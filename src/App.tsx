@@ -438,14 +438,29 @@ function App() {
     const handleBeforeUnload = () => saveNow()
     window.addEventListener('beforeunload', handleBeforeUnload)
 
-    // Cmd+drag anywhere to move window
+    // Cmd+drag anywhere to move window (capture phase to prevent other handlers)
     const handleMouseDown = (e: MouseEvent) => {
       if (e.metaKey && e.button === 0) {
         e.preventDefault()
+        e.stopPropagation()
         appWindow.startDragging()
       }
     }
-    window.addEventListener('mousedown', handleMouseDown)
+    window.addEventListener('mousedown', handleMouseDown, true)
+
+    // Show move cursor when Cmd is held
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Meta') {
+        document.body.classList.add('cmd-held')
+      }
+    }
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Meta') {
+        document.body.classList.remove('cmd-held')
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('keyup', handleKeyUp)
 
     onCleanup(() => {
       unlistenNew.then(fn => fn())
@@ -460,7 +475,10 @@ function App() {
       window.removeEventListener('blur', handleBlur)
       window.removeEventListener('focus', handleFocus)
       window.removeEventListener('beforeunload', handleBeforeUnload)
-      window.removeEventListener('mousedown', handleMouseDown)
+      window.removeEventListener('mousedown', handleMouseDown, true)
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('keyup', handleKeyUp)
+      document.body.classList.remove('cmd-held')
       if (saveTimeout) clearTimeout(saveTimeout)
       if (statusTimeout) clearTimeout(statusTimeout)
     })

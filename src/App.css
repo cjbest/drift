@@ -15,6 +15,11 @@
   z-index: 100;
 }
 
+body.cmd-held,
+body.cmd-held * {
+  cursor: move !important;
+}
+
 .status-message {
   position: fixed;
   bottom: 20px;
