@@ -86,6 +86,7 @@ export function QuickOpen(props: QuickOpenProps) {
   const [selectedIndex, setSelectedIndex] = createSignal(0)
 
   let inputRef: HTMLInputElement | undefined
+  let listRef: HTMLDivElement | undefined
 
   onMount(async () => {
     // Focus input immediately
@@ -148,6 +149,13 @@ export function QuickOpen(props: QuickOpenProps) {
     setSelectedIndex(0)
   })
 
+  // Scroll selected item into view
+  createEffect(() => {
+    const idx = selectedIndex()
+    const item = listRef?.children[idx] as HTMLElement | undefined
+    item?.scrollIntoView({ block: 'nearest' })
+  })
+
   const handleKeyDown = (e: KeyboardEvent) => {
     // Stop all keyboard events from reaching CodeMirror
     e.stopPropagation()
@@ -194,7 +202,7 @@ export function QuickOpen(props: QuickOpenProps) {
           onKeyDown={handleKeyDown}
           autofocus
         />
-        <div class="quick-open-list">
+        <div class="quick-open-list" ref={listRef}>
           <For each={filteredNotes()}>
             {(note, index) => (
               <div

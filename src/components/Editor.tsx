@@ -32,8 +32,8 @@ export function Editor(props: EditorProps) {
         lineHeight: '1.6',
       },
       '.cm-line': {
-        paddingLeft: '32px',  // 52 / 1.618 ≈ 32
-        paddingRight: '32px',
+        paddingLeft: '0',
+        paddingRight: '0',
       },
       '.cm-gutters': {
         display: 'none',
@@ -46,6 +46,8 @@ export function Editor(props: EditorProps) {
       },
       '.cm-scroller': {
         overflow: 'auto',
+        paddingLeft: 'max(32px, calc((100% - 900px) / 2))',
+        paddingRight: 'max(32px, calc((100% - 900px) / 2))',
       },
       '&.cm-focused': {
         outline: 'none',
