@@ -2,7 +2,7 @@ import { onMount, onCleanup, createEffect } from 'solid-js'
 import { EditorState, RangeSetBuilder } from '@codemirror/state'
 import { EditorView, keymap, highlightActiveLine, ViewPlugin, Decoration, drawSelection } from '@codemirror/view'
 import type { DecorationSet, ViewUpdate } from '@codemirror/view'
-import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
+import { defaultKeymap, history, historyKeymap, indentMore, indentLess } from '@codemirror/commands'
 import { markdown } from '@codemirror/lang-markdown'
 import './Editor.css'
 
@@ -251,6 +251,14 @@ export function Editor(props: EditorProps) {
           })
           return true
         },
+      },
+      {
+        key: 'Tab',
+        run: indentMore,
+      },
+      {
+        key: 'Shift-Tab',
+        run: indentLess,
       },
     ])
 
