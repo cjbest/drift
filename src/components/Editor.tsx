@@ -1,7 +1,7 @@
 import { onMount, onCleanup, createEffect } from 'solid-js'
 import { EditorState, RangeSetBuilder } from '@codemirror/state'
 import { EditorView, keymap, highlightActiveLine, ViewPlugin, Decoration, drawSelection } from '@codemirror/view'
-import type { DecorationSet } from '@codemirror/view'
+import type { DecorationSet, ViewUpdate } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { markdown } from '@codemirror/lang-markdown'
 import './Editor.css'
@@ -24,7 +24,7 @@ const cursorHider = ViewPlugin.fromClass(class {
     this.showCursor(view)
   }
 
-  update(update: any) {
+  update(update: ViewUpdate) {
     const view = update.view
     const { from, to, head } = view.state.selection.main
     const hasSelection = from !== to
@@ -91,7 +91,7 @@ const selectionHighlighter = ViewPlugin.fromClass(class {
     this.decorations = this.buildDecorations(view)
   }
 
-  update(update: any) {
+  update(update: ViewUpdate) {
     if (update.selectionSet || update.docChanged || update.viewportChanged) {
       this.decorations = this.buildDecorations(update.view)
     }
@@ -152,7 +152,6 @@ export function Editor(props: EditorProps) {
         fontFamily: '"SF Mono", Menlo, Monaco, "Courier New", monospace',
         paddingTop: '52px',
         paddingBottom: '20px',
-        caretColor: 'var(--fg)',
         lineHeight: '1.6',
       },
       '.cm-line': {

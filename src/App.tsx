@@ -9,8 +9,10 @@ import { QuickOpen } from './components/QuickOpen'
 import './App.css'
 
 const DRIFT_FOLDER = 'Drift'
-const MAX_RECENT_FILES = 10
 const OPEN_FILES_KEY = 'drift-open-files'
+
+type ThemeMode = 'system' | 'light' | 'dark'
+const THEME_LABELS: Record<ThemeMode, string> = { system: 'System', light: 'Light', dark: 'Dark' }
 
 // Track which files are open in which windows
 function getOpenFiles(): Record<string, string> {
@@ -56,8 +58,6 @@ function sanitizeFilename(content: string): string {
   return title || 'Untitled'
 }
 
-type ThemeMode = 'system' | 'light' | 'dark'
-
 function App() {
   const [content, setContent] = createSignal('')
   const [currentFilePath, setCurrentFilePath] = createSignal<string | null>(null)
@@ -87,43 +87,33 @@ function App() {
 
   const cycleTheme = () => {
     const modes: ThemeMode[] = ['system', 'light', 'dark']
-    const labels = { system: 'System', light: 'Light', dark: 'Dark' }
     const current = theme()
     const next = modes[(modes.indexOf(current) + 1) % modes.length]
     setTheme(next)
     localStorage.setItem('drift-theme', next)
     applyTheme(next)
-    showStatus(`${labels[next]} mode`)
+    showStatus(`${THEME_LABELS[next]} mode`)
   }
 
   const setThemeMode = (mode: ThemeMode) => {
-    const labels = { system: 'System', light: 'Light', dark: 'Dark' }
     setTheme(mode)
     localStorage.setItem('drift-theme', mode)
     applyTheme(mode)
-    showStatus(`${labels[mode]} mode`)
+    showStatus(`${THEME_LABELS[mode]} mode`)
   }
 
   const ensureDriftDir = async () => {
-    try {
-      let docDir = await documentDir()
-      console.log('Document dir:', docDir)
-      // Ensure no double slashes
-      if (!docDir.endsWith('/')) docDir += '/'
-      const dir = `${docDir}${DRIFT_FOLDER}`
-      setDriftDir(dir)
+    let docDir = await documentDir()
+    // Ensure no double slashes
+    if (!docDir.endsWith('/')) docDir += '/'
+    const dir = `${docDir}${DRIFT_FOLDER}`
+    setDriftDir(dir)
 
-      const dirExists = await exists(dir)
-      console.log('Dir exists:', dirExists)
-      if (!dirExists) {
-        console.log('Creating dir:', dir)
-        await mkdir(dir)
-      }
-      return dir
-    } catch (e) {
-      console.error('ensureDriftDir error:', e)
-      throw e
+    const dirExists = await exists(dir)
+    if (!dirExists) {
+      await mkdir(dir)
     }
+    return dir
   }
 
   const loadFileAccessTimes = () => {
@@ -181,7 +171,6 @@ function App() {
           }
 
           if (newPath !== filePath) {
-            console.log('Renaming:', filePath, '->', newPath)
             await rename(filePath, newPath)
             oldPath = filePath
             filePath = newPath
@@ -190,9 +179,7 @@ function App() {
       }
 
       setCurrentFilePath(filePath)
-      console.log('Saving to:', filePath)
       await writeTextFile(filePath, contentToSave)
-      console.log('Saved successfully')
       recordFileAccess(filePath, oldPath)
 
       // Update file registration (handles new files and renames)
