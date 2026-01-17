@@ -241,6 +241,17 @@ export function Editor(props: EditorProps) {
           return true
         },
       },
+      {
+        key: 'Mod-l',
+        run: (view) => {
+          const { head } = view.state.selection.main
+          const line = view.state.doc.lineAt(head)
+          view.dispatch({
+            selection: { anchor: line.from, head: line.to },
+          })
+          return true
+        },
+      },
     ])
 
     const state = EditorState.create({
