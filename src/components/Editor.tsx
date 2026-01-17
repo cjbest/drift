@@ -61,10 +61,13 @@ export function Editor(props: EditorProps) {
       '&.cm-focused .cm-cursor': {
         animation: 'cm-blink 0.4s steps(1) infinite',
       },
-      '.cm-selectionBackground': {
+      '.cm-selectionBackground, .cm-content ::selection': {
         backgroundColor: '#EEFF41 !important',
       },
-      '&.cm-focused .cm-selectionBackground': {
+      '&.cm-focused .cm-selectionBackground, &.cm-focused .cm-content ::selection': {
+        backgroundColor: '#EEFF41 !important',
+      },
+      '.cm-selectionLayer .cm-selectionBackground': {
         backgroundColor: '#EEFF41 !important',
       },
     })

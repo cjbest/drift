@@ -7,3 +7,20 @@
 .editor-container .cm-editor {
   height: 100%;
 }
+
+.cm-selectionBackground {
+  background-color: #EEFF41 !important;
+}
+
+.cm-focused .cm-selectionBackground {
+  background-color: #EEFF41 !important;
+}
+
+.cm-selectionLayer .cm-selectionBackground {
+  background-color: #EEFF41 !important;
+}
+
+.cm-content ::selection {
+  background-color: #EEFF41 !important;
+  color: #000000 !important;
+}
