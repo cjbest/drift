@@ -59,7 +59,25 @@ pub fn run() {
         ],
       )?;
 
-      let menu = Menu::with_items(app, &[&app_menu, &file_menu, &edit_menu])?;
+      let cycle_theme = MenuItem::with_id(app, "cycle_theme", "Toggle Theme", true, Some("CmdOrCtrl+D"))?;
+      let theme_system = MenuItem::with_id(app, "theme_system", "System", true, None::<&str>)?;
+      let theme_light = MenuItem::with_id(app, "theme_light", "Light", true, None::<&str>)?;
+      let theme_dark = MenuItem::with_id(app, "theme_dark", "Dark", true, None::<&str>)?;
+
+      let view_menu = Submenu::with_items(
+        app,
+        "View",
+        true,
+        &[
+          &cycle_theme,
+          &PredefinedMenuItem::separator(app)?,
+          &theme_system,
+          &theme_light,
+          &theme_dark,
+        ],
+      )?;
+
+      let menu = Menu::with_items(app, &[&app_menu, &file_menu, &edit_menu, &view_menu])?;
       app.set_menu(menu)?;
 
       Ok(())
@@ -70,6 +88,10 @@ pub fn run() {
         "new_window" => { let _ = app.emit("menu-new-window", ()); }
         "close_window" => { let _ = app.emit("menu-close-window", ()); }
         "open_note" => { let _ = app.emit("menu-open-note", ()); }
+        "cycle_theme" => { let _ = app.emit("menu-cycle-theme", ()); }
+        "theme_system" => { let _ = app.emit("menu-theme-system", ()); }
+        "theme_light" => { let _ = app.emit("menu-theme-light", ()); }
+        "theme_dark" => { let _ = app.emit("menu-theme-dark", ()); }
         _ => {}
       }
     })

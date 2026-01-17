@@ -14,3 +14,18 @@
   -webkit-app-region: drag;
   z-index: 100;
 }
+
+.status-message {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--fg);
+  color: var(--bg);
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  opacity: 0.9;
+  z-index: 1000;
+}

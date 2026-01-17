@@ -56,14 +56,53 @@ function sanitizeFilename(content: string): string {
   return title || 'Untitled'
 }
 
+type ThemeMode = 'system' | 'light' | 'dark'
+
 function App() {
   const [content, setContent] = createSignal('')
   const [currentFilePath, setCurrentFilePath] = createSignal<string | null>(null)
   const [fileAccessTimes, setFileAccessTimes] = createSignal<Record<string, number>>({})
   const [quickOpenVisible, setQuickOpenVisible] = createSignal(false)
   const [driftDir, setDriftDir] = createSignal('')
+  const [theme, setTheme] = createSignal<ThemeMode>((localStorage.getItem('drift-theme') as ThemeMode) || 'system')
+  const [statusMessage, setStatusMessage] = createSignal<string | null>(null)
 
   let saveTimeout: number | undefined
+  let statusTimeout: number | undefined
+
+  const applyTheme = (mode: ThemeMode) => {
+    document.documentElement.removeAttribute('data-theme')
+    if (mode === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light')
+    } else if (mode === 'dark') {
+      document.documentElement.setAttribute('data-theme', 'dark')
+    }
+  }
+
+  const showStatus = (message: string) => {
+    setStatusMessage(message)
+    if (statusTimeout) clearTimeout(statusTimeout)
+    statusTimeout = setTimeout(() => setStatusMessage(null), 1500) as unknown as number
+  }
+
+  const cycleTheme = () => {
+    const modes: ThemeMode[] = ['system', 'light', 'dark']
+    const labels = { system: 'System', light: 'Light', dark: 'Dark' }
+    const current = theme()
+    const next = modes[(modes.indexOf(current) + 1) % modes.length]
+    setTheme(next)
+    localStorage.setItem('drift-theme', next)
+    applyTheme(next)
+    showStatus(`${labels[next]} mode`)
+  }
+
+  const setThemeMode = (mode: ThemeMode) => {
+    const labels = { system: 'System', light: 'Light', dark: 'Dark' }
+    setTheme(mode)
+    localStorage.setItem('drift-theme', mode)
+    applyTheme(mode)
+    showStatus(`${labels[mode]} mode`)
+  }
 
   const ensureDriftDir = async () => {
     try {
@@ -291,6 +330,7 @@ function App() {
   onMount(async () => {
     await ensureDriftDir()
     loadFileAccessTimes()
+    applyTheme(theme())
 
     const appWindow = getCurrentWindow()
 
@@ -331,6 +371,18 @@ function App() {
     const unlistenOpen = listen('menu-open-note', () => {
       if (document.hasFocus()) setQuickOpenVisible(true)
     })
+    const unlistenCycleTheme = listen('menu-cycle-theme', () => {
+      if (document.hasFocus()) cycleTheme()
+    })
+    const unlistenThemeSystem = listen('menu-theme-system', () => {
+      if (document.hasFocus()) setThemeMode('system')
+    })
+    const unlistenThemeLight = listen('menu-theme-light', () => {
+      if (document.hasFocus()) setThemeMode('light')
+    })
+    const unlistenThemeDark = listen('menu-theme-dark', () => {
+      if (document.hasFocus()) setThemeMode('dark')
+    })
 
     // Save on window close and unregister
     const unlistenClose = appWindow.onCloseRequested((event) => {
@@ -351,10 +403,15 @@ function App() {
       unlistenNewWindow.then(fn => fn())
       unlistenCloseWindow.then(fn => fn())
       unlistenOpen.then(fn => fn())
+      unlistenCycleTheme.then(fn => fn())
+      unlistenThemeSystem.then(fn => fn())
+      unlistenThemeLight.then(fn => fn())
+      unlistenThemeDark.then(fn => fn())
       unlistenClose.then(fn => fn())
       window.removeEventListener('blur', handleBlur)
       window.removeEventListener('beforeunload', handleBeforeUnload)
       if (saveTimeout) clearTimeout(saveTimeout)
+      if (statusTimeout) clearTimeout(statusTimeout)
     })
   })
 
@@ -367,6 +424,7 @@ function App() {
         onNewNote={newNote}
         onOpenNote={() => setQuickOpenVisible(true)}
         onNewWindow={() => openNewWindow()}
+        onCycleTheme={cycleTheme}
       />
       <Show when={quickOpenVisible()}>
         <QuickOpen
@@ -380,6 +438,9 @@ function App() {
           onClose={() => setQuickOpenVisible(false)}
           listAllNotes={listAllNotes}
         />
+      </Show>
+      <Show when={statusMessage()}>
+        <div class="status-message">{statusMessage()}</div>
       </Show>
     </div>
   )
