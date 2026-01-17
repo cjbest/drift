@@ -10,6 +10,22 @@ import type { NoteInfo } from './components/QuickOpen'
 import './App.css'
 
 const DRIFT_FOLDER = 'Drift'
+
+// Dev: Cmd+Shift+R to hard reload (Tauri doesn't handle this natively)
+if (import.meta.hot) {
+  window.addEventListener('keydown', (e) => {
+    if (e.metaKey && e.shiftKey && e.key === 'r') {
+      e.preventDefault()
+      location.reload()
+    }
+  })
+}
+
+// Track if this is first load vs HMR reload (for dev feedback)
+const isHmrReload = import.meta.hot?.data?.initialized ?? false
+if (import.meta.hot) {
+  import.meta.hot.data.initialized = true
+}
 const OPEN_FILES_KEY = 'drift-open-files'
 
 type ThemeMode = 'system' | 'light' | 'dark'
@@ -352,6 +368,7 @@ function App() {
     loadFileAccessTimes()
     applyTheme(theme())
     refreshNotesCache()
+    if (isHmrReload) showStatus('Refreshed')
 
     const appWindow = getCurrentWindow()
 

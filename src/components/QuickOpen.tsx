@@ -73,6 +73,16 @@ function findMatch(query: string, text: string): number {
   return text.toLowerCase().indexOf(query.toLowerCase())
 }
 
+function formatDateAsTitle(date: Date): string {
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+function ellipsizeMiddle(text: string, maxLen: number): string {
+  if (text.length <= maxLen) return text
+  const half = Math.floor((maxLen - 3) / 2)
+  return text.slice(0, half) + '...' + text.slice(-half)
+}
+
 export function QuickOpen(props: QuickOpenProps) {
   const [query, setQuery] = createSignal('')
   const [selectedIndex, setSelectedIndex] = createSignal(0)
@@ -107,6 +117,21 @@ export function QuickOpen(props: QuickOpenProps) {
     // Sort by most recent (either created or accessed)
     return [...notes].sort((a, b) => getRelevantTime(b) - getRelevantTime(a))
   })
+
+  // Get display title - fallback to date if no title, ellipsize when searching
+  const getDisplayTitle = (note: NoteInfo): string => {
+    let title = note.title?.trim()
+    if (!title && note.createdAt) {
+      title = formatDateAsTitle(note.createdAt)
+    }
+    if (!title) title = 'Untitled'
+
+    // When searching, truncate long titles so preview is visible
+    if (query().trim() && title.length > 25) {
+      return ellipsizeMiddle(title, 25)
+    }
+    return title
+  }
 
   // Get display preview - show match snippet with bold highlighting
   const getDisplayPreview = (note: NoteInfo): JSX.Element => {
@@ -200,7 +225,7 @@ export function QuickOpen(props: QuickOpenProps) {
                 onClick={() => props.onSelect(note.path)}
                 onMouseMove={() => setSelectedIndex(index())}
               >
-                <span class="quick-open-title">{note.title}</span>
+                <span class="quick-open-title">{getDisplayTitle(note)}</span>
                 {note.preview && (
                   <span class="quick-open-preview">{getDisplayPreview(note)}</span>
                 )}
