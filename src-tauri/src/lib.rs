@@ -17,13 +17,14 @@ pub fn run() {
       // Build menus
       let new_note = MenuItem::with_id(app, "new_note", "New Note", true, Some("CmdOrCtrl+N"))?;
       let new_window = MenuItem::with_id(app, "new_window", "New Window", true, Some("CmdOrCtrl+Shift+N"))?;
+      let close_window = MenuItem::with_id(app, "close_window", "Close Window", true, Some("CmdOrCtrl+W"))?;
       let open_note = MenuItem::with_id(app, "open_note", "Open Note...", true, Some("CmdOrCtrl+P"))?;
 
       let file_menu = Submenu::with_items(
         app,
         "File",
         true,
-        &[&new_note, &new_window, &PredefinedMenuItem::separator(app)?, &open_note],
+        &[&new_note, &new_window, &close_window, &PredefinedMenuItem::separator(app)?, &open_note],
       )?;
 
       let app_menu = Submenu::with_items(
@@ -67,6 +68,7 @@ pub fn run() {
       match event.id().as_ref() {
         "new_note" => { let _ = app.emit("menu-new-note", ()); }
         "new_window" => { let _ = app.emit("menu-new-window", ()); }
+        "close_window" => { let _ = app.emit("menu-close-window", ()); }
         "open_note" => { let _ = app.emit("menu-open-note", ()); }
         _ => {}
       }

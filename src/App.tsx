@@ -1,7 +1,7 @@
 import { createSignal, onMount, onCleanup, Show } from 'solid-js'
 import { listen } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
+import { WebviewWindow, getAllWebviewWindows } from '@tauri-apps/api/webviewWindow'
 import { documentDir } from '@tauri-apps/api/path'
 import { readTextFile, writeTextFile, mkdir, exists, readDir, rename } from '@tauri-apps/plugin-fs'
 import { Editor } from './components/Editor'
@@ -10,6 +10,35 @@ import './App.css'
 
 const DRIFT_FOLDER = 'Drift'
 const MAX_RECENT_FILES = 10
+const OPEN_FILES_KEY = 'drift-open-files'
+
+// Track which files are open in which windows
+function getOpenFiles(): Record<string, string> {
+  const stored = localStorage.getItem(OPEN_FILES_KEY)
+  return stored ? JSON.parse(stored) : {}
+}
+
+function registerOpenFile(filePath: string, windowLabel: string) {
+  const files = getOpenFiles()
+  files[filePath] = windowLabel
+  localStorage.setItem(OPEN_FILES_KEY, JSON.stringify(files))
+}
+
+function unregisterWindow(windowLabel: string) {
+  const files = getOpenFiles()
+  const updated: Record<string, string> = {}
+  for (const [path, label] of Object.entries(files)) {
+    if (label !== windowLabel) {
+      updated[path] = label
+    }
+  }
+  localStorage.setItem(OPEN_FILES_KEY, JSON.stringify(updated))
+}
+
+function getWindowForFile(filePath: string): string | null {
+  const files = getOpenFiles()
+  return files[filePath] || null
+}
 
 function sanitizeFilename(content: string): string {
   // Get first line, prefer heading
@@ -126,17 +155,63 @@ function App() {
       await writeTextFile(filePath, contentToSave)
       console.log('Saved successfully')
       recordFileAccess(filePath, oldPath)
+
+      // Update file registration (handles new files and renames)
+      const appWindow = getCurrentWindow()
+      if (oldPath) {
+        // Renamed: remove old registration
+        const files = getOpenFiles()
+        if (files[oldPath] === appWindow.label) {
+          delete files[oldPath]
+          localStorage.setItem(OPEN_FILES_KEY, JSON.stringify(files))
+        }
+      }
+      registerOpenFile(filePath, appWindow.label)
     } catch (e) {
       console.error('saveFile error:', e)
     }
   }
 
   const openFile = async (filePath: string) => {
-    const fileContent = await readTextFile(filePath)
-    setContent(fileContent)
-    setCurrentFilePath(filePath)
-    recordFileAccess(filePath)
-    setQuickOpenVisible(false)
+    try {
+      const appWindow = getCurrentWindow()
+      const myLabel = appWindow.label
+
+      // Check if file is already open in another window
+      const existingWindowLabel = getWindowForFile(filePath)
+      if (existingWindowLabel && existingWindowLabel !== myLabel) {
+        // Find the actual window
+        const allWindows = await getAllWebviewWindows()
+        const otherWindow = allWindows.find(w => w.label === existingWindowLabel)
+        if (otherWindow) {
+          setQuickOpenVisible(false)
+          await otherWindow.setFocus()
+          appWindow.close()
+          return
+        }
+        // Window no longer exists, clean up stale entry
+        unregisterWindow(existingWindowLabel)
+      }
+
+      // Unregister old file if we had one
+      const oldPath = currentFilePath()
+      if (oldPath) {
+        const files = getOpenFiles()
+        if (files[oldPath] === myLabel) {
+          delete files[oldPath]
+          localStorage.setItem(OPEN_FILES_KEY, JSON.stringify(files))
+        }
+      }
+
+      const fileContent = await readTextFile(filePath)
+      setContent(fileContent)
+      setCurrentFilePath(filePath)
+      recordFileAccess(filePath)
+      registerOpenFile(filePath, myLabel)
+      setQuickOpenVisible(false)
+    } catch (e) {
+      console.error('openFile error:', e)
+    }
   }
 
   const listAllNotes = async (): Promise<string[]> => {
@@ -170,6 +245,16 @@ function App() {
     const currentPath = currentFilePath()
     if (currentContent.trim()) {
       await saveFile(currentContent, currentPath)
+    }
+
+    // Unregister old file
+    if (currentPath) {
+      const appWindow = getCurrentWindow()
+      const files = getOpenFiles()
+      if (files[currentPath] === appWindow.label) {
+        delete files[currentPath]
+        localStorage.setItem(OPEN_FILES_KEY, JSON.stringify(files))
+      }
     }
 
     setContent('')
@@ -207,11 +292,26 @@ function App() {
     await ensureDriftDir()
     loadFileAccessTimes()
 
+    const appWindow = getCurrentWindow()
+
     // Check for file parameter in URL (for opening in new window)
     const urlParams = new URLSearchParams(window.location.search)
     const fileParam = urlParams.get('file')
     if (fileParam) {
       openFile(fileParam)
+    } else {
+      // On refresh, reload the file if this window has one registered
+      const files = getOpenFiles()
+      const myFile = Object.entries(files).find(([_, label]) => label === appWindow.label)?.[0]
+      if (myFile) {
+        readTextFile(myFile).then(content => {
+          setContent(content)
+          setCurrentFilePath(myFile)
+        }).catch(() => {
+          // File no longer exists, clean up
+          unregisterWindow(appWindow.label)
+        })
+      }
     }
 
     // Only respond to menu events if this window is focused
@@ -221,14 +321,21 @@ function App() {
     const unlistenNewWindow = listen('menu-new-window', () => {
       if (document.hasFocus()) openNewWindow()
     })
+    const unlistenCloseWindow = listen('menu-close-window', () => {
+      if (document.hasFocus()) {
+        saveNow()
+        unregisterWindow(appWindow.label)
+        appWindow.close()
+      }
+    })
     const unlistenOpen = listen('menu-open-note', () => {
       if (document.hasFocus()) setQuickOpenVisible(true)
     })
 
-    // Save on window close
-    const appWindow = getCurrentWindow()
-    const unlistenClose = appWindow.onCloseRequested(async (event) => {
-      await saveNow()
+    // Save on window close and unregister
+    const unlistenClose = appWindow.onCloseRequested((event) => {
+      saveNow() // Don't await - let it save in background
+      unregisterWindow(appWindow.label)
     })
 
     // Save on window blur (switching apps)
@@ -242,6 +349,7 @@ function App() {
     onCleanup(() => {
       unlistenNew.then(fn => fn())
       unlistenNewWindow.then(fn => fn())
+      unlistenCloseWindow.then(fn => fn())
       unlistenOpen.then(fn => fn())
       unlistenClose.then(fn => fn())
       window.removeEventListener('blur', handleBlur)
