@@ -3,9 +3,10 @@ import { listen } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { WebviewWindow, getAllWebviewWindows } from '@tauri-apps/api/webviewWindow'
 import { documentDir } from '@tauri-apps/api/path'
-import { readTextFile, writeTextFile, mkdir, exists, readDir, rename } from '@tauri-apps/plugin-fs'
+import { readTextFile, writeTextFile, mkdir, exists, readDir, rename, stat } from '@tauri-apps/plugin-fs'
 import { Editor } from './components/Editor'
-import { QuickOpen } from './components/QuickOpen'
+import { QuickOpen, getFilename, getPreview } from './components/QuickOpen'
+import type { NoteInfo } from './components/QuickOpen'
 import './App.css'
 
 const DRIFT_FOLDER = 'Drift'
@@ -63,9 +64,10 @@ function App() {
   const [currentFilePath, setCurrentFilePath] = createSignal<string | null>(null)
   const [fileAccessTimes, setFileAccessTimes] = createSignal<Record<string, number>>({})
   const [quickOpenVisible, setQuickOpenVisible] = createSignal(false)
-  const [driftDir, setDriftDir] = createSignal('')
+  const [, setDriftDir] = createSignal('')
   const [theme, setTheme] = createSignal<ThemeMode>((localStorage.getItem('drift-theme') as ThemeMode) || 'system')
   const [statusMessage, setStatusMessage] = createSignal<string | null>(null)
+  const [cachedNotes, setCachedNotes] = createSignal<NoteInfo[]>([])
 
   let saveTimeout: number | undefined
   let statusTimeout: number | undefined
@@ -200,6 +202,7 @@ function App() {
         }
       }
       registerOpenFile(filePath, appWindow.label)
+      refreshNotesCache() // Update cache in background
     } catch (e) {
       console.error('saveFile error:', e)
     }
@@ -257,6 +260,29 @@ function App() {
     } catch {
       return []
     }
+  }
+
+  const refreshNotesCache = async () => {
+    const paths = await listAllNotes()
+    const notes: NoteInfo[] = await Promise.all(
+      paths.map(async (path) => {
+        try {
+          const [content, fileStat] = await Promise.all([
+            readTextFile(path),
+            stat(path),
+          ])
+          return {
+            path,
+            title: getFilename(path),
+            preview: getPreview(content),
+            createdAt: fileStat.birthtime ? new Date(fileStat.birthtime) : null,
+          }
+        } catch {
+          return { path, title: getFilename(path), preview: '', createdAt: null }
+        }
+      })
+    )
+    setCachedNotes(notes)
   }
 
   const handleContentChange = (newContent: string) => {
@@ -325,6 +351,7 @@ function App() {
     await ensureDriftDir()
     loadFileAccessTimes()
     applyTheme(theme())
+    refreshNotesCache()
 
     const appWindow = getCurrentWindow()
 
@@ -379,14 +406,16 @@ function App() {
     })
 
     // Save on window close and unregister
-    const unlistenClose = appWindow.onCloseRequested((event) => {
+    const unlistenClose = appWindow.onCloseRequested(() => {
       saveNow() // Don't await - let it save in background
       unregisterWindow(appWindow.label)
     })
 
-    // Save on window blur (switching apps)
+    // Save on window blur, refresh cache on focus
     const handleBlur = () => saveNow()
+    const handleFocus = () => refreshNotesCache()
     window.addEventListener('blur', handleBlur)
+    window.addEventListener('focus', handleFocus)
 
     // Save before browser unload (backup)
     const handleBeforeUnload = () => saveNow()
@@ -412,6 +441,7 @@ function App() {
       unlistenThemeDark.then(fn => fn())
       unlistenClose.then(fn => fn())
       window.removeEventListener('blur', handleBlur)
+      window.removeEventListener('focus', handleFocus)
       window.removeEventListener('beforeunload', handleBeforeUnload)
       window.removeEventListener('mousedown', handleMouseDown)
       if (saveTimeout) clearTimeout(saveTimeout)
@@ -435,13 +465,13 @@ function App() {
         <QuickOpen
           fileAccessTimes={fileAccessTimes()}
           currentFile={currentFilePath()}
+          notes={cachedNotes()}
           onSelect={openFile}
           onSelectNewWindow={(path) => {
             setQuickOpenVisible(false)
             openNewWindow(path)
           }}
           onClose={() => setQuickOpenVisible(false)}
-          listAllNotes={listAllNotes}
         />
       </Show>
       <Show when={statusMessage()}>

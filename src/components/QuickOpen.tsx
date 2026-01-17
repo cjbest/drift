@@ -1,8 +1,8 @@
-import { createSignal, createEffect, onMount, For } from 'solid-js'
-import { readTextFile, stat } from '@tauri-apps/plugin-fs'
+import { createSignal, createEffect, createMemo, onMount, For } from 'solid-js'
+import type { JSX } from 'solid-js'
 import './QuickOpen.css'
 
-interface NoteInfo {
+export interface NoteInfo {
   path: string
   title: string
   preview: string
@@ -52,66 +52,37 @@ function formatRelativeDate(date: Date | null): string {
 interface QuickOpenProps {
   fileAccessTimes: Record<string, number>
   currentFile: string | null
+  notes: NoteInfo[]
   onSelect: (filePath: string) => void
   onSelectNewWindow: (filePath: string) => void
   onClose: () => void
-  listAllNotes: () => Promise<string[]>
 }
 
-function getFilename(path: string): string {
+export function getFilename(path: string): string {
   return path.split('/').pop()?.replace('.md', '') || path
 }
 
-function getPreview(content: string): string {
+export function getPreview(content: string): string {
   // Get content after the first line, collapsed to single line
   const lines = content.split('\n').slice(1).filter(l => l.trim())
   return lines.join(' ').slice(0, 200)
 }
 
-function fuzzyMatch(query: string, text: string): boolean {
-  const lowerQuery = query.toLowerCase()
-  const lowerText = text.toLowerCase()
-  let qi = 0
-  for (let ti = 0; ti < lowerText.length && qi < lowerQuery.length; ti++) {
-    if (lowerText[ti] === lowerQuery[qi]) qi++
-  }
-  return qi === lowerQuery.length
+function findMatch(query: string, text: string): number {
+  // Returns index of match, or -1 if no match
+  return text.toLowerCase().indexOf(query.toLowerCase())
 }
 
 export function QuickOpen(props: QuickOpenProps) {
   const [query, setQuery] = createSignal('')
-  const [allNotes, setAllNotes] = createSignal<NoteInfo[]>([])
-  const [filteredNotes, setFilteredNotes] = createSignal<NoteInfo[]>([])
   const [selectedIndex, setSelectedIndex] = createSignal(0)
 
   let inputRef: HTMLInputElement | undefined
   let listRef: HTMLDivElement | undefined
 
-  onMount(async () => {
+  onMount(() => {
     // Focus input immediately
     setTimeout(() => inputRef?.focus(), 0)
-
-    // Load all notes with previews and creation dates (excluding current file)
-    const paths = (await props.listAllNotes()).filter(p => p !== props.currentFile)
-    const notes: NoteInfo[] = await Promise.all(
-      paths.map(async (path) => {
-        try {
-          const [content, fileStat] = await Promise.all([
-            readTextFile(path),
-            stat(path),
-          ])
-          return {
-            path,
-            title: getFilename(path),
-            preview: getPreview(content),
-            createdAt: fileStat.birthtime ? new Date(fileStat.birthtime) : null,
-          }
-        } catch {
-          return { path, title: getFilename(path), preview: '', createdAt: null }
-        }
-      })
-    )
-    setAllNotes(notes)
   })
 
   const getRelevantTime = (note: NoteInfo): number => {
@@ -120,29 +91,48 @@ export function QuickOpen(props: QuickOpenProps) {
     return Math.max(accessTime, createTime)
   }
 
-  const updateFilteredNotes = () => {
-    const q = query()
-    let notes = allNotes()
+  // Filter and sort notes reactively
+  const filteredNotes = createMemo(() => {
+    const q = query().trim()
+    // Exclude current file
+    let notes = props.notes.filter(n => n.path !== props.currentFile)
 
-    if (q.trim()) {
-      // Filter by query (match title or preview)
+    if (q) {
+      // Filter by substring match in title or preview
       notes = notes.filter(n =>
-        fuzzyMatch(q, n.title) || fuzzyMatch(q, n.preview)
+        findMatch(q, n.title) !== -1 || findMatch(q, n.preview) !== -1
       )
     }
 
     // Sort by most recent (either created or accessed)
-    const sorted = [...notes].sort((a, b) => getRelevantTime(b) - getRelevantTime(a))
-    setFilteredNotes(sorted)
-  }
-
-  // Update filtered notes when allNotes or query changes
-  createEffect(() => {
-    allNotes() // track dependency
-    updateFilteredNotes()
+    return [...notes].sort((a, b) => getRelevantTime(b) - getRelevantTime(a))
   })
 
-  // Reset selection only when query changes
+  // Get display preview - show match snippet with bold highlighting
+  const getDisplayPreview = (note: NoteInfo): JSX.Element => {
+    const q = query().trim()
+    if (!q) return <>{note.preview}</>
+
+    const text = note.preview
+    const idx = findMatch(q, text)
+
+    if (idx === -1) return <>{text}</>
+
+    // Get snippet around match
+    const start = Math.max(0, idx - 30)
+    const end = Math.min(text.length, idx + q.length + 120)
+
+    const prefix = start > 0 ? '...' : ''
+    const suffix = end < text.length ? '...' : ''
+
+    const beforeMatch = text.slice(start, idx)
+    const match = text.slice(idx, idx + q.length)
+    const afterMatch = text.slice(idx + q.length, end)
+
+    return <>{prefix}{beforeMatch}<strong>{match}</strong>{afterMatch}{suffix}</>
+  }
+
+  // Reset selection when query changes
   createEffect(() => {
     query() // track dependency
     setSelectedIndex(0)
@@ -212,7 +202,7 @@ export function QuickOpen(props: QuickOpenProps) {
               >
                 <span class="quick-open-title">{note.title}</span>
                 {note.preview && (
-                  <span class="quick-open-preview">{note.preview}</span>
+                  <span class="quick-open-preview">{getDisplayPreview(note)}</span>
                 )}
                 {note.createdAt && (
                   <span class="quick-open-date">{formatRelativeDate(note.createdAt)}</span>
