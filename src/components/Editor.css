@@ -8,19 +8,18 @@
   height: 100%;
 }
 
-.cm-selectionBackground {
-  background-color: #EEFF41 !important;
-}
-
-.cm-focused .cm-selectionBackground {
-  background-color: #EEFF41 !important;
-}
-
-.cm-selectionLayer .cm-selectionBackground {
-  background-color: #EEFF41 !important;
+/* Selection styling handled by custom plugin */
+.cm-selectionLayer {
+  display: none !important;
 }
 
 .cm-content ::selection {
-  background-color: #EEFF41 !important;
-  color: #000000 !important;
+  background: transparent !important;
+}
+
+.selection-highlight {
+  background-color: #EEFF41;
+  color: #000000;
+  border-radius: 3px;
+  padding: 1px 0;
 }

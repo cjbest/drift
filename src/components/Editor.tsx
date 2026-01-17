@@ -1,9 +1,58 @@
 import { onMount, onCleanup, createEffect } from 'solid-js'
-import { EditorState } from '@codemirror/state'
-import { EditorView, keymap, highlightActiveLine } from '@codemirror/view'
+import { EditorState, RangeSetBuilder } from '@codemirror/state'
+import { EditorView, keymap, highlightActiveLine, ViewPlugin, Decoration } from '@codemirror/view'
+import type { DecorationSet } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { markdown } from '@codemirror/lang-markdown'
 import './Editor.css'
+
+// Custom selection highlighting that wraps text tightly (Sublime-style)
+const selectionMark = Decoration.mark({ class: 'selection-highlight' })
+
+const selectionHighlighter = ViewPlugin.fromClass(class {
+  decorations: DecorationSet
+
+  constructor(view: EditorView) {
+    this.decorations = this.buildDecorations(view)
+  }
+
+  update(update: any) {
+    if (update.selectionSet || update.docChanged || update.viewportChanged) {
+      this.decorations = this.buildDecorations(update.view)
+    }
+  }
+
+  buildDecorations(view: EditorView): DecorationSet {
+    const builder = new RangeSetBuilder<Decoration>()
+    const { from, to } = view.state.selection.main
+
+    if (from === to) {
+      return builder.finish()
+    }
+
+    // Add decorations for each line segment of the selection
+    const doc = view.state.doc
+    let pos = from
+
+    while (pos < to) {
+      const line = doc.lineAt(pos)
+      const lineEnd = Math.min(line.to, to)
+      const lineStart = Math.max(line.from, pos)
+
+      // Only decorate if there's actual text to highlight on this line
+      if (lineStart < lineEnd) {
+        builder.add(lineStart, lineEnd, selectionMark)
+      }
+
+      // Move to next line
+      pos = line.to + 1
+    }
+
+    return builder.finish()
+  }
+}, {
+  decorations: v => v.decorations
+})
 
 interface EditorProps {
   content: string
@@ -63,15 +112,6 @@ export function Editor(props: EditorProps) {
       },
       '&.cm-focused .cm-cursor': {
         animation: 'cm-blink 0.4s steps(1) infinite',
-      },
-      '.cm-selectionBackground, .cm-content ::selection': {
-        backgroundColor: '#EEFF41 !important',
-      },
-      '&.cm-focused .cm-selectionBackground, &.cm-focused .cm-content ::selection': {
-        backgroundColor: '#EEFF41 !important',
-      },
-      '.cm-selectionLayer .cm-selectionBackground': {
-        backgroundColor: '#EEFF41 !important',
       },
     })
 
@@ -134,6 +174,7 @@ export function Editor(props: EditorProps) {
         markdown(),
         updateListener,
         EditorView.lineWrapping,
+        selectionHighlighter,
       ],
     })
 
