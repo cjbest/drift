@@ -1,5 +1,54 @@
-import { createSignal, createEffect, onMount, onCleanup, For } from 'solid-js'
+import { createSignal, createEffect, onMount, For } from 'solid-js'
+import { readTextFile, stat } from '@tauri-apps/plugin-fs'
 import './QuickOpen.css'
+
+interface NoteInfo {
+  path: string
+  title: string
+  preview: string
+  createdAt: Date | null
+}
+
+function formatRelativeDate(date: Date | null): string {
+  if (!date) return ''
+
+  const now = new Date()
+  const diff = now.getTime() - date.getTime()
+  const seconds = Math.floor(diff / 1000)
+  const minutes = Math.floor(seconds / 60)
+  const hours = Math.floor(minutes / 60)
+  const days = Math.floor(hours / 24)
+
+  // Within last minute
+  if (seconds < 60) return `${seconds}s ago`
+
+  // Within last hour
+  if (minutes < 60) return `${minutes} min ago`
+
+  // Today (but over an hour ago)
+  const isToday = date.toDateString() === now.toDateString()
+  if (isToday) {
+    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: undefined, hour12: true }).toLowerCase()
+  }
+
+  // Yesterday
+  const yesterday = new Date(now)
+  yesterday.setDate(yesterday.getDate() - 1)
+  if (date.toDateString() === yesterday.toDateString()) return 'yesterday'
+
+  // Within last week
+  if (days < 7) {
+    return date.toLocaleDateString('en-US', { weekday: 'short' })
+  }
+
+  // This year
+  if (date.getFullYear() === now.getFullYear()) {
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  }
+
+  // Older
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
 
 interface QuickOpenProps {
   recentFiles: string[]
@@ -10,6 +59,12 @@ interface QuickOpenProps {
 
 function getFilename(path: string): string {
   return path.split('/').pop()?.replace('.md', '') || path
+}
+
+function getPreview(content: string): string {
+  // Get content after the first line, collapsed to single line
+  const lines = content.split('\n').slice(1).filter(l => l.trim())
+  return lines.join(' ').slice(0, 200)
 }
 
 function fuzzyMatch(query: string, text: string): boolean {
@@ -24,52 +79,74 @@ function fuzzyMatch(query: string, text: string): boolean {
 
 export function QuickOpen(props: QuickOpenProps) {
   const [query, setQuery] = createSignal('')
-  const [allFiles, setAllFiles] = createSignal<string[]>([])
-  const [filteredFiles, setFilteredFiles] = createSignal<string[]>([])
+  const [allNotes, setAllNotes] = createSignal<NoteInfo[]>([])
+  const [filteredNotes, setFilteredNotes] = createSignal<NoteInfo[]>([])
   const [selectedIndex, setSelectedIndex] = createSignal(0)
 
   let inputRef: HTMLInputElement | undefined
 
   onMount(async () => {
-    // Load all notes
-    const notes = await props.listAllNotes()
-    setAllFiles(notes)
+    // Load all notes with previews and creation dates
+    const paths = await props.listAllNotes()
+    const notes: NoteInfo[] = await Promise.all(
+      paths.map(async (path) => {
+        try {
+          const [content, fileStat] = await Promise.all([
+            readTextFile(path),
+            stat(path),
+          ])
+          return {
+            path,
+            title: getFilename(path),
+            preview: getPreview(content),
+            createdAt: fileStat.birthtime ? new Date(fileStat.birthtime) : null,
+          }
+        } catch {
+          return { path, title: getFilename(path), preview: '', createdAt: null }
+        }
+      })
+    )
+    setAllNotes(notes)
 
     // Start with recent files if no query
-    updateFilteredFiles('')
+    updateFilteredNotes('')
 
     // Focus input
     inputRef?.focus()
   })
 
-  const updateFilteredFiles = (q: string) => {
+  const updateFilteredNotes = (q: string) => {
+    const all = allNotes()
     if (!q.trim()) {
       // Show recent files first, then others
-      const recent = props.recentFiles.filter(f => allFiles().includes(f))
-      const others = allFiles().filter(f => !props.recentFiles.includes(f))
-      setFilteredFiles([...recent, ...others])
+      const recentPaths = new Set(props.recentFiles)
+      const recent = all.filter(n => recentPaths.has(n.path))
+      const others = all.filter(n => !recentPaths.has(n.path))
+      setFilteredNotes([...recent, ...others])
     } else {
-      // Filter by query
-      const matches = allFiles().filter(f => fuzzyMatch(q, getFilename(f)))
-      setFilteredFiles(matches)
+      // Filter by query (match title or preview)
+      const matches = all.filter(n =>
+        fuzzyMatch(q, n.title) || fuzzyMatch(q, n.preview)
+      )
+      setFilteredNotes(matches)
     }
     setSelectedIndex(0)
   }
 
   createEffect(() => {
-    updateFilteredFiles(query())
+    updateFilteredNotes(query())
   })
 
   const handleKeyDown = (e: KeyboardEvent) => {
     // Stop all keyboard events from reaching CodeMirror
     e.stopPropagation()
 
-    const files = filteredFiles()
+    const notes = filteredNotes()
 
     switch (e.key) {
       case 'ArrowDown':
         e.preventDefault()
-        setSelectedIndex(i => Math.min(i + 1, files.length - 1))
+        setSelectedIndex(i => Math.min(i + 1, notes.length - 1))
         break
       case 'ArrowUp':
         e.preventDefault()
@@ -77,8 +154,8 @@ export function QuickOpen(props: QuickOpenProps) {
         break
       case 'Enter':
         e.preventDefault()
-        if (files[selectedIndex()]) {
-          props.onSelect(files[selectedIndex()])
+        if (notes[selectedIndex()]) {
+          props.onSelect(notes[selectedIndex()].path)
         }
         break
       case 'Escape':
@@ -95,24 +172,31 @@ export function QuickOpen(props: QuickOpenProps) {
           ref={inputRef}
           type="text"
           class="quick-open-input"
-          placeholder="Search notes..."
+          placeholder="Search..."
           value={query()}
           onInput={e => setQuery(e.currentTarget.value)}
           onKeyDown={handleKeyDown}
         />
         <div class="quick-open-list">
-          <For each={filteredFiles()}>
-            {(file, index) => (
+          <For each={filteredNotes()}>
+            {(note, index) => (
               <div
                 class="quick-open-item"
                 classList={{ selected: index() === selectedIndex() }}
-                onClick={() => props.onSelect(file)}
+                onClick={() => props.onSelect(note.path)}
+                onMouseMove={() => setSelectedIndex(index())}
               >
-                {getFilename(file)}
+                <span class="quick-open-title">{note.title}</span>
+                {note.preview && (
+                  <span class="quick-open-preview">{note.preview}</span>
+                )}
+                {note.createdAt && (
+                  <span class="quick-open-date">{formatRelativeDate(note.createdAt)}</span>
+                )}
               </div>
             )}
           </For>
-          {filteredFiles().length === 0 && (
+          {filteredNotes().length === 0 && (
             <div class="quick-open-empty">No notes found</div>
           )}
         </div>

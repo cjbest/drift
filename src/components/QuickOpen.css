@@ -46,14 +46,35 @@
   padding: 10px 20px;
   cursor: pointer;
   font-size: 15px;
-}
-
-.quick-open-item:hover {
-  background: var(--selection);
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  overflow: hidden;
 }
 
 .quick-open-item.selected {
   background: var(--selection);
+}
+
+.quick-open-title {
+  flex-shrink: 0;
+}
+
+.quick-open-preview {
+  opacity: 0.4;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1;
+}
+
+.quick-open-date {
+  opacity: 0.4;
+  font-size: 12px;
+  flex-shrink: 0;
+  margin-left: 12px;
 }
 
 .quick-open-empty {
