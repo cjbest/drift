@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Dusty Teal - cool, sophisticated, sky-adjacent -->
+  <rect width="512" height="512" rx="100" ry="100" fill="#1e2a2d"/>
+  <path d="M100 280 Q180 220 260 260 Q340 300 420 240"
+        stroke="#5B9A8B" stroke-width="48" fill="none" stroke-linecap="round"/>
+</svg>

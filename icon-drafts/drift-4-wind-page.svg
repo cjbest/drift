@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Rounded square background with gradient -->
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1f1f1f"/>
+      <stop offset="100%" style="stop-color:#141414"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="100" fill="url(#bg)"/>
+  <!-- Abstract page lifting in wind -->
+  <path d="M140 380 L140 140 Q180 120 240 130 Q320 145 360 120 L360 340 Q300 380 200 360 Q160 355 140 380 Z"
+        fill="#fafafa" opacity="0.95"/>
+  <!-- Wind lines -->
+  <path d="M80 200 Q120 195 160 200" stroke="#505050" stroke-width="8" fill="none" stroke-linecap="round"/>
+  <path d="M60 260 Q110 250 180 260" stroke="#404040" stroke-width="6" fill="none" stroke-linecap="round"/>
+  <path d="M90 320 Q130 315 170 320" stroke="#303030" stroke-width="6" fill="none" stroke-linecap="round"/>
+</svg>

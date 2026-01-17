@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Rounded square background -->
+  <rect width="512" height="512" rx="100" fill="#1a1a1a"/>
+  <!-- Stylized D made of flowing lines -->
+  <path d="M160 120 L160 392" stroke="#e0e0e0" stroke-width="36" fill="none" stroke-linecap="round"/>
+  <path d="M160 120 Q360 120 360 256 Q360 392 160 392"
+        stroke="#e0e0e0" stroke-width="36" fill="none" stroke-linecap="round"/>
+</svg>

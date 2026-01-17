@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Rounded square background -->
+  <rect width="512" height="512" rx="100" fill="#1a1a1a"/>
+  <!-- Gentler S-curve, more serene -->
+  <path d="M90 300 Q200 240 310 270 Q420 300 430 220"
+        stroke="#f0f0f0" stroke-width="36" fill="none" stroke-linecap="round"/>
+</svg>

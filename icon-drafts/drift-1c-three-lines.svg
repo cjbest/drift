@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Rounded square background -->
+  <rect width="512" height="512" rx="100" fill="#1a1a1a"/>
+  <!-- Three flowing lines like text drifting away -->
+  <path d="M100 180 Q180 160 260 175 Q340 190 400 170"
+        stroke="#f0f0f0" stroke-width="24" fill="none" stroke-linecap="round"/>
+  <path d="M100 260 Q200 235 300 255 Q380 270 420 250"
+        stroke="#a0a0a0" stroke-width="24" fill="none" stroke-linecap="round"/>
+  <path d="M100 340 Q160 325 240 340 Q320 355 380 335"
+        stroke="#606060" stroke-width="24" fill="none" stroke-linecap="round"/>
+</svg>

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Rounded square background -->
+  <rect width="512" height="512" rx="100" fill="#1a1a1a"/>
+  <!-- Page shape with flowing edge -->
+  <path d="M140 100 L340 100 L380 140 L380 412 Q300 380 220 400 Q160 415 140 400 Z"
+        fill="#2a2a2a" stroke="#3a3a3a" stroke-width="2"/>
+  <!-- Dog ear -->
+  <path d="M340 100 L340 140 L380 140 Z" fill="#3a3a3a"/>
+  <!-- Text lines that drift/flow -->
+  <path d="M180 180 Q240 175 300 185" stroke="#e0e0e0" stroke-width="12" fill="none" stroke-linecap="round"/>
+  <path d="M180 230 Q250 220 320 235" stroke="#a0a0a0" stroke-width="12" fill="none" stroke-linecap="round"/>
+  <path d="M180 280 Q230 275 280 280" stroke="#707070" stroke-width="12" fill="none" stroke-linecap="round"/>
+</svg>
