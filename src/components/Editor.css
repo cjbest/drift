@@ -23,3 +23,15 @@
   border-radius: 3px;
   padding: 1px 0;
 }
+
+/* Cursor styling - hide native caret, use CodeMirror's custom cursor */
+.cm-content {
+  caret-color: transparent !important;
+}
+
+.cm-cursor, .cm-cursor-primary {
+  border-left: 2px solid #FF8C00 !important;
+  height: 1.7em !important;
+  transform: translate(-1px, -0.25em);
+  animation: none !important;
+}

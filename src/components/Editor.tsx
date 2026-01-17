@@ -1,6 +1,6 @@
 import { onMount, onCleanup, createEffect } from 'solid-js'
 import { EditorState, RangeSetBuilder } from '@codemirror/state'
-import { EditorView, keymap, highlightActiveLine, ViewPlugin, Decoration } from '@codemirror/view'
+import { EditorView, keymap, highlightActiveLine, ViewPlugin, Decoration, drawSelection } from '@codemirror/view'
 import type { DecorationSet } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { markdown } from '@codemirror/lang-markdown'
@@ -101,18 +101,6 @@ export function Editor(props: EditorProps) {
       '&.cm-focused': {
         outline: 'none',
       },
-      '.cm-cursor, .cm-dropCursor': {
-        borderLeftColor: 'var(--fg) !important',
-        borderLeftWidth: '2px !important',
-        height: '1.4em !important',
-      },
-      '@keyframes cm-blink': {
-        '0%, 100%': { opacity: '1' },
-        '50%': { opacity: '0' },
-      },
-      '&.cm-focused .cm-cursor': {
-        animation: 'cm-blink 0.4s steps(1) infinite',
-      },
     })
 
     const lightTheme = EditorView.theme({
@@ -175,6 +163,7 @@ export function Editor(props: EditorProps) {
         updateListener,
         EditorView.lineWrapping,
         selectionHighlighter,
+        drawSelection({ cursorBlinkRate: 0 }),
       ],
     })
 
