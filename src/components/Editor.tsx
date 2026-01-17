@@ -8,6 +8,8 @@ import './Editor.css'
 interface EditorProps {
   content: string
   onChange: (content: string) => void
+  onNewNote: () => void
+  onOpenNote: () => void
 }
 
 export function Editor(props: EditorProps) {
@@ -18,7 +20,7 @@ export function Editor(props: EditorProps) {
     const theme = EditorView.theme({
       '&': {
         height: '100%',
-        fontSize: '16px',
+        fontSize: '18px',
       },
       '.cm-content': {
         fontFamily: '"SF Mono", Menlo, Monaco, "Courier New", monospace',
@@ -69,6 +71,23 @@ export function Editor(props: EditorProps) {
       }
     })
 
+    const appKeymap = keymap.of([
+      {
+        key: 'Mod-n',
+        run: () => {
+          props.onNewNote()
+          return true
+        },
+      },
+      {
+        key: 'Mod-p',
+        run: () => {
+          props.onOpenNote()
+          return true
+        },
+      },
+    ])
+
     const state = EditorState.create({
       doc: props.content,
       extensions: [
@@ -76,6 +95,7 @@ export function Editor(props: EditorProps) {
         lightTheme,
         highlightActiveLine(),
         history(),
+        appKeymap,
         keymap.of([
           ...defaultKeymap,
           ...historyKeymap,
