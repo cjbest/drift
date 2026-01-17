@@ -56,3 +56,9 @@
   opacity: 0;
   transition: none;
 }
+
+/* Instant cursor show (no transition) - used on focus */
+.cursor-no-transition .cm-cursor,
+.cursor-no-transition .cm-cursor-primary {
+  transition: none !important;
+}

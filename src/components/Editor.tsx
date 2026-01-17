@@ -44,6 +44,12 @@ const cursorHider = ViewPlugin.fromClass(class {
       this.timeout = null
     }
 
+    // Show cursor immediately when window/editor gains focus
+    if (update.focusChanged && view.hasFocus) {
+      this.showCursor(view, true)
+      return
+    }
+
     // Never hide cursor if only whitespace to the left
     if (onlyWhitespaceBefore) {
       this.showCursor(view)
@@ -72,8 +78,15 @@ const cursorHider = ViewPlugin.fromClass(class {
     }
   }
 
-  showCursor(view: EditorView) {
-    view.dom.classList.remove('cursor-hidden')
+  showCursor(view: EditorView, instant = false) {
+    if (instant) {
+      view.dom.classList.add('cursor-no-transition')
+      view.dom.classList.remove('cursor-hidden')
+      // Remove the no-transition class after a frame so future transitions work
+      requestAnimationFrame(() => view.dom.classList.remove('cursor-no-transition'))
+    } else {
+      view.dom.classList.remove('cursor-hidden')
+    }
   }
 
   hideCursor(view: EditorView) {
