@@ -51,8 +51,10 @@ function formatRelativeDate(date: Date | null): string {
 }
 
 interface QuickOpenProps {
-  recentFiles: string[]
+  fileAccessTimes: Record<string, number>
+  currentFile: string | null
   onSelect: (filePath: string) => void
+  onSelectNewWindow: (filePath: string) => void
   onClose: () => void
   listAllNotes: () => Promise<string[]>
 }
@@ -86,8 +88,11 @@ export function QuickOpen(props: QuickOpenProps) {
   let inputRef: HTMLInputElement | undefined
 
   onMount(async () => {
-    // Load all notes with previews and creation dates
-    const paths = await props.listAllNotes()
+    // Focus input immediately
+    setTimeout(() => inputRef?.focus(), 0)
+
+    // Load all notes with previews and creation dates (excluding current file)
+    const paths = (await props.listAllNotes()).filter(p => p !== props.currentFile)
     const notes: NoteInfo[] = await Promise.all(
       paths.map(async (path) => {
         try {
@@ -107,34 +112,40 @@ export function QuickOpen(props: QuickOpenProps) {
       })
     )
     setAllNotes(notes)
-
-    // Start with recent files if no query
-    updateFilteredNotes('')
-
-    // Focus input
-    inputRef?.focus()
   })
 
-  const updateFilteredNotes = (q: string) => {
-    const all = allNotes()
-    if (!q.trim()) {
-      // Show recent files first, then others
-      const recentPaths = new Set(props.recentFiles)
-      const recent = all.filter(n => recentPaths.has(n.path))
-      const others = all.filter(n => !recentPaths.has(n.path))
-      setFilteredNotes([...recent, ...others])
-    } else {
-      // Filter by query (match title or preview)
-      const matches = all.filter(n =>
-        fuzzyMatch(q, n.title) || fuzzyMatch(q, n.preview)
-      )
-      setFilteredNotes(matches)
-    }
-    setSelectedIndex(0)
+  const getRelevantTime = (note: NoteInfo): number => {
+    const accessTime = props.fileAccessTimes[note.path] || 0
+    const createTime = note.createdAt?.getTime() || 0
+    return Math.max(accessTime, createTime)
   }
 
+  const updateFilteredNotes = () => {
+    const q = query()
+    let notes = allNotes()
+
+    if (q.trim()) {
+      // Filter by query (match title or preview)
+      notes = notes.filter(n =>
+        fuzzyMatch(q, n.title) || fuzzyMatch(q, n.preview)
+      )
+    }
+
+    // Sort by most recent (either created or accessed)
+    const sorted = [...notes].sort((a, b) => getRelevantTime(b) - getRelevantTime(a))
+    setFilteredNotes(sorted)
+  }
+
+  // Update filtered notes when allNotes or query changes
   createEffect(() => {
-    updateFilteredNotes(query())
+    allNotes() // track dependency
+    updateFilteredNotes()
+  })
+
+  // Reset selection only when query changes
+  createEffect(() => {
+    query() // track dependency
+    setSelectedIndex(0)
   })
 
   const handleKeyDown = (e: KeyboardEvent) => {
@@ -145,6 +156,7 @@ export function QuickOpen(props: QuickOpenProps) {
 
     switch (e.key) {
       case 'ArrowDown':
+      case 'Tab':
         e.preventDefault()
         setSelectedIndex(i => Math.min(i + 1, notes.length - 1))
         break
@@ -155,7 +167,11 @@ export function QuickOpen(props: QuickOpenProps) {
       case 'Enter':
         e.preventDefault()
         if (notes[selectedIndex()]) {
-          props.onSelect(notes[selectedIndex()].path)
+          if (e.metaKey) {
+            props.onSelectNewWindow(notes[selectedIndex()].path)
+          } else {
+            props.onSelect(notes[selectedIndex()].path)
+          }
         }
         break
       case 'Escape':
@@ -176,6 +192,7 @@ export function QuickOpen(props: QuickOpenProps) {
           value={query()}
           onInput={e => setQuery(e.currentTarget.value)}
           onKeyDown={handleKeyDown}
+          autofocus
         />
         <div class="quick-open-list">
           <For each={filteredNotes()}>

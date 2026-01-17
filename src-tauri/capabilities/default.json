@@ -2,12 +2,18 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "enables the default permissions",
+  "webviews": [
+    "main",
+    "drift-*"
+  ],
   "windows": [
-    "main"
+    "main",
+    "drift-*"
   ],
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",
+    "core:webview:allow-create-webview-window",
     "core:path:default",
     "fs:default",
     "fs:allow-read",
@@ -19,6 +25,7 @@
     "fs:allow-write-text-file",
     "fs:allow-read-text-file",
     "fs:allow-stat",
+    "fs:allow-rename",
     "fs:scope-document-recursive"
   ]
 }

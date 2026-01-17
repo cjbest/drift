@@ -1,8 +1,9 @@
 import { createSignal, onMount, onCleanup, Show } from 'solid-js'
 import { listen } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
+import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { documentDir } from '@tauri-apps/api/path'
-import { readTextFile, writeTextFile, mkdir, exists, readDir } from '@tauri-apps/plugin-fs'
+import { readTextFile, writeTextFile, mkdir, exists, readDir, rename } from '@tauri-apps/plugin-fs'
 import { Editor } from './components/Editor'
 import { QuickOpen } from './components/QuickOpen'
 import './App.css'
@@ -29,7 +30,7 @@ function sanitizeFilename(content: string): string {
 function App() {
   const [content, setContent] = createSignal('')
   const [currentFilePath, setCurrentFilePath] = createSignal<string | null>(null)
-  const [recentFiles, setRecentFiles] = createSignal<string[]>([])
+  const [fileAccessTimes, setFileAccessTimes] = createSignal<Record<string, number>>({})
   const [quickOpenVisible, setQuickOpenVisible] = createSignal(false)
   const [driftDir, setDriftDir] = createSignal('')
 
@@ -57,19 +58,24 @@ function App() {
     }
   }
 
-  const loadRecentFiles = () => {
-    const stored = localStorage.getItem('drift-recent-files')
+  const loadFileAccessTimes = () => {
+    const stored = localStorage.getItem('drift-file-access-times')
     if (stored) {
-      setRecentFiles(JSON.parse(stored))
+      setFileAccessTimes(JSON.parse(stored))
     }
   }
 
-  const addToRecentFiles = (filePath: string) => {
-    const recent = recentFiles().filter(f => f !== filePath)
-    recent.unshift(filePath)
-    const updated = recent.slice(0, MAX_RECENT_FILES)
-    setRecentFiles(updated)
-    localStorage.setItem('drift-recent-files', JSON.stringify(updated))
+  const recordFileAccess = (filePath: string, oldPath?: string) => {
+    const times = { ...fileAccessTimes() }
+    // If renaming, transfer the old timestamp
+    if (oldPath && oldPath !== filePath && times[oldPath]) {
+      times[filePath] = times[oldPath]
+      delete times[oldPath]
+    }
+    // Update access time to now
+    times[filePath] = Date.now()
+    setFileAccessTimes(times)
+    localStorage.setItem('drift-file-access-times', JSON.stringify(times))
   }
 
   const saveFile = async (contentToSave: string, existingPath?: string | null) => {
@@ -78,6 +84,7 @@ function App() {
     try {
       const dir = await ensureDriftDir()
       let filePath = existingPath ?? currentFilePath()
+      let oldPath: string | undefined
 
       if (!filePath) {
         // Create new file with name from content
@@ -90,14 +97,35 @@ function App() {
           filePath = `${dir}/${filename} ${counter}.md`
           counter++
         }
+      } else {
+        // Check if title changed and we need to rename
+        const currentFilename = filePath.split('/').pop()?.replace('.md', '') || ''
+        const newFilename = sanitizeFilename(contentToSave)
 
-        setCurrentFilePath(filePath)
+        if (currentFilename !== newFilename) {
+          let newPath = `${dir}/${newFilename}.md`
+
+          // Handle duplicates (but not with self)
+          let counter = 1
+          while (await exists(newPath) && newPath !== filePath) {
+            newPath = `${dir}/${newFilename} ${counter}.md`
+            counter++
+          }
+
+          if (newPath !== filePath) {
+            console.log('Renaming:', filePath, '->', newPath)
+            await rename(filePath, newPath)
+            oldPath = filePath
+            filePath = newPath
+          }
+        }
       }
 
+      setCurrentFilePath(filePath)
       console.log('Saving to:', filePath)
       await writeTextFile(filePath, contentToSave)
       console.log('Saved successfully')
-      addToRecentFiles(filePath)
+      recordFileAccess(filePath, oldPath)
     } catch (e) {
       console.error('saveFile error:', e)
     }
@@ -107,7 +135,7 @@ function App() {
     const fileContent = await readTextFile(filePath)
     setContent(fileContent)
     setCurrentFilePath(filePath)
-    addToRecentFiles(filePath)
+    recordFileAccess(filePath)
     setQuickOpenVisible(false)
   }
 
@@ -158,13 +186,43 @@ function App() {
     }
   }
 
+  const openNewWindow = async (filePath?: string) => {
+    const label = `drift-${Date.now()}`
+    // Use current origin to work in both dev and production
+    const base = window.location.origin
+    const url = filePath ? `${base}/?file=${encodeURIComponent(filePath)}` : base
+    new WebviewWindow(label, {
+      url,
+      title: 'Drift',
+      width: 900,
+      height: 700,
+      minWidth: 400,
+      minHeight: 300,
+      titleBarStyle: 'overlay',
+      hiddenTitle: true,
+    })
+  }
+
   onMount(async () => {
     await ensureDriftDir()
-    loadRecentFiles()
+    loadFileAccessTimes()
 
-    const unlistenNew = listen('menu-new-note', newNote)
+    // Check for file parameter in URL (for opening in new window)
+    const urlParams = new URLSearchParams(window.location.search)
+    const fileParam = urlParams.get('file')
+    if (fileParam) {
+      openFile(fileParam)
+    }
+
+    // Only respond to menu events if this window is focused
+    const unlistenNew = listen('menu-new-note', () => {
+      if (document.hasFocus()) newNote()
+    })
+    const unlistenNewWindow = listen('menu-new-window', () => {
+      if (document.hasFocus()) openNewWindow()
+    })
     const unlistenOpen = listen('menu-open-note', () => {
-      setQuickOpenVisible(true)
+      if (document.hasFocus()) setQuickOpenVisible(true)
     })
 
     // Save on window close
@@ -183,6 +241,7 @@ function App() {
 
     onCleanup(() => {
       unlistenNew.then(fn => fn())
+      unlistenNewWindow.then(fn => fn())
       unlistenOpen.then(fn => fn())
       unlistenClose.then(fn => fn())
       window.removeEventListener('blur', handleBlur)
@@ -199,11 +258,17 @@ function App() {
         onChange={handleContentChange}
         onNewNote={newNote}
         onOpenNote={() => setQuickOpenVisible(true)}
+        onNewWindow={() => openNewWindow()}
       />
       <Show when={quickOpenVisible()}>
         <QuickOpen
-          recentFiles={recentFiles()}
+          fileAccessTimes={fileAccessTimes()}
+          currentFile={currentFilePath()}
           onSelect={openFile}
+          onSelectNewWindow={(path) => {
+            setQuickOpenVisible(false)
+            openNewWindow(path)
+          }}
           onClose={() => setQuickOpenVisible(false)}
           listAllNotes={listAllNotes}
         />

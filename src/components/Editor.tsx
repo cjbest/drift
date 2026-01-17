@@ -10,6 +10,7 @@ interface EditorProps {
   onChange: (content: string) => void
   onNewNote: () => void
   onOpenNote: () => void
+  onNewWindow: () => void
 }
 
 export function Editor(props: EditorProps) {
@@ -27,6 +28,7 @@ export function Editor(props: EditorProps) {
         paddingTop: '52px',
         paddingBottom: '20px',
         caretColor: 'var(--fg)',
+        lineHeight: '1.6',
       },
       '.cm-line': {
         paddingLeft: '32px',  // 52 / 1.618 ≈ 32
@@ -86,6 +88,13 @@ export function Editor(props: EditorProps) {
           return true
         },
       },
+      {
+        key: 'Mod-Shift-n',
+        run: () => {
+          props.onNewWindow()
+          return true
+        },
+      },
     ])
 
     const state = EditorState.create({
@@ -129,7 +138,9 @@ export function Editor(props: EditorProps) {
           to: view.state.doc.length,
           insert: newContent,
         },
+        selection: { anchor: newContent.length },
       })
+      view.focus()
     }
   })
 
