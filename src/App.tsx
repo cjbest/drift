@@ -392,6 +392,15 @@ function App() {
     const handleBeforeUnload = () => saveNow()
     window.addEventListener('beforeunload', handleBeforeUnload)
 
+    // Cmd+drag anywhere to move window
+    const handleMouseDown = (e: MouseEvent) => {
+      if (e.metaKey && e.button === 0) {
+        e.preventDefault()
+        appWindow.startDragging()
+      }
+    }
+    window.addEventListener('mousedown', handleMouseDown)
+
     onCleanup(() => {
       unlistenNew.then(fn => fn())
       unlistenNewWindow.then(fn => fn())
@@ -404,6 +413,7 @@ function App() {
       unlistenClose.then(fn => fn())
       window.removeEventListener('blur', handleBlur)
       window.removeEventListener('beforeunload', handleBeforeUnload)
+      window.removeEventListener('mousedown', handleMouseDown)
       if (saveTimeout) clearTimeout(saveTimeout)
       if (statusTimeout) clearTimeout(statusTimeout)
     })

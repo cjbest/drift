@@ -37,6 +37,19 @@
   transition: opacity 0.3s ease;
 }
 
+/* White cursor in dark mode */
+:root[data-theme="dark"] .cm-cursor,
+:root[data-theme="dark"] .cm-cursor-primary {
+  border-left-color: #ffffff !important;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .cm-cursor,
+  :root:not([data-theme="light"]) .cm-cursor-primary {
+    border-left-color: #ffffff !important;
+  }
+}
+
 /* Hide cursor - instant out, smooth in */
 .cursor-hidden .cm-cursor,
 .cursor-hidden .cm-cursor-primary {
