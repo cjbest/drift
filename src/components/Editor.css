@@ -30,8 +30,16 @@
 }
 
 .cm-cursor, .cm-cursor-primary {
-  border-left: 2px solid #FF8C00 !important;
+  border-left: 2px solid #000000 !important;
   height: 1.7em !important;
   transform: translate(-1px, -0.25em);
   animation: none !important;
+  transition: opacity 0.3s ease;
+}
+
+/* Hide cursor - instant out, smooth in */
+.cursor-hidden .cm-cursor,
+.cursor-hidden .cm-cursor-primary {
+  opacity: 0;
+  transition: none;
 }

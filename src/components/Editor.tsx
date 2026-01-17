@@ -9,6 +9,81 @@ import './Editor.css'
 // Custom selection highlighting that wraps text tightly (Sublime-style)
 const selectionMark = Decoration.mark({ class: 'selection-highlight' })
 
+// Smart cursor hiding:
+// - Fades while typing, comes back when idle
+// - Fades after 1s with selection (for screenshots)
+// - Comes back on cursor movement
+const cursorHider = ViewPlugin.fromClass(class {
+  timeout: ReturnType<typeof setTimeout> | null = null
+  lastCursorPos: number = 0
+  lastDocLength: number = 0
+
+  constructor(view: EditorView) {
+    this.lastCursorPos = view.state.selection.main.head
+    this.lastDocLength = view.state.doc.length
+    this.showCursor(view)
+  }
+
+  update(update: any) {
+    const view = update.view
+    const { from, to, head } = view.state.selection.main
+    const hasSelection = from !== to
+    const cursorMoved = head !== this.lastCursorPos && !update.docChanged
+    const line = view.state.doc.lineAt(head)
+    const atLineStart = head === line.from
+    const docLength = view.state.doc.length
+    const isDeleting = docLength < this.lastDocLength
+
+    this.lastCursorPos = head
+    this.lastDocLength = docLength
+
+    // Clear existing timeout
+    if (this.timeout) {
+      clearTimeout(this.timeout)
+      this.timeout = null
+    }
+
+    // Never hide cursor at start of line
+    if (atLineStart) {
+      this.showCursor(view)
+      return
+    }
+
+    if (update.docChanged) {
+      if (isDeleting) {
+        // Backspace/delete - show cursor
+        this.showCursor(view)
+      } else {
+        // Typing - hide cursor immediately, show after idle
+        this.hideCursor(view)
+        this.timeout = setTimeout(() => this.showCursor(view), 1500)
+      }
+    } else if (cursorMoved) {
+      // Cursor moved without typing - show it instantly
+      this.showCursor(view)
+      if (hasSelection) {
+        // But fade after 1s if there's a selection
+        this.timeout = setTimeout(() => this.hideCursor(view), 1000)
+      }
+    } else if (hasSelection) {
+      // Selection exists, fade after 1s
+      this.timeout = setTimeout(() => this.hideCursor(view), 1000)
+    }
+  }
+
+  showCursor(view: EditorView) {
+    view.dom.classList.remove('cursor-hidden')
+  }
+
+  hideCursor(view: EditorView) {
+    view.dom.classList.add('cursor-hidden')
+  }
+
+  destroy() {
+    if (this.timeout) clearTimeout(this.timeout)
+  }
+})
+
 const selectionHighlighter = ViewPlugin.fromClass(class {
   decorations: DecorationSet
 
@@ -163,6 +238,7 @@ export function Editor(props: EditorProps) {
         updateListener,
         EditorView.lineWrapping,
         selectionHighlighter,
+        cursorHider,
         drawSelection({ cursorBlinkRate: 0 }),
       ],
     })
