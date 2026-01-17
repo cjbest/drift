@@ -1,4 +1,4 @@
-import { createSignal, onMount } from 'solid-js'
+import { createSignal } from 'solid-js'
 import { Editor } from './components/Editor'
 import './App.css'
 
