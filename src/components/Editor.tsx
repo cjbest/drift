@@ -30,7 +30,8 @@ const cursorHider = ViewPlugin.fromClass(class {
     const hasSelection = from !== to
     const cursorMoved = head !== this.lastCursorPos && !update.docChanged
     const line = view.state.doc.lineAt(head)
-    const atLineStart = head === line.from
+    const textBeforeCursor = view.state.doc.sliceString(line.from, head)
+    const onlyWhitespaceBefore = textBeforeCursor.trim() === ''
     const docLength = view.state.doc.length
     const isDeleting = docLength < this.lastDocLength
 
@@ -43,8 +44,8 @@ const cursorHider = ViewPlugin.fromClass(class {
       this.timeout = null
     }
 
-    // Never hide cursor at start of line
-    if (atLineStart) {
+    // Never hide cursor if only whitespace to the left
+    if (onlyWhitespaceBefore) {
       this.showCursor(view)
       return
     }
