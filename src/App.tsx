@@ -85,10 +85,17 @@ function App() {
     statusTimeout = setTimeout(() => setStatusMessage(null), 1500) as unknown as number
   }
 
-  const cycleTheme = () => {
-    const modes: ThemeMode[] = ['system', 'light', 'dark']
+  const toggleTheme = () => {
+    // Detect current effective appearance
     const current = theme()
-    const next = modes[(modes.indexOf(current) + 1) % modes.length]
+    let isDark: boolean
+    if (current === 'system') {
+      isDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+    } else {
+      isDark = current === 'dark'
+    }
+    // Toggle to opposite
+    const next: ThemeMode = isDark ? 'light' : 'dark'
     setTheme(next)
     localStorage.setItem('drift-theme', next)
     applyTheme(next)
@@ -359,7 +366,7 @@ function App() {
       if (document.hasFocus()) setQuickOpenVisible(true)
     })
     const unlistenCycleTheme = listen('menu-cycle-theme', () => {
-      if (document.hasFocus()) cycleTheme()
+      if (document.hasFocus()) toggleTheme()
     })
     const unlistenThemeSystem = listen('menu-theme-system', () => {
       if (document.hasFocus()) setThemeMode('system')
@@ -411,7 +418,8 @@ function App() {
         onNewNote={newNote}
         onOpenNote={() => setQuickOpenVisible(true)}
         onNewWindow={() => openNewWindow()}
-        onCycleTheme={cycleTheme}
+        onToggleTheme={toggleTheme}
+        onSystemTheme={() => setThemeMode('system')}
       />
       <Show when={quickOpenVisible()}>
         <QuickOpen

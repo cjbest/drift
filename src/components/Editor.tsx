@@ -135,7 +135,8 @@ interface EditorProps {
   onNewNote: () => void
   onOpenNote: () => void
   onNewWindow: () => void
-  onCycleTheme: () => void
+  onToggleTheme: () => void
+  onSystemTheme: () => void
 }
 
 export function Editor(props: EditorProps) {
@@ -215,7 +216,14 @@ export function Editor(props: EditorProps) {
       {
         key: 'Mod-d',
         run: () => {
-          props.onCycleTheme()
+          props.onToggleTheme()
+          return true
+        },
+      },
+      {
+        key: 'Mod-Shift-d',
+        run: () => {
+          props.onSystemTheme()
           return true
         },
       },
