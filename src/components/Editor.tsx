@@ -51,12 +51,21 @@ export function Editor(props: EditorProps) {
       },
       '.cm-cursor, .cm-dropCursor': {
         borderLeftColor: 'var(--fg) !important',
+        borderLeftWidth: '2px !important',
+        height: '1.4em !important',
+      },
+      '@keyframes cm-blink': {
+        '0%, 100%': { opacity: '1' },
+        '50%': { opacity: '0' },
+      },
+      '&.cm-focused .cm-cursor': {
+        animation: 'cm-blink 0.4s steps(1) infinite',
       },
       '.cm-selectionBackground': {
-        backgroundColor: 'var(--selection) !important',
+        backgroundColor: '#EEFF41 !important',
       },
       '&.cm-focused .cm-selectionBackground': {
-        backgroundColor: 'var(--selection) !important',
+        backgroundColor: '#EEFF41 !important',
       },
     })
 

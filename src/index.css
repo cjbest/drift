@@ -7,7 +7,7 @@
   --fg: #1a1a1a;
   --sidebar-bg: #f5f5f5;
   --sidebar-border: #e0e0e0;
-  --selection: #d0e0ff;
+  --selection: #EEFF41;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -16,7 +16,7 @@
     --fg: #e0e0e0;
     --sidebar-bg: #252525;
     --sidebar-border: #333333;
-    --selection: #3a4a5a;
+    --selection: #EEFF41;
   }
 }
 
