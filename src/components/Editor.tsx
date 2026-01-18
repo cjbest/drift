@@ -314,7 +314,7 @@ export function Editor(props: EditorProps) {
               messages: [
                 {
                   role: 'system',
-                  content: 'You are a helpful writing assistant. The user will show you a document with a selected portion marked between <<<SELECTED>>> and <<</SELECTED>>>. Return ONLY a fixed-up version of the selected text. Fix typos, grammar, improve clarity. If there are TODOs, placeholders, or notes asking for content, fill them in appropriately based on context. Return ONLY the replacement text with no explanation or markdown formatting.',
+                  content: 'You are a helpful writing assistant. The user will show you a document with a selected portion marked between <<<SELECTED>>> and <<</SELECTED>>>. Return ONLY a fixed-up version of the selected text. Fix typos, grammar, improve clarity. Replace placeholders with real content: "tk" or "TK" means "to come" and should be replaced with the correct information (e.g. "tk wrote Lord of the Flies" → "William Golding wrote Lord of the Flies"), TODO comments should be addressed, THINGS IN ALL CAPS are placeholders, and [text in square brackets] should be filled in or if it contains comma-separated options like [large, big, enormous] pick the best word for the context. Return ONLY the replacement text with no explanation or markdown formatting.',
                 },
                 {
                   role: 'user',
