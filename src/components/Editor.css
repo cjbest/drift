@@ -63,12 +63,21 @@
   transition: none !important;
 }
 
-/* AI loading state - pulse the selection */
+/* AI loading state - shimmer on yellow highlight */
 .ai-loading .selection-highlight {
-  animation: ai-pulse 1s ease-in-out infinite;
+  background: linear-gradient(
+    90deg,
+    #EEFF41 0%,
+    #EEFF41 35%,
+    #ffffff 50%,
+    #EEFF41 65%,
+    #EEFF41 100%
+  );
+  background-size: 300% 100%;
+  animation: ai-shimmer 1s linear infinite;
 }
 
-@keyframes ai-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
+@keyframes ai-shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
 }
