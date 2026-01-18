@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- Transparent background with padded icon -->
+  <!-- Icon sits in roughly 824x824 area centered (80% of canvas) -->
+  <rect x="100" y="100" width="824" height="824" rx="160" ry="160" fill="#1a1a1a"/>
+  <!-- Wave in off-white, scaled and centered -->
+  <path d="M260 540 Q420 420 580 500 Q740 580 900 460"
+        stroke="#f5f5f5" stroke-width="76" fill="none" stroke-linecap="round"/>
+</svg>
