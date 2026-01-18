@@ -2,6 +2,10 @@
 
 A minimal, distraction-free markdown editor for macOS.
 
+<p align="center">
+  <img src="assets/demo.gif" alt="Drift demo" width="600">
+</p>
+
 ## Features
 
 - **Distraction-free writing** - Clean interface, smart cursor that fades while typing
