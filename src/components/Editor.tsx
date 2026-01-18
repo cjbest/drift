@@ -1,4 +1,5 @@
-import { onMount, onCleanup, createEffect } from 'solid-js'
+import { onMount, onCleanup, createEffect, createSignal, Show } from 'solid-js'
+import { ApiKeyDialog } from './ApiKeyDialog'
 import { EditorState, RangeSetBuilder } from '@codemirror/state'
 import { EditorView, keymap, highlightActiveLine, ViewPlugin, Decoration, drawSelection } from '@codemirror/view'
 import type { DecorationSet, ViewUpdate } from '@codemirror/view'
@@ -158,6 +159,8 @@ export function Editor(props: EditorProps) {
   let view: EditorView | undefined
 
   let aiAbortController: AbortController | null = null
+  let pendingAiRequest: (() => void) | null = null
+  const [showApiKeyDialog, setShowApiKeyDialog] = createSignal(false)
 
   onMount(() => {
     const theme = EditorView.theme({
@@ -282,9 +285,15 @@ export function Editor(props: EditorProps) {
           if (!selectedText.trim()) return true
 
           // Get API key
-          const apiKey = localStorage.getItem('openai-api-key')
+          let apiKey = localStorage.getItem('openai-api-key')
           if (!apiKey) {
-            alert('Set your OpenAI API key first:\n\nlocalStorage.setItem("openai-api-key", "sk-...")\n\nPaste this in the console (Cmd+Option+I)')
+            // Store the request to run after key is entered
+            pendingAiRequest = () => {
+              // Re-trigger Cmd+K
+              const event = new KeyboardEvent('keydown', { key: 'k', metaKey: true })
+              view.contentDOM.dispatchEvent(event)
+            }
+            setShowApiKeyDialog(true)
             return true
           }
 
@@ -419,5 +428,28 @@ export function Editor(props: EditorProps) {
     }
   })
 
-  return <div ref={containerRef} class="editor-container" />
+  const handleApiKeySubmit = (key: string) => {
+    localStorage.setItem('openai-api-key', key)
+    setShowApiKeyDialog(false)
+    if (pendingAiRequest) {
+      const request = pendingAiRequest
+      pendingAiRequest = null
+      // Small delay to let dialog close
+      setTimeout(request, 50)
+    }
+  }
+
+  const handleApiKeyCancel = () => {
+    setShowApiKeyDialog(false)
+    pendingAiRequest = null
+  }
+
+  return (
+    <>
+      <div ref={containerRef} class="editor-container" />
+      <Show when={showApiKeyDialog()}>
+        <ApiKeyDialog onSubmit={handleApiKeySubmit} onCancel={handleApiKeyCancel} />
+      </Show>
+    </>
+  )
 }

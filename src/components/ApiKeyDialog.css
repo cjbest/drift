@@ -1,0 +1,66 @@
+.api-key-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.api-key-dialog {
+  background: var(--bg);
+  border: 1px solid var(--fg);
+  border-radius: 8px;
+  padding: 20px;
+  width: 350px;
+}
+
+.api-key-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+
+.api-key-input {
+  width: 100%;
+  padding: 10px 12px;
+  font-size: 14px;
+  font-family: "SF Mono", Menlo, Monaco, monospace;
+  border: 1px solid var(--fg);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--fg);
+  box-sizing: border-box;
+}
+
+.api-key-input:focus {
+  outline: none;
+  border-color: #EEFF41;
+}
+
+.api-key-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.api-key-btn {
+  padding: 8px 16px;
+  font-size: 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  border: none;
+}
+
+.api-key-btn.cancel {
+  background: transparent;
+  color: var(--fg);
+  border: 1px solid var(--fg);
+}
+
+.api-key-btn.submit {
+  background: var(--fg);
+  color: var(--bg);
+}
