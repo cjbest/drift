@@ -10,6 +10,34 @@ import './Editor.css'
 // Custom selection highlighting that wraps text tightly (Sublime-style)
 const selectionMark = Decoration.mark({ class: 'selection-highlight' })
 
+// Bold first line (acts as title)
+const firstLineMark = Decoration.mark({ class: 'first-line-title' })
+
+const firstLineHighlighter = ViewPlugin.fromClass(class {
+  decorations: DecorationSet
+
+  constructor(view: EditorView) {
+    this.decorations = this.buildDecorations(view)
+  }
+
+  update(update: ViewUpdate) {
+    if (update.docChanged || update.viewportChanged) {
+      this.decorations = this.buildDecorations(update.view)
+    }
+  }
+
+  buildDecorations(view: EditorView): DecorationSet {
+    const builder = new RangeSetBuilder<Decoration>()
+    const firstLine = view.state.doc.line(1)
+    if (firstLine.length > 0) {
+      builder.add(firstLine.from, firstLine.to, firstLineMark)
+    }
+    return builder.finish()
+  }
+}, {
+  decorations: v => v.decorations
+})
+
 // Smart cursor hiding:
 // - Fades while typing, comes back when idle
 // - Fades after 1s with selection (for screenshots)
@@ -394,6 +422,7 @@ export function Editor(props: EditorProps) {
         updateListener,
         EditorView.lineWrapping,
         selectionHighlighter,
+        firstLineHighlighter,
         cursorHider,
         drawSelection({ cursorBlinkRate: 0 }),
       ],

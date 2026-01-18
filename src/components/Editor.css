@@ -1,3 +1,11 @@
+/* First line as title */
+.first-line-title {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 1.618em;
+  line-height: 1.4;
+}
+
 .editor-container {
   flex: 1;
   height: 100%;
