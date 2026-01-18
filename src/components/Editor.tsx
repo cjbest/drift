@@ -157,6 +157,8 @@ export function Editor(props: EditorProps) {
   let containerRef: HTMLDivElement | undefined
   let view: EditorView | undefined
 
+  let aiAbortController: AbortController | null = null
+
   onMount(() => {
     const theme = EditorView.theme({
       '&': {
@@ -259,6 +261,111 @@ export function Editor(props: EditorProps) {
       {
         key: 'Shift-Tab',
         run: indentLess,
+      },
+      {
+        key: 'Mod-k',
+        run: (view) => {
+          // Don't start new request if one is in progress
+          if (aiAbortController) return true
+
+          const { from, to } = view.state.selection.main
+          let selFrom = from, selTo = to
+
+          // If no selection, use current line
+          if (from === to) {
+            const line = view.state.doc.lineAt(from)
+            selFrom = line.from
+            selTo = line.to
+          }
+
+          const selectedText = view.state.doc.sliceString(selFrom, selTo)
+          if (!selectedText.trim()) return true
+
+          // Get API key
+          const apiKey = localStorage.getItem('openai-api-key')
+          if (!apiKey) {
+            alert('Set your OpenAI API key first:\n\nlocalStorage.setItem("openai-api-key", "sk-...")\n\nPaste this in the console (Cmd+Option+I)')
+            return true
+          }
+
+          // Select the range and show loading state
+          view.dispatch({
+            selection: { anchor: selFrom, head: selTo },
+          })
+          view.dom.classList.add('ai-loading')
+
+          // Build context with selection marked
+          const contextWithMarker =
+            view.state.doc.sliceString(0, selFrom) +
+            '<<<SELECTED>>>' + selectedText + '<<</SELECTED>>>' +
+            view.state.doc.sliceString(selTo)
+
+          // Create abort controller for cancellation
+          aiAbortController = new AbortController()
+
+          fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify({
+              model: 'gpt-5.2',
+              messages: [
+                {
+                  role: 'system',
+                  content: 'You are a helpful writing assistant. The user will show you a document with a selected portion marked between <<<SELECTED>>> and <<</SELECTED>>>. Return ONLY a fixed-up version of the selected text. Fix typos, grammar, improve clarity. If there are TODOs, placeholders, or notes asking for content, fill them in appropriately based on context. Return ONLY the replacement text with no explanation or markdown formatting.',
+                },
+                {
+                  role: 'user',
+                  content: contextWithMarker,
+                },
+              ],
+              max_completion_tokens: 1000,
+            }),
+            signal: aiAbortController.signal,
+          })
+            .then(res => res.json())
+            .then(data => {
+              view.dom.classList.remove('ai-loading')
+              aiAbortController = null
+              const replacement = data.choices?.[0]?.message?.content
+              if (replacement) {
+                view.dispatch({
+                  changes: { from: selFrom, to: selTo, insert: replacement },
+                  selection: { anchor: selFrom + replacement.length },
+                })
+              } else if (data.error) {
+                console.error('OpenAI error:', data.error)
+                alert('API error: ' + (data.error.message || 'Unknown error'))
+              }
+            })
+            .catch(err => {
+              view.dom.classList.remove('ai-loading')
+              aiAbortController = null
+              if (err.name !== 'AbortError') {
+                console.error('AI fix error:', err)
+                alert('Failed to connect to OpenAI')
+              }
+            })
+
+          return true
+        },
+      },
+      {
+        key: 'Escape',
+        run: (view) => {
+          if (aiAbortController) {
+            aiAbortController.abort()
+            aiAbortController = null
+            view.dom.classList.remove('ai-loading')
+            // Collapse selection to end
+            const { to } = view.state.selection.main
+            view.dispatch({ selection: { anchor: to } })
+            return true
+          }
+          return false
+        },
       },
     ])
 
