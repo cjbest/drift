@@ -1,35 +1,35 @@
 # Drift
 
-A minimal, distraction-free markdown writing app for macOS. Think iA Writer meets Bear, but lighter.
-
-## Vision
-
-Drift is for writers who want to focus on words, not features. It stays out of your way until you need it.
+A minimal, distraction-free markdown editor for macOS.
 
 ## Features
 
-### Done
-- [x] Native macOS app (Tauri + SolidJS)
-- [x] Markdown editor with CodeMirror 6
-- [x] Live preview (inline bold/italic rendering)
-- [x] Dark theme matching macOS
+- **Distraction-free writing** - Clean interface, smart cursor that fades while typing
+- **Quick Open (Cmd+P)** - Fuzzy search through all your notes
+- **Auto-save** - Notes save automatically to `~/Documents/Drift`
+- **Auto-naming** - Files named from first heading or line
+- **AI Fix (Cmd+K)** - Fix typos, grammar, fill in placeholders (requires OpenAI API key)
+- **Dark/Light mode** - Toggle with Cmd+D, or follow system with Cmd+Shift+D
+- **Native macOS** - Proper menus, shortcuts, and window management
 
-### In Progress
-- [ ] File sidebar organized by date (Today, Yesterday, This Week, etc.)
-- [ ] Auto-save with intelligent auto-naming from first line
-- [ ] Quick jump search (Cmd+P) for navigating notes
+## Keyboard Shortcuts
 
-### Planned
-- [ ] Native macOS menus with standard shortcuts
-- [ ] Light/dark mode following system preference
-- [ ] Distraction-free mode (hide sidebar, fade UI)
-- [ ] Local file storage (~/.drift or configurable)
+| Shortcut | Action |
+|----------|--------|
+| Cmd+N | New note |
+| Cmd+P | Quick open |
+| Cmd+K | AI fix selection/line |
+| Cmd+L | Select line |
+| Cmd+D | Toggle dark/light |
+| Cmd+Shift+D | Use system theme |
+| Cmd+Shift+N | New window |
+| Tab / Shift+Tab | Indent/unindent |
 
 ## Tech Stack
 
-- **Tauri** - Native macOS wrapper, Rust backend
+- **Tauri 2** - Native macOS app
 - **SolidJS** - Reactive UI
-- **CodeMirror 6** - Editor foundation
+- **CodeMirror 6** - Editor
 - **TypeScript** - Type safety
 
 ## Development
@@ -39,9 +39,16 @@ npm install
 npm run tauri dev
 ```
 
+## Build
+
+```bash
+npm run tauri build
+```
+
+App bundle will be at `src-tauri/target/release/bundle/macos/Drift.app`
+
 ## Philosophy
 
-1. **Local-first** - Your notes are files on disk, not locked in a database
-2. **Fast** - Launch instantly, never wait
-3. **Minimal** - No accounts, no sync complexity, no bloat
-4. **Native** - Looks and feels like it belongs on macOS
+- **Local-first** - Notes are markdown files on disk
+- **Fast** - Launches instantly
+- **Minimal** - No accounts, no sync, no bloat
