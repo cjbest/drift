@@ -184,7 +184,6 @@ body.cmd-held .bare-url {
   height: 1.61em !important;
   transform: translate(-1px, -0.25em);
   animation: none !important;
-  transition: opacity 0.3s ease;
 }
 
 /* Title line (larger font): taller cursor */
@@ -209,18 +208,6 @@ body.cmd-held .bare-url {
   }
 }
 
-/* Hide cursor - instant out, smooth in */
-.cursor-hidden .cm-cursor,
-.cursor-hidden .cm-cursor-primary {
-  opacity: 0;
-  transition: none;
-}
-
-/* Instant cursor show (no transition) - used on focus */
-.cursor-no-transition .cm-cursor,
-.cursor-no-transition .cm-cursor-primary {
-  transition: none !important;
-}
 
 /* AI loading state - shimmer on yellow highlight */
 .ai-loading .selection-highlight {

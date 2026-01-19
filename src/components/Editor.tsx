@@ -569,103 +569,25 @@ const firstLineHighlighter = ViewPlugin.fromClass(class {
   decorations: v => v.decorations
 })
 
-// Smart cursor hiding:
-// - Fades while typing, comes back when idle
-// - Fades after 1s with selection (for screenshots)
-// - Comes back on cursor movement
-const cursorHider = ViewPlugin.fromClass(class {
-  timeout: ReturnType<typeof setTimeout> | null = null
-  lastCursorPos: number = 0
-  lastDocLength: number = 0
-
+// Track when cursor is in title line (first line has larger font, needs different cursor size)
+const cursorTitleTracker = ViewPlugin.fromClass(class {
   constructor(view: EditorView) {
-    this.lastCursorPos = view.state.selection.main.head
-    this.lastDocLength = view.state.doc.length
-    this.showCursor(view)
-    // Set initial cursor-in-title state
     const line = view.state.doc.lineAt(view.state.selection.main.head)
     view.dom.classList.toggle('cursor-in-title', line.number === 1)
   }
 
   update(update: ViewUpdate) {
     const view = update.view
-    const { from, to, head } = view.state.selection.main
-    const hasSelection = from !== to
-    const cursorMoved = head !== this.lastCursorPos && !update.docChanged
-    const line = view.state.doc.lineAt(head)
-    const textBeforeCursor = view.state.doc.sliceString(line.from, head)
-    const onlyWhitespaceBefore = textBeforeCursor.trim() === ''
-    const docLength = view.state.doc.length
-    const isDeleting = docLength < this.lastDocLength
+    const line = view.state.doc.lineAt(view.state.selection.main.head)
+    view.dom.classList.toggle('cursor-in-title', line.number === 1)
 
-    // Track if cursor is in title (first line) - always update this
-    const isInTitle = line.number === 1
-    view.dom.classList.toggle('cursor-in-title', isInTitle)
-
-    this.lastCursorPos = head
-    this.lastDocLength = docLength
-
-    // Clear existing timeout
-    if (this.timeout) {
-      clearTimeout(this.timeout)
-      this.timeout = null
-    }
-
-    // Show cursor immediately when window/editor gains focus
+    // Re-apply after focus (cursor may be recreated)
     if (update.focusChanged && view.hasFocus) {
-      this.showCursor(view, true)
-      // Re-apply cursor-in-title after a frame (cursor may be recreated on focus)
       requestAnimationFrame(() => {
         const line = view.state.doc.lineAt(view.state.selection.main.head)
         view.dom.classList.toggle('cursor-in-title', line.number === 1)
       })
     }
-
-    // Never hide cursor if only whitespace to the left
-    if (onlyWhitespaceBefore) {
-      this.showCursor(view)
-      return
-    }
-
-    if (update.docChanged) {
-      if (isDeleting) {
-        // Backspace/delete - show cursor
-        this.showCursor(view)
-      } else {
-        // Typing - hide cursor immediately, show after idle
-        this.hideCursor(view)
-        this.timeout = setTimeout(() => this.showCursor(view), 1500)
-      }
-    } else if (cursorMoved) {
-      // Cursor moved without typing - show it instantly
-      this.showCursor(view)
-      if (hasSelection) {
-        // But fade after 1s if there's a selection
-        this.timeout = setTimeout(() => this.hideCursor(view), 1000)
-      }
-    } else if (hasSelection) {
-      // Selection exists, fade after 1s
-      this.timeout = setTimeout(() => this.hideCursor(view), 1000)
-    }
-  }
-
-  showCursor(view: EditorView, instant = false) {
-    if (instant) {
-      view.dom.classList.add('cursor-no-transition')
-      view.dom.classList.remove('cursor-hidden')
-      // Remove the no-transition class after a frame so future transitions work
-      requestAnimationFrame(() => view.dom.classList.remove('cursor-no-transition'))
-    } else {
-      view.dom.classList.remove('cursor-hidden')
-    }
-  }
-
-  hideCursor(view: EditorView) {
-    view.dom.classList.add('cursor-hidden')
-  }
-
-  destroy() {
-    if (this.timeout) clearTimeout(this.timeout)
   }
 })
 
@@ -1151,7 +1073,7 @@ export function Editor(props: EditorProps) {
             return false
           },
         }),
-        cursorHider,
+        cursorTitleTracker,
         drawSelection({ cursorBlinkRate: 0 }),
       ],
     })
