@@ -17,6 +17,57 @@ const firstLineMark = Decoration.mark({ class: 'first-line-title' })
 const checkboxUnchecked = Decoration.mark({ class: 'checkbox-marker checkbox-unchecked' })
 const checkboxChecked = Decoration.mark({ class: 'checkbox-marker checkbox-checked' })
 
+// Heading decorations
+const headingMarker = Decoration.mark({ class: 'heading-marker' })
+const heading1 = Decoration.mark({ class: 'heading heading-1' })
+const heading2 = Decoration.mark({ class: 'heading heading-2' })
+const heading3 = Decoration.mark({ class: 'heading heading-3' })
+
+const headingHighlighter = ViewPlugin.fromClass(class {
+  decorations: DecorationSet
+
+  constructor(view: EditorView) {
+    this.decorations = this.buildDecorations(view)
+  }
+
+  update(update: ViewUpdate) {
+    if (update.docChanged || update.viewportChanged) {
+      this.decorations = this.buildDecorations(update.view)
+    }
+  }
+
+  buildDecorations(view: EditorView): DecorationSet {
+    const builder = new RangeSetBuilder<Decoration>()
+    const doc = view.state.doc
+
+    for (let i = 1; i <= doc.lines; i++) {
+      const line = doc.line(i)
+      const text = line.text
+
+      // Match headings (# at start of line)
+      const match = text.match(/^(#{1,3})\s+(.*)$/)
+      if (match) {
+        const markerEnd = match[1].length
+        const textStart = markerEnd + 1 // skip the space
+        const level = match[1].length
+
+        // Style the # markers
+        builder.add(line.from, line.from + markerEnd, headingMarker)
+
+        // Style the heading text
+        if (match[2].length > 0) {
+          const headingDeco = level === 1 ? heading1 : level === 2 ? heading2 : heading3
+          builder.add(line.from + textStart, line.to, headingDeco)
+        }
+      }
+    }
+
+    return builder.finish()
+  }
+}, {
+  decorations: v => v.decorations
+})
+
 const checkboxHighlighter = ViewPlugin.fromClass(class {
   decorations: DecorationSet
 
@@ -449,13 +500,46 @@ export function Editor(props: EditorProps) {
         },
       },
       {
-        key: 'Mod-Shift-l',
+        key: 'Mod-Shift-8',
         run: (view) => {
-          const { from, to } = view.state.selection.main
+          const { from, to, head } = view.state.selection.main
           const startLine = view.state.doc.lineAt(from)
           const endLine = view.state.doc.lineAt(to)
+          const cursorLine = view.state.doc.lineAt(head)
+          const cursorOffset = head - cursorLine.from
 
           const changes: { from: number; to: number; insert: string }[] = []
+          let adding = false
+
+          for (let i = startLine.number; i <= endLine.number; i++) {
+            const line = view.state.doc.line(i)
+            const text = line.text
+
+            if (text.startsWith('* ')) {
+              // Remove bullet
+              changes.push({ from: line.from, to: line.from + 2, insert: '' })
+            } else {
+              // Add bullet
+              changes.push({ from: line.from, to: line.from, insert: '* ' })
+              if (i === cursorLine.number) adding = true
+            }
+          }
+
+          const newCursorPos = adding ? head + 2 : Math.max(cursorLine.from, head - 2)
+          view.dispatch({ changes, selection: { anchor: newCursorPos } })
+          return true
+        },
+      },
+      {
+        key: 'Mod-Shift-l',
+        run: (view) => {
+          const { from, to, head } = view.state.selection.main
+          const startLine = view.state.doc.lineAt(from)
+          const endLine = view.state.doc.lineAt(to)
+          const cursorLine = view.state.doc.lineAt(head)
+
+          const changes: { from: number; to: number; insert: string }[] = []
+          let cursorDelta = 0
 
           for (let i = startLine.number; i <= endLine.number; i++) {
             const line = view.state.doc.line(i)
@@ -464,16 +548,20 @@ export function Editor(props: EditorProps) {
             if (text.match(/^- \[[x ]\] /)) {
               // Remove checkbox
               changes.push({ from: line.from, to: line.from + 6, insert: '' })
+              if (i === cursorLine.number) cursorDelta = -6
             } else if (text.match(/^- \[[x ]\]/)) {
               // Remove checkbox (no trailing space)
               changes.push({ from: line.from, to: line.from + 5, insert: '' })
+              if (i === cursorLine.number) cursorDelta = -5
             } else {
               // Add checkbox
               changes.push({ from: line.from, to: line.from, insert: '- [ ] ' })
+              if (i === cursorLine.number) cursorDelta = 6
             }
           }
 
-          view.dispatch({ changes })
+          const newCursorPos = Math.max(cursorLine.from, head + cursorDelta)
+          view.dispatch({ changes, selection: { anchor: newCursorPos } })
           return true
         },
       },
@@ -524,6 +612,7 @@ export function Editor(props: EditorProps) {
         selectionHighlighter,
         firstLineHighlighter,
         checkboxHighlighter,
+        headingHighlighter,
         EditorView.domEventHandlers({
           click: (event, view) => {
             const target = event.target as HTMLElement
