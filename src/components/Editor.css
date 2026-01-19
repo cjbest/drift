@@ -111,11 +111,11 @@
   text-decoration: underline;
 }
 
-/* Pointer cursor on links only when Cmd is held */
+/* Pointer cursor on links only when Cmd is held (overrides move cursor) */
 body.cmd-held .link-text,
 body.cmd-held .link-url-truncated,
 body.cmd-held .bare-url {
-  cursor: pointer;
+  cursor: pointer !important;
 }
 
 /* Checkbox markers - clickable [ ] and [x] */
