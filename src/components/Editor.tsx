@@ -1,7 +1,8 @@
 import { onMount, onCleanup, createEffect, createSignal, Show } from 'solid-js'
+import { open } from '@tauri-apps/plugin-shell'
 import { ApiKeyDialog } from './ApiKeyDialog'
 import { EditorState, RangeSetBuilder } from '@codemirror/state'
-import { EditorView, keymap, highlightActiveLine, ViewPlugin, Decoration, drawSelection } from '@codemirror/view'
+import { EditorView, keymap, highlightActiveLine, ViewPlugin, Decoration, drawSelection, WidgetType } from '@codemirror/view'
 import type { DecorationSet, ViewUpdate } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap, indentMore, indentLess } from '@codemirror/commands'
 import { markdown } from '@codemirror/lang-markdown'
@@ -59,6 +60,174 @@ const headingHighlighter = ViewPlugin.fromClass(class {
           const headingDeco = level === 1 ? heading1 : level === 2 ? heading2 : heading3
           builder.add(line.from + textStart, line.to, headingDeco)
         }
+      }
+    }
+
+    return builder.finish()
+  }
+}, {
+  decorations: v => v.decorations
+})
+
+// Link decorations
+const linkBracket = Decoration.mark({ class: 'link-bracket' })
+const linkText = Decoration.mark({ class: 'link-text' })
+const linkUrlFull = Decoration.mark({ class: 'link-url' })
+const bareUrlMark = Decoration.mark({ class: 'bare-url' })
+
+// Helper to truncate URL after domain
+function truncateUrl(url: string): string {
+  try {
+    const parsed = new URL(url)
+    return parsed.origin + '/…'
+  } catch {
+    return url.slice(0, 30) + '…'
+  }
+}
+
+// Widget for truncated URL display
+class TruncatedUrlWidget extends WidgetType {
+  constructor(readonly fullUrl: string, readonly displayText: string) {
+    super()
+  }
+
+  toDOM() {
+    const span = document.createElement('span')
+    span.className = 'link-url-truncated'
+    span.textContent = this.displayText
+    span.setAttribute('data-full-url', this.fullUrl)
+    return span
+  }
+
+  eq(other: TruncatedUrlWidget) {
+    return other.fullUrl === this.fullUrl && other.displayText === this.displayText
+  }
+}
+
+// Plugin for link mark decorations (styling)
+const linkStyler = ViewPlugin.fromClass(class {
+  decorations: DecorationSet
+
+  constructor(view: EditorView) {
+    this.decorations = this.buildDecorations(view)
+  }
+
+  update(update: ViewUpdate) {
+    if (update.docChanged || update.viewportChanged || update.selectionSet) {
+      this.decorations = this.buildDecorations(update.view)
+    }
+  }
+
+  buildDecorations(view: EditorView): DecorationSet {
+    const builder = new RangeSetBuilder<Decoration>()
+    const doc = view.state.doc
+    const cursorLine = doc.lineAt(view.state.selection.main.head).number
+
+    for (let i = 1; i <= doc.lines; i++) {
+      const line = doc.line(i)
+      const text = line.text
+      const isCurrentLine = i === cursorLine
+
+      // Match markdown links: [text](url)
+      const mdLinkRegex = /\[([^\]]+)\]\(([^)]+)\)/g
+      let match
+      while ((match = mdLinkRegex.exec(text)) !== null) {
+        const start = line.from + match.index
+        const linkTextContent = match[1]
+        const urlContent = match[2]
+
+        // [ bracket
+        builder.add(start, start + 1, linkBracket)
+        // link text (underlined)
+        builder.add(start + 1, start + 1 + linkTextContent.length, linkText)
+        // ] bracket
+        builder.add(start + 1 + linkTextContent.length, start + 2 + linkTextContent.length, linkBracket)
+
+        // Only show full URL styling when on current line
+        if (isCurrentLine) {
+          const urlStart = start + 2 + linkTextContent.length
+          const urlEnd = urlStart + 2 + urlContent.length
+          builder.add(urlStart, urlEnd, linkUrlFull)
+        }
+      }
+
+      // Match bare URLs (only style when on current line OR short enough)
+      const bareUrlRegex = /https?:\/\/[^\s\])<>]+/g
+      while ((match = bareUrlRegex.exec(text)) !== null) {
+        const url = match[0]
+        // Skip if inside markdown link
+        const beforeMatch = text.slice(0, match.index)
+        if (beforeMatch.match(/\]\($/)) continue
+
+        // Only add mark decoration if on current line or URL is short
+        if (isCurrentLine || url.length <= 60) {
+          const start = line.from + match.index
+          builder.add(start, start + url.length, bareUrlMark)
+        }
+      }
+    }
+
+    return builder.finish()
+  }
+}, {
+  decorations: v => v.decorations
+})
+
+// Separate plugin for replace decorations (truncation)
+const linkTruncator = ViewPlugin.fromClass(class {
+  decorations: DecorationSet
+
+  constructor(view: EditorView) {
+    this.decorations = this.buildDecorations(view)
+  }
+
+  update(update: ViewUpdate) {
+    if (update.docChanged || update.viewportChanged || update.selectionSet) {
+      this.decorations = this.buildDecorations(update.view)
+    }
+  }
+
+  buildDecorations(view: EditorView): DecorationSet {
+    const builder = new RangeSetBuilder<Decoration>()
+    const doc = view.state.doc
+    const cursorLine = doc.lineAt(view.state.selection.main.head).number
+
+    for (let i = 1; i <= doc.lines; i++) {
+      const line = doc.line(i)
+      const text = line.text
+      const isCurrentLine = i === cursorLine
+
+      if (isCurrentLine) continue // Don't truncate on current line
+
+      // Match markdown links: [text](url) - truncate the (url) part
+      const mdLinkRegex = /\[([^\]]+)\]\(([^)]+)\)/g
+      let match
+      while ((match = mdLinkRegex.exec(text)) !== null) {
+        const start = line.from + match.index
+        const linkTextContent = match[1]
+        const urlContent = match[2]
+        const urlStart = start + 2 + linkTextContent.length
+        const urlEnd = urlStart + 2 + urlContent.length
+
+        builder.add(urlStart, urlEnd, Decoration.replace({
+          widget: new TruncatedUrlWidget(urlContent, '(…)')
+        }))
+      }
+
+      // Match bare URLs - only truncate if > 60 chars
+      const bareUrlRegex = /https?:\/\/[^\s\])<>]+/g
+      while ((match = bareUrlRegex.exec(text)) !== null) {
+        const url = match[0]
+        if (url.length <= 60) continue
+
+        // Skip if inside markdown link
+        const beforeMatch = text.slice(0, match.index)
+        if (beforeMatch.match(/\]\($/)) continue
+
+        const start = line.from + match.index
+        builder.add(start, start + url.length, Decoration.replace({
+          widget: new TruncatedUrlWidget(url, truncateUrl(url))
+        }))
       }
     }
 
@@ -613,9 +782,13 @@ export function Editor(props: EditorProps) {
         firstLineHighlighter,
         checkboxHighlighter,
         headingHighlighter,
+        linkStyler,
+        linkTruncator,
         EditorView.domEventHandlers({
           click: (event, view) => {
             const target = event.target as HTMLElement
+
+            // Handle checkbox clicks
             if (target.classList.contains('checkbox-marker')) {
               event.preventDefault()
               const pos = view.posAtDOM(target)
@@ -636,6 +809,58 @@ export function Editor(props: EditorProps) {
               }
               return true
             }
+
+            // Handle truncated URL widget clicks
+            if (target.classList.contains('link-url-truncated')) {
+              event.preventDefault()
+              const url = target.getAttribute('data-full-url')
+              if (url) {
+                open(url)
+              }
+              return true
+            }
+
+            // Handle link clicks by position
+            const pos = view.posAtCoords({ x: event.clientX, y: event.clientY })
+            if (pos !== null) {
+              const line = view.state.doc.lineAt(pos)
+              const text = line.text
+              const offsetInLine = pos - line.from
+
+              // Check for markdown link [text](url)
+              const mdLinkRegex = /\[([^\]]+)\]\(([^)]+)\)/g
+              let match
+              while ((match = mdLinkRegex.exec(text)) !== null) {
+                const linkStart = match.index
+                const linkTextEnd = match.index + 1 + match[1].length // end of link text
+                // Click on link text opens the link
+                if (offsetInLine >= linkStart + 1 && offsetInLine <= linkTextEnd) {
+                  event.preventDefault()
+                  let url = match[2]
+                  // Add https:// if no protocol
+                  if (!url.match(/^https?:\/\//)) {
+                    url = 'https://' + url
+                  }
+                  open(url)
+                  return true
+                }
+              }
+
+              // Check for bare URL (plain click)
+              const bareUrlRegex = /https?:\/\/[^\s\])<>]+/g
+              while ((match = bareUrlRegex.exec(text)) !== null) {
+                // Skip if inside markdown link
+                const beforeMatch = text.slice(0, match.index)
+                if (beforeMatch.match(/\]\($/)) continue
+
+                if (offsetInLine >= match.index && offsetInLine <= match.index + match[0].length) {
+                  event.preventDefault()
+                  open(match[0])
+                  return true
+                }
+              }
+            }
+
             return false
           },
         }),

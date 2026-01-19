@@ -30,6 +30,7 @@
     "fs:allow-read-text-file",
     "fs:allow-stat",
     "fs:allow-rename",
-    "fs:scope-document-recursive"
+    "fs:scope-document-recursive",
+    "shell:allow-open"
   ]
 }

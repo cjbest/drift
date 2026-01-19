@@ -18,6 +18,74 @@
   font-weight: 600;
 }
 
+/* Link styling */
+.link-bracket {
+  color: rgba(0, 0, 0, 0.3);
+}
+
+:root[data-theme="dark"] .link-bracket {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .link-bracket {
+    color: rgba(255, 255, 255, 0.3);
+  }
+}
+
+.link-text {
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.link-url {
+  color: rgba(0, 0, 0, 0.25);
+}
+
+:root[data-theme="dark"] .link-url {
+  color: rgba(255, 255, 255, 0.25);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .link-url {
+    color: rgba(255, 255, 255, 0.25);
+  }
+}
+
+.link-url-truncated {
+  color: rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+}
+
+:root[data-theme="dark"] .link-url-truncated {
+  color: rgba(255, 255, 255, 0.25);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .link-url-truncated {
+    color: rgba(255, 255, 255, 0.25);
+  }
+}
+
+.link-url-truncated:hover {
+  color: rgba(0, 0, 0, 0.5);
+}
+
+:root[data-theme="dark"] .link-url-truncated:hover {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .link-url-truncated:hover {
+    color: rgba(255, 255, 255, 0.5);
+  }
+}
+
+.bare-url {
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 /* Checkbox markers - clickable [ ] and [x] */
 .checkbox-marker {
   cursor: pointer;
