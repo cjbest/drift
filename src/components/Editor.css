@@ -81,7 +81,6 @@
 
 .link-url-truncated {
   color: rgba(0, 0, 0, 0.25);
-  cursor: pointer;
 }
 
 :root[data-theme="dark"] .link-url-truncated {
@@ -110,6 +109,12 @@
 
 .bare-url {
   text-decoration: underline;
+}
+
+/* Pointer cursor on links only when Cmd is held */
+body.cmd-held .link-text,
+body.cmd-held .link-url-truncated,
+body.cmd-held .bare-url {
   cursor: pointer;
 }
 
