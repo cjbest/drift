@@ -430,7 +430,10 @@ function App() {
     })
 
     // Save on window blur, refresh cache on focus
-    const handleBlur = () => saveNow()
+    const handleBlur = () => {
+      saveNow()
+      document.body.classList.remove('cmd-held') // Clear stuck cursor
+    }
     const handleFocus = () => refreshNotesCache()
     window.addEventListener('blur', handleBlur)
     window.addEventListener('focus', handleFocus)
