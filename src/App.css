@@ -6,13 +6,35 @@
 }
 
 .titlebar {
-  height: 50px;
+  height: 42px;
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   -webkit-app-region: drag;
   z-index: 100;
+  background: var(--bg);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 8px;
+}
+
+.titlebar-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 50%;
+  text-align: center;
+}
+
+.titlebar-title.visible {
+  opacity: 0.6;
 }
 
 body.cmd-held,

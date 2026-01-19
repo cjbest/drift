@@ -84,6 +84,7 @@ function App() {
   const [theme, setTheme] = createSignal<ThemeMode>((localStorage.getItem('drift-theme') as ThemeMode) || 'system')
   const [statusMessage, setStatusMessage] = createSignal<string | null>(null)
   const [cachedNotes, setCachedNotes] = createSignal<NoteInfo[]>([])
+  const [showTitleInBar, setShowTitleInBar] = createSignal(false)
 
   let saveTimeout: number | undefined
   let statusTimeout: number | undefined
@@ -486,7 +487,11 @@ function App() {
 
   return (
     <div class="app">
-      <div class="titlebar" data-tauri-drag-region />
+      <div class="titlebar" data-tauri-drag-region>
+        <span class={`titlebar-title ${showTitleInBar() ? 'visible' : ''}`}>
+          {content().split('\n')[0]?.replace(/^#+\s*/, '') || ''}
+        </span>
+      </div>
       <Editor
         content={content()}
         onChange={handleContentChange}
@@ -495,6 +500,7 @@ function App() {
         onNewWindow={() => openNewWindow()}
         onToggleTheme={toggleTheme}
         onSystemTheme={() => setThemeMode('system')}
+        onScrollPastTitle={setShowTitleInBar}
       />
       <Show when={quickOpenVisible()}>
         <QuickOpen

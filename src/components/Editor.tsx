@@ -545,6 +545,7 @@ interface EditorProps {
   onNewWindow: () => void
   onToggleTheme: () => void
   onSystemTheme: () => void
+  onScrollPastTitle: (scrolled: boolean) => void
 }
 
 export function Editor(props: EditorProps) {
@@ -563,7 +564,7 @@ export function Editor(props: EditorProps) {
       },
       '.cm-content': {
         fontFamily: '"SF Mono", Menlo, Monaco, "Courier New", monospace',
-        paddingTop: '52px',
+        paddingTop: '42px',
         paddingBottom: '20px',
         lineHeight: '1.6',
       },
@@ -981,6 +982,15 @@ export function Editor(props: EditorProps) {
 
     // Focus the editor
     view.focus()
+
+    // Track scroll to show/hide title in titlebar
+    const scroller = view.scrollDOM
+    const handleScroll = () => {
+      // First line starts at ~52px due to padding, show title after scrolling ~30px
+      props.onScrollPastTitle(scroller.scrollTop > 30)
+    }
+    scroller.addEventListener('scroll', handleScroll)
+    handleScroll() // Initial check
   })
 
   onCleanup(() => {
