@@ -24,6 +24,14 @@ const heading1 = Decoration.mark({ class: 'heading heading-1' })
 const heading2 = Decoration.mark({ class: 'heading heading-2' })
 const heading3 = Decoration.mark({ class: 'heading heading-3' })
 
+// Blockquote decorations
+const blockquoteMarker = Decoration.mark({ class: 'blockquote-marker' })
+const blockquoteText = Decoration.mark({ class: 'blockquote-text' })
+
+// Emphasis decorations
+const boldText = Decoration.mark({ class: 'bold-text' })
+const italicText = Decoration.mark({ class: 'italic-text' })
+
 const headingHighlighter = ViewPlugin.fromClass(class {
   decorations: DecorationSet
 
@@ -61,6 +69,99 @@ const headingHighlighter = ViewPlugin.fromClass(class {
           builder.add(line.from + textStart, line.to, headingDeco)
         }
       }
+    }
+
+    return builder.finish()
+  }
+}, {
+  decorations: v => v.decorations
+})
+
+const blockquoteHighlighter = ViewPlugin.fromClass(class {
+  decorations: DecorationSet
+
+  constructor(view: EditorView) {
+    this.decorations = this.buildDecorations(view)
+  }
+
+  update(update: ViewUpdate) {
+    if (update.docChanged || update.viewportChanged) {
+      this.decorations = this.buildDecorations(update.view)
+    }
+  }
+
+  buildDecorations(view: EditorView): DecorationSet {
+    const builder = new RangeSetBuilder<Decoration>()
+    const doc = view.state.doc
+
+    for (let i = 1; i <= doc.lines; i++) {
+      const line = doc.line(i)
+      const text = line.text
+
+      // Match blockquotes (> at start of line)
+      const match = text.match(/^(>+)\s?(.*)$/)
+      if (match) {
+        const markerEnd = match[1].length
+        // Style the > marker(s)
+        builder.add(line.from, line.from + markerEnd, blockquoteMarker)
+        // Style the quote text
+        if (match[2].length > 0) {
+          const textStart = markerEnd + (text[markerEnd] === ' ' ? 1 : 0)
+          builder.add(line.from + textStart, line.to, blockquoteText)
+        }
+      }
+    }
+
+    return builder.finish()
+  }
+}, {
+  decorations: v => v.decorations
+})
+
+const emphasisHighlighter = ViewPlugin.fromClass(class {
+  decorations: DecorationSet
+
+  constructor(view: EditorView) {
+    this.decorations = this.buildDecorations(view)
+  }
+
+  update(update: ViewUpdate) {
+    if (update.docChanged || update.viewportChanged) {
+      this.decorations = this.buildDecorations(update.view)
+    }
+  }
+
+  buildDecorations(view: EditorView): DecorationSet {
+    const decorations: { from: number; to: number; deco: Decoration }[] = []
+    const doc = view.state.doc
+
+    for (let i = 1; i <= doc.lines; i++) {
+      const line = doc.line(i)
+      const text = line.text
+
+      // Find **bold** patterns - style just the text, not the **
+      const boldRegex = /\*\*(.+?)\*\*/g
+      let match
+      while ((match = boldRegex.exec(text)) !== null) {
+        const textStart = line.from + match.index + 2
+        const textEnd = textStart + match[1].length
+        decorations.push({ from: textStart, to: textEnd, deco: boldText })
+      }
+
+      // Find *italic* patterns (but not **) - style just the text, not the *
+      const italicRegex = /(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g
+      while ((match = italicRegex.exec(text)) !== null) {
+        const textStart = line.from + match.index + 1
+        const textEnd = textStart + match[1].length
+        decorations.push({ from: textStart, to: textEnd, deco: italicText })
+      }
+    }
+
+    // Sort by position and add to builder
+    decorations.sort((a, b) => a.from - b.from || a.to - b.to)
+    const builder = new RangeSetBuilder<Decoration>()
+    for (const { from, to, deco } of decorations) {
+      builder.add(from, to, deco)
     }
 
     return builder.finish()
@@ -782,6 +883,8 @@ export function Editor(props: EditorProps) {
         firstLineHighlighter,
         checkboxHighlighter,
         headingHighlighter,
+        blockquoteHighlighter,
+        emphasisHighlighter,
         linkStyler,
         linkTruncator,
         EditorView.domEventHandlers({
@@ -810,53 +913,55 @@ export function Editor(props: EditorProps) {
               return true
             }
 
-            // Handle truncated URL widget clicks
-            if (target.classList.contains('link-url-truncated')) {
-              event.preventDefault()
-              const url = target.getAttribute('data-full-url')
-              if (url) {
-                open(url)
-              }
-              return true
-            }
-
-            // Handle link clicks by position
-            const pos = view.posAtCoords({ x: event.clientX, y: event.clientY })
-            if (pos !== null) {
-              const line = view.state.doc.lineAt(pos)
-              const text = line.text
-              const offsetInLine = pos - line.from
-
-              // Check for markdown link [text](url)
-              const mdLinkRegex = /\[([^\]]+)\]\(([^)]+)\)/g
-              let match
-              while ((match = mdLinkRegex.exec(text)) !== null) {
-                const linkStart = match.index
-                const linkTextEnd = match.index + 1 + match[1].length // end of link text
-                // Click on link text opens the link
-                if (offsetInLine >= linkStart + 1 && offsetInLine <= linkTextEnd) {
-                  event.preventDefault()
-                  let url = match[2]
-                  // Add https:// if no protocol
-                  if (!url.match(/^https?:\/\//)) {
-                    url = 'https://' + url
-                  }
+            // Handle link clicks (Cmd+click only)
+            if (event.metaKey) {
+              // Handle truncated URL widget clicks
+              if (target.classList.contains('link-url-truncated')) {
+                event.preventDefault()
+                const url = target.getAttribute('data-full-url')
+                if (url) {
                   open(url)
-                  return true
                 }
+                return true
               }
 
-              // Check for bare URL (plain click)
-              const bareUrlRegex = /https?:\/\/[^\s\])<>]+/g
-              while ((match = bareUrlRegex.exec(text)) !== null) {
-                // Skip if inside markdown link
-                const beforeMatch = text.slice(0, match.index)
-                if (beforeMatch.match(/\]\($/)) continue
+              // Handle link clicks by position
+              const pos = view.posAtCoords({ x: event.clientX, y: event.clientY })
+              if (pos !== null) {
+                const line = view.state.doc.lineAt(pos)
+                const text = line.text
+                const offsetInLine = pos - line.from
 
-                if (offsetInLine >= match.index && offsetInLine <= match.index + match[0].length) {
-                  event.preventDefault()
-                  open(match[0])
-                  return true
+                // Check for markdown link [text](url)
+                const mdLinkRegex = /\[([^\]]+)\]\(([^)]+)\)/g
+                let match
+                while ((match = mdLinkRegex.exec(text)) !== null) {
+                  const linkStart = match.index
+                  const linkTextEnd = match.index + 1 + match[1].length // end of link text
+                  if (offsetInLine >= linkStart + 1 && offsetInLine <= linkTextEnd) {
+                    event.preventDefault()
+                    let url = match[2]
+                    // Add https:// if no protocol
+                    if (!url.match(/^https?:\/\//)) {
+                      url = 'https://' + url
+                    }
+                    open(url)
+                    return true
+                  }
+                }
+
+                // Check for bare URL
+                const bareUrlRegex = /https?:\/\/[^\s\])<>]+/g
+                while ((match = bareUrlRegex.exec(text)) !== null) {
+                  // Skip if inside markdown link
+                  const beforeMatch = text.slice(0, match.index)
+                  if (beforeMatch.match(/\]\($/)) continue
+
+                  if (offsetInLine >= match.index && offsetInLine <= match.index + match[0].length) {
+                    event.preventDefault()
+                    open(match[0])
+                    return true
+                  }
                 }
               }
             }

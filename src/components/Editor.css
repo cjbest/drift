@@ -18,6 +18,34 @@
   font-weight: 600;
 }
 
+/* Blockquote styling */
+.blockquote-marker {
+  color: rgba(0, 0, 0, 0.3);
+}
+
+:root[data-theme="dark"] .blockquote-marker {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .blockquote-marker {
+    color: rgba(255, 255, 255, 0.3);
+  }
+}
+
+.blockquote-text {
+  font-style: italic;
+}
+
+/* Emphasis styling */
+.bold-text {
+  font-weight: 600;
+}
+
+.italic-text {
+  font-style: italic;
+}
+
 /* Link styling */
 .link-bracket {
   color: rgba(0, 0, 0, 0.3);
@@ -35,7 +63,6 @@
 
 .link-text {
   text-decoration: underline;
-  cursor: pointer;
 }
 
 .link-url {
