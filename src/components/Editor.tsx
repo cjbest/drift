@@ -582,6 +582,9 @@ const cursorHider = ViewPlugin.fromClass(class {
     this.lastCursorPos = view.state.selection.main.head
     this.lastDocLength = view.state.doc.length
     this.showCursor(view)
+    // Set initial cursor-in-title state
+    const line = view.state.doc.lineAt(view.state.selection.main.head)
+    view.dom.classList.toggle('cursor-in-title', line.number === 1)
   }
 
   update(update: ViewUpdate) {
@@ -595,6 +598,10 @@ const cursorHider = ViewPlugin.fromClass(class {
     const docLength = view.state.doc.length
     const isDeleting = docLength < this.lastDocLength
 
+    // Track if cursor is in title (first line) - always update this
+    const isInTitle = line.number === 1
+    view.dom.classList.toggle('cursor-in-title', isInTitle)
+
     this.lastCursorPos = head
     this.lastDocLength = docLength
 
@@ -607,7 +614,11 @@ const cursorHider = ViewPlugin.fromClass(class {
     // Show cursor immediately when window/editor gains focus
     if (update.focusChanged && view.hasFocus) {
       this.showCursor(view, true)
-      return
+      // Re-apply cursor-in-title after a frame (cursor may be recreated on focus)
+      requestAnimationFrame(() => {
+        const line = view.state.doc.lineAt(view.state.selection.main.head)
+        view.dom.classList.toggle('cursor-in-title', line.number === 1)
+      })
     }
 
     // Never hide cursor if only whitespace to the left

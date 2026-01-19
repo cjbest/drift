@@ -178,23 +178,33 @@ body.cmd-held .bare-url {
   caret-color: transparent !important;
 }
 
+/* Light mode: 2px black cursor */
 .cm-cursor, .cm-cursor-primary {
   border-left: 2px solid #000000 !important;
-  height: 1.7em !important;
+  height: 1.61em !important;
   transform: translate(-1px, -0.25em);
   animation: none !important;
   transition: opacity 0.3s ease;
 }
 
-/* White cursor in dark mode */
+/* Title line (larger font): taller cursor */
+.cursor-in-title .cm-cursor,
+.cursor-in-title .cm-cursor-primary {
+  height: 2.6em !important;
+  transform: translate(-1px, -0.55em);
+}
+
+/* Dark mode: 1.5px white cursor */
 :root[data-theme="dark"] .cm-cursor,
 :root[data-theme="dark"] .cm-cursor-primary {
+  border-left-width: 1.5px !important;
   border-left-color: #ffffff !important;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) .cm-cursor,
   :root:not([data-theme="light"]) .cm-cursor-primary {
+    border-left-width: 1.5px !important;
     border-left-color: #ffffff !important;
   }
 }
