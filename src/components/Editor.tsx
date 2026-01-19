@@ -216,7 +216,7 @@ const indentHighlighter = ViewPlugin.fromClass(class {
 const searchMatchCounter = ViewPlugin.fromClass(class {
   countEl: HTMLElement | null = null
   wrapper: HTMLElement | null = null
-  doneBtn: HTMLElement | null = null
+  doneBtn: HTMLButtonElement | null = null
 
   constructor(view: EditorView) {
     this.setupPanel(view)
@@ -298,14 +298,16 @@ const searchMatchCounter = ViewPlugin.fromClass(class {
     let firstMatchFrom = -1
     const sel = view.state.selection.main
 
-    while (!cursor.next().done) {
+    let result = cursor.next()
+    while (!result.done) {
       total++
       if (firstMatchFrom === -1) {
-        firstMatchFrom = cursor.value.from
+        firstMatchFrom = result.value.from
       }
-      if (cursor.value.from <= sel.from && cursor.value.to >= sel.from) {
+      if (result.value.from <= sel.from && result.value.to >= sel.from) {
         current = total
       }
+      result = cursor.next()
     }
 
     if (total === 0) {
@@ -354,8 +356,13 @@ function truncateUrl(url: string): string {
 
 // Widget for truncated URL display
 class TruncatedUrlWidget extends WidgetType {
-  constructor(readonly fullUrl: string, readonly displayText: string) {
+  fullUrl: string
+  displayText: string
+
+  constructor(fullUrl: string, displayText: string) {
     super()
+    this.fullUrl = fullUrl
+    this.displayText = displayText
   }
 
   toDOM() {
@@ -876,7 +883,6 @@ export function Editor(props: EditorProps) {
           const startLine = view.state.doc.lineAt(from)
           const endLine = view.state.doc.lineAt(to)
           const cursorLine = view.state.doc.lineAt(head)
-          const cursorOffset = head - cursorLine.from
 
           const changes: { from: number; to: number; insert: string }[] = []
           let adding = false
