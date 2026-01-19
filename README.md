@@ -1,40 +1,27 @@
 # Drift
 
-A minimal, distraction-free markdown editor for macOS.
+The markdown editor I always wanted for my personal notes.
 
 <p align="center">
   <img src="assets/demo.gif" alt="Drift demo" width="600">
 </p>
 
-## Features
+Most note apps are slow, bloated, or want to own your data. Drift is different:
 
-- **Distraction-free writing** - Clean interface, smart cursor that fades while typing
-- **Quick Open (Cmd+P)** - Fuzzy search through all your notes
-- **Auto-save** - Notes save automatically to `~/Documents/Drift`
-- **Auto-naming** - Files named from first heading or line
-- **AI Fix (Cmd+K)** - Fix typos, grammar, fill in placeholders (requires OpenAI API key)
-- **Dark/Light mode** - Toggle with Cmd+D, or follow system with Cmd+Shift+D
-- **Native macOS** - Proper menus, shortcuts, and window management
+- **Instant** - Native macOS app, not Electron. Launches in under a second.
+- **Plain markdown files** - Your notes live in `~/Documents/Drift`. Open them in any editor.
+- **AI that helps** - Cmd+K fixes typos, grammar, and fills in placeholders.
+- **Zero friction** - Auto-save, auto-naming from content, Cmd+P to find anything.
 
-## Keyboard Shortcuts
+## Shortcuts
 
-| Shortcut | Action |
+| | |
 |----------|--------|
-| Cmd+N | New note |
-| Cmd+P | Quick open |
-| Cmd+K | AI fix selection/line |
-| Cmd+L | Select line |
-| Cmd+D | Toggle dark/light |
-| Cmd+Shift+D | Use system theme |
-| Cmd+Shift+N | New window |
-| Tab / Shift+Tab | Indent/unindent |
-
-## Tech Stack
-
-- **Tauri 2** - Native macOS app
-- **SolidJS** - Reactive UI
-- **CodeMirror 6** - Editor
-- **TypeScript** - Type safety
+| **Cmd+P** | Quick open |
+| **Cmd+K** | AI fix selection |
+| **Cmd+N** | New note |
+| **Cmd+F** | Find in document |
+| **Cmd+D** | Toggle dark/light |
 
 ## Development
 
@@ -49,10 +36,4 @@ npm run tauri dev
 npm run tauri build
 ```
 
-App bundle will be at `src-tauri/target/release/bundle/macos/Drift.app`
-
-## Philosophy
-
-- **Local-first** - Notes are markdown files on disk
-- **Fast** - Launches instantly
-- **Minimal** - No accounts, no sync, no bloat
+Built with Tauri 2, SolidJS, and CodeMirror 6.
