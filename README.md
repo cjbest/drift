@@ -3,7 +3,7 @@
 The markdown editor I always wanted for my personal notes.
 
 <p align="center">
-  <img src="assets/demo.gif" alt="Drift demo" width="600">
+  <img src="assets/demo.gif?v=2" alt="Drift demo" width="600">
 </p>
 
 Most note apps are slow, bloated, or want to own your data. Drift is different:
