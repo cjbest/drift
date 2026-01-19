@@ -1,3 +1,24 @@
+/* Checkbox markers - clickable [ ] and [x] */
+.checkbox-marker {
+  cursor: pointer;
+  border-radius: 2px;
+  transition: background-color 0.1s ease;
+}
+
+.checkbox-marker:hover {
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+:root[data-theme="dark"] .checkbox-marker:hover {
+  background-color: rgba(255, 255, 255, 0.15);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .checkbox-marker:hover {
+    background-color: rgba(255, 255, 255, 0.15);
+  }
+}
+
 /* First line as title */
 .first-line-title {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;

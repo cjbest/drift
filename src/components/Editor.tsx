@@ -13,6 +13,50 @@ const selectionMark = Decoration.mark({ class: 'selection-highlight' })
 // Bold first line (acts as title)
 const firstLineMark = Decoration.mark({ class: 'first-line-title' })
 
+// Checkbox decorations for click interaction
+const checkboxUnchecked = Decoration.mark({ class: 'checkbox-marker checkbox-unchecked' })
+const checkboxChecked = Decoration.mark({ class: 'checkbox-marker checkbox-checked' })
+
+const checkboxHighlighter = ViewPlugin.fromClass(class {
+  decorations: DecorationSet
+
+  constructor(view: EditorView) {
+    this.decorations = this.buildDecorations(view)
+  }
+
+  update(update: ViewUpdate) {
+    if (update.docChanged || update.viewportChanged) {
+      this.decorations = this.buildDecorations(update.view)
+    }
+  }
+
+  buildDecorations(view: EditorView): DecorationSet {
+    const builder = new RangeSetBuilder<Decoration>()
+    const doc = view.state.doc
+
+    for (let i = 1; i <= doc.lines; i++) {
+      const line = doc.line(i)
+      const text = line.text
+
+      // Find [ ] or [x] in checkbox pattern
+      const uncheckedMatch = text.match(/^- \[ \]/)
+      const checkedMatch = text.match(/^- \[x\]/)
+
+      if (uncheckedMatch) {
+        // Mark just the [ ] part (positions 2-5)
+        builder.add(line.from + 2, line.from + 5, checkboxUnchecked)
+      } else if (checkedMatch) {
+        // Mark just the [x] part (positions 2-5)
+        builder.add(line.from + 2, line.from + 5, checkboxChecked)
+      }
+    }
+
+    return builder.finish()
+  }
+}, {
+  decorations: v => v.decorations
+})
+
 const firstLineHighlighter = ViewPlugin.fromClass(class {
   decorations: DecorationSet
 
@@ -404,6 +448,62 @@ export function Editor(props: EditorProps) {
           return false
         },
       },
+      {
+        key: 'Mod-Shift-l',
+        run: (view) => {
+          const { from, to } = view.state.selection.main
+          const startLine = view.state.doc.lineAt(from)
+          const endLine = view.state.doc.lineAt(to)
+
+          const changes: { from: number; to: number; insert: string }[] = []
+
+          for (let i = startLine.number; i <= endLine.number; i++) {
+            const line = view.state.doc.line(i)
+            const text = line.text
+
+            if (text.match(/^- \[[x ]\] /)) {
+              // Remove checkbox
+              changes.push({ from: line.from, to: line.from + 6, insert: '' })
+            } else if (text.match(/^- \[[x ]\]/)) {
+              // Remove checkbox (no trailing space)
+              changes.push({ from: line.from, to: line.from + 5, insert: '' })
+            } else {
+              // Add checkbox
+              changes.push({ from: line.from, to: line.from, insert: '- [ ] ' })
+            }
+          }
+
+          view.dispatch({ changes })
+          return true
+        },
+      },
+      {
+        key: 'Mod-Enter',
+        run: (view) => {
+          const { head } = view.state.selection.main
+          const line = view.state.doc.lineAt(head)
+          const text = line.text
+
+          const unchecked = text.indexOf('- [ ]')
+          const checked = text.indexOf('- [x]')
+
+          if (unchecked !== -1) {
+            // Check it
+            view.dispatch({
+              changes: { from: line.from + unchecked + 3, to: line.from + unchecked + 4, insert: 'x' },
+            })
+            return true
+          } else if (checked !== -1) {
+            // Uncheck it
+            view.dispatch({
+              changes: { from: line.from + checked + 3, to: line.from + checked + 4, insert: ' ' },
+            })
+            return true
+          }
+
+          return false
+        },
+      },
     ])
 
     const state = EditorState.create({
@@ -423,6 +523,33 @@ export function Editor(props: EditorProps) {
         EditorView.lineWrapping,
         selectionHighlighter,
         firstLineHighlighter,
+        checkboxHighlighter,
+        EditorView.domEventHandlers({
+          click: (event, view) => {
+            const target = event.target as HTMLElement
+            if (target.classList.contains('checkbox-marker')) {
+              event.preventDefault()
+              const pos = view.posAtDOM(target)
+              const line = view.state.doc.lineAt(pos)
+              const text = line.text
+
+              const unchecked = text.indexOf('- [ ]')
+              const checked = text.indexOf('- [x]')
+
+              if (unchecked !== -1) {
+                view.dispatch({
+                  changes: { from: line.from + unchecked + 3, to: line.from + unchecked + 4, insert: 'x' },
+                })
+              } else if (checked !== -1) {
+                view.dispatch({
+                  changes: { from: line.from + checked + 3, to: line.from + checked + 4, insert: ' ' },
+                })
+              }
+              return true
+            }
+            return false
+          },
+        }),
         cursorHider,
         drawSelection({ cursorBlinkRate: 0 }),
       ],
