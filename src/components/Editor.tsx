@@ -32,6 +32,10 @@ const blockquoteText = Decoration.mark({ class: 'blockquote-text' })
 const boldText = Decoration.mark({ class: 'bold-text' })
 const italicText = Decoration.mark({ class: 'italic-text' })
 
+// Line indent decorations for hanging indent on wrap
+const bulletIndent = Decoration.line({ class: 'line-bullet-indent' })
+const checkboxIndent = Decoration.line({ class: 'line-checkbox-indent' })
+
 const headingHighlighter = ViewPlugin.fromClass(class {
   decorations: DecorationSet
 
@@ -162,6 +166,43 @@ const emphasisHighlighter = ViewPlugin.fromClass(class {
     const builder = new RangeSetBuilder<Decoration>()
     for (const { from, to, deco } of decorations) {
       builder.add(from, to, deco)
+    }
+
+    return builder.finish()
+  }
+}, {
+  decorations: v => v.decorations
+})
+
+const indentHighlighter = ViewPlugin.fromClass(class {
+  decorations: DecorationSet
+
+  constructor(view: EditorView) {
+    this.decorations = this.buildDecorations(view)
+  }
+
+  update(update: ViewUpdate) {
+    if (update.docChanged || update.viewportChanged) {
+      this.decorations = this.buildDecorations(update.view)
+    }
+  }
+
+  buildDecorations(view: EditorView): DecorationSet {
+    const builder = new RangeSetBuilder<Decoration>()
+    const doc = view.state.doc
+
+    for (let i = 1; i <= doc.lines; i++) {
+      const line = doc.line(i)
+      const text = line.text
+
+      // Checkbox lines: - [ ] or - [x] (not tabbed)
+      if (text.match(/^- \[[x ]\] /)) {
+        builder.add(line.from, line.from, checkboxIndent)
+      }
+      // Bullet lines: * or - (not tabbed)
+      else if (text.match(/^[*-] /)) {
+        builder.add(line.from, line.from, bulletIndent)
+      }
     }
 
     return builder.finish()
@@ -886,6 +927,7 @@ export function Editor(props: EditorProps) {
         headingHighlighter,
         blockquoteHighlighter,
         emphasisHighlighter,
+        indentHighlighter,
         linkStyler,
         linkTruncator,
         EditorView.domEventHandlers({

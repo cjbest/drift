@@ -225,3 +225,14 @@
   0% { background-position: 100% 0; }
   100% { background-position: -100% 0; }
 }
+
+/* Hanging indent for wrapped lines in bullets and checklists */
+.cm-line.line-bullet-indent {
+  padding-left: 2ch;
+  text-indent: -2ch;
+}
+
+.cm-line.line-checkbox-indent {
+  padding-left: 6ch;
+  text-indent: -6ch;
+}
