@@ -6,6 +6,7 @@ import { EditorView, keymap, highlightActiveLine, ViewPlugin, Decoration, drawSe
 import type { DecorationSet, ViewUpdate } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap, indentMore, indentLess } from '@codemirror/commands'
 import { markdown } from '@codemirror/lang-markdown'
+import { search, searchKeymap, getSearchQuery } from '@codemirror/search'
 import './Editor.css'
 
 // Custom selection highlighting that wraps text tightly (Sublime-style)
@@ -209,6 +210,130 @@ const indentHighlighter = ViewPlugin.fromClass(class {
   }
 }, {
   decorations: v => v.decorations
+})
+
+// Search match counter - injects "X of Y" into search panel and adds Done button
+const searchMatchCounter = ViewPlugin.fromClass(class {
+  countEl: HTMLElement | null = null
+  wrapper: HTMLElement | null = null
+  doneBtn: HTMLElement | null = null
+
+  constructor(view: EditorView) {
+    this.setupPanel(view)
+  }
+
+  update(update: ViewUpdate) {
+    this.setupPanel(update.view)
+  }
+
+  setupPanel(view: EditorView) {
+    const panel = view.dom.querySelector('.cm-search') as HTMLElement
+    if (!panel) {
+      this.countEl = null
+      this.wrapper = null
+      this.doneBtn = null
+      return
+    }
+
+    const input = panel.querySelector('input[main-field]') as HTMLElement
+
+    // Wrap input if not already wrapped
+    if (input && !this.wrapper) {
+      this.wrapper = document.createElement('div')
+      this.wrapper.className = 'search-input-wrapper'
+      input.parentNode?.insertBefore(this.wrapper, input)
+      this.wrapper.appendChild(input)
+
+      // Create count element inside wrapper
+      this.countEl = document.createElement('span')
+      this.countEl.className = 'search-match-count'
+      this.wrapper.appendChild(this.countEl)
+
+      // Re-focus input after wrapping
+      ;(input as HTMLInputElement).focus()
+    }
+
+    // Add Done button if not present
+    if (!this.doneBtn || !panel.contains(this.doneBtn)) {
+      this.doneBtn = document.createElement('button')
+      this.doneBtn.className = 'search-done-btn'
+      this.doneBtn.textContent = 'Done'
+      this.doneBtn.type = 'button'
+      this.doneBtn.onclick = () => {
+        // Close the search panel
+        const closeBtn = panel.querySelector('[name="close"]') as HTMLButtonElement
+        closeBtn?.click()
+      }
+      panel.appendChild(this.doneBtn)
+    }
+
+    // Update count
+    this.updateCount(view)
+  }
+
+  lastQuery: string = ''
+  lastTotal: number = 0
+
+  updateCount(view: EditorView) {
+    if (!this.countEl) return
+
+    const query = getSearchQuery(view.state)
+    if (!query.valid) {
+      this.countEl.textContent = ''
+      this.lastQuery = ''
+      this.lastTotal = 0
+      return
+    }
+
+    // Get the actual search string from the input
+    const panel = view.dom.querySelector('.cm-search')
+    const input = panel?.querySelector('input[main-field]') as HTMLInputElement
+    const queryStr = input?.value || ''
+
+    // Count matches and find first match position
+    const doc = view.state.doc
+    const cursor = query.getCursor(doc)
+    let total = 0
+    let current = 0
+    let firstMatchFrom = -1
+    const sel = view.state.selection.main
+
+    while (!cursor.next().done) {
+      total++
+      if (firstMatchFrom === -1) {
+        firstMatchFrom = cursor.value.from
+      }
+      if (cursor.value.from <= sel.from && cursor.value.to >= sel.from) {
+        current = total
+      }
+    }
+
+    if (total === 0) {
+      this.countEl.textContent = '0'
+    } else if (current > 0) {
+      this.countEl.textContent = `${current}/${total}`
+    } else {
+      this.countEl.textContent = String(total)
+    }
+
+    // On new search query or new matches, jump to first match
+    const queryChanged = queryStr !== this.lastQuery
+    const newMatches = total > 0 && this.lastTotal === 0
+
+    if ((queryChanged || newMatches) && total > 0 && firstMatchFrom >= 0 && current === 0) {
+      this.lastQuery = queryStr
+      this.lastTotal = total
+      // Small delay to let search state settle
+      setTimeout(() => {
+        view.dispatch({
+          effects: EditorView.scrollIntoView(firstMatchFrom, { y: 'center' })
+        })
+      }, 10)
+    } else {
+      this.lastQuery = queryStr
+      this.lastTotal = total
+    }
+  }
 })
 
 // Link decorations
@@ -917,7 +1042,10 @@ export function Editor(props: EditorProps) {
         keymap.of([
           ...defaultKeymap,
           ...historyKeymap,
+          ...searchKeymap,
         ]),
+        search({ top: true }),
+        searchMatchCounter,
         markdown(),
         updateListener,
         EditorView.lineWrapping,

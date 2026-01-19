@@ -231,6 +231,210 @@ body.cmd-held .bare-url {
   100% { background-position: -100% 0; }
 }
 
+/* Search panel styling - floating top right */
+.cm-panels-top {
+  position: absolute !important;
+  top: 0 !important;
+  right: 0 !important;
+  left: auto !important;
+  width: auto !important;
+  background: transparent !important;
+  border: none !important;
+  z-index: 50;
+  padding: 38px 24px 0 0 !important;
+}
+
+.cm-panel.cm-search {
+  background: var(--bg);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.1);
+}
+
+:root[data-theme="dark"] .cm-panel.cm-search {
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.4);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .cm-panel.cm-search {
+    border-color: rgba(255, 255, 255, 0.12);
+    box-shadow: 0 2px 16px rgba(0, 0, 0, 0.4);
+  }
+}
+
+/* Hide replace row, extra options, and close button */
+.cm-panel.cm-search br,
+.cm-panel.cm-search br + input,
+.cm-panel.cm-search br + input + button,
+.cm-panel.cm-search br + input + button + button,
+.cm-panel.cm-search [name="select"],
+.cm-panel.cm-search [name="close"],
+.cm-panel.cm-search label {
+  display: none !important;
+}
+
+/* Input wrapper for positioning count inside */
+.cm-panel.cm-search .search-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.cm-panel.cm-search input[main-field] {
+  font-family: "SF Mono", Menlo, Monaco, monospace;
+  font-size: 13px;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  background: rgba(0, 0, 0, 0.03);
+  color: var(--fg);
+  padding: 7px 50px 7px 10px;
+  width: 220px;
+  box-sizing: border-box;
+}
+
+.cm-panel.cm-search input[main-field]:focus {
+  outline: none;
+  border-color: rgba(0, 0, 0, 0.2);
+}
+
+:root[data-theme="dark"] .cm-panel.cm-search input[main-field] {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+:root[data-theme="dark"] .cm-panel.cm-search input[main-field]:focus {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .cm-panel.cm-search input[main-field] {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+  :root:not([data-theme="light"]) .cm-panel.cm-search input[main-field]:focus {
+    border-color: rgba(255, 255, 255, 0.2);
+  }
+}
+
+/* Match count inside input */
+.cm-panel.cm-search .search-match-count {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
+  color: var(--fg);
+  opacity: 0.4;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* Arrow buttons for prev/next - left/right style */
+.cm-panel.cm-search button[name="next"],
+.cm-panel.cm-search button[name="prev"] {
+  font-size: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--fg);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.5;
+  padding: 0;
+}
+
+/* Reorder so prev (‹) comes before next (›) */
+.cm-panel.cm-search button[name="prev"] {
+  order: 1;
+}
+.cm-panel.cm-search button[name="next"] {
+  order: 2;
+}
+.cm-panel.cm-search .search-done-btn {
+  order: 3;
+}
+
+.cm-panel.cm-search button[name="next"]:hover,
+.cm-panel.cm-search button[name="prev"]:hover {
+  background: rgba(0, 0, 0, 0.06);
+  opacity: 1;
+}
+
+:root[data-theme="dark"] .cm-panel.cm-search button[name="next"]:hover,
+:root[data-theme="dark"] .cm-panel.cm-search button[name="prev"]:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .cm-panel.cm-search button[name="next"]:hover,
+  :root:not([data-theme="light"]) .cm-panel.cm-search button[name="prev"]:hover {
+    background: rgba(255, 255, 255, 0.1);
+  }
+}
+
+.cm-panel.cm-search button[name="prev"]::after {
+  content: "‹";
+  font-size: 18px;
+  font-weight: 300;
+}
+
+.cm-panel.cm-search button[name="next"]::after {
+  content: "›";
+  font-size: 18px;
+  font-weight: 300;
+}
+
+/* Done button */
+.cm-panel.cm-search .search-done-btn {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--fg);
+  opacity: 0.6;
+  cursor: pointer;
+  padding: 4px 8px;
+  margin-left: 2px;
+}
+
+.cm-panel.cm-search .search-done-btn:hover {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.06);
+}
+
+:root[data-theme="dark"] .cm-panel.cm-search .search-done-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .cm-panel.cm-search .search-done-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+  }
+}
+
+/* Search match highlighting */
+.cm-searchMatch {
+  background-color: rgba(238, 255, 65, 0.4);
+  border-radius: 2px;
+}
+
+.cm-searchMatch-selected {
+  background-color: #EEFF41;
+}
+
 /* Hanging indent for wrapped lines in bullets and checklists */
 .cm-line.line-bullet-indent {
   padding-left: 2ch;
