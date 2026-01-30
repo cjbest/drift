@@ -107,21 +107,19 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          GIF_URL="https://raw.githubusercontent.com/${{ github.repository }}/${BRANCH_NAME}/demo.gif"
           gh pr create \
             --title "Implement #${{ github.event.issue.number }}: ${{ github.event.issue.title }}" \
-            --body "$(cat << 'EOF'
-          Closes #${{ github.event.issue.number }}
+            --body "Closes #${{ github.event.issue.number }}
 
           ## Summary
           This PR was automatically created by Claude Agent.
 
           ## Demo
-          ![Demo](demo.gif)
+          ![Demo](${GIF_URL})
 
           ---
-          🤖 Generated with Claude Code
-          EOF
-          )" || echo "PR may already exist"
+          🤖 Generated with Claude Code" || echo "PR may already exist"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
