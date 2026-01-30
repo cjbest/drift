@@ -196,12 +196,12 @@ const indentHighlighter = ViewPlugin.fromClass(class {
       const line = doc.line(i)
       const text = line.text
 
-      // Checkbox lines: - [ ] or - [x] (not tabbed)
-      if (text.match(/^- \[[x ]\] /)) {
+      // Checkbox lines: - [ ] or - [x] (with optional leading whitespace)
+      if (text.match(/^\s*- \[[x ]\] /)) {
         builder.add(line.from, line.from, checkboxIndent)
       }
-      // Bullet lines: * or - (not tabbed)
-      else if (text.match(/^[*-] /)) {
+      // Bullet lines: * or - (with optional leading whitespace)
+      else if (text.match(/^\s*[*-] /)) {
         builder.add(line.from, line.from, bulletIndent)
       }
     }
