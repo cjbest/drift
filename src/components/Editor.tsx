@@ -2,7 +2,7 @@ import { onMount, onCleanup, createEffect, createSignal, Show } from 'solid-js'
 import { open } from '@tauri-apps/plugin-shell'
 import { ApiKeyDialog } from './ApiKeyDialog'
 import { EditorState, RangeSetBuilder } from '@codemirror/state'
-import { EditorView, keymap, highlightActiveLine, ViewPlugin, Decoration, drawSelection, WidgetType } from '@codemirror/view'
+import { EditorView, keymap, highlightActiveLine, ViewPlugin, Decoration, drawSelection, WidgetType, scrollPastEnd } from '@codemirror/view'
 import type { DecorationSet, ViewUpdate } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap, indentMore, indentLess } from '@codemirror/commands'
 import { markdown } from '@codemirror/lang-markdown'
@@ -988,6 +988,8 @@ export function Editor(props: EditorProps) {
         markdown(),
         updateListener,
         EditorView.lineWrapping,
+        scrollPastEnd(),
+        EditorView.scrollMargins.of(() => ({ bottom: 50 })),
         selectionHighlighter,
         firstLineHighlighter,
         checkboxHighlighter,
