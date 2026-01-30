@@ -30,11 +30,19 @@ test('explosion particles appear when typing', async ({ page }) => {
   // Wait a tiny bit for the particle to be created
   await page.waitForTimeout(100)
 
-  // Explosion particles should appear
-  const particles = page.locator('.explosion-particle')
-  await expect(particles.first()).toBeVisible()
+  // Fire particles should appear (flame, smoke, or ember)
+  const flameParticles = page.locator('.flame-particle')
+  const smokeParticles = page.locator('.smoke-particle')
+  const emberTrails = page.locator('.ember-trail')
 
-  // Take a screenshot showing the explosion
+  // At least one type of particle should be visible
+  const hasFlame = await flameParticles.first().isVisible().catch(() => false)
+  const hasSmoke = await smokeParticles.first().isVisible().catch(() => false)
+  const hasEmber = await emberTrails.first().isVisible().catch(() => false)
+
+  expect(hasFlame || hasSmoke || hasEmber).toBe(true)
+
+  // Take a screenshot showing the fire effect
   await page.screenshot({ path: 'e2e/screenshots/explosion-particles.png' })
 })
 
@@ -95,9 +103,14 @@ test('no particles appear when explosions are disabled', async ({ page }) => {
   // Wait a bit
   await page.waitForTimeout(200)
 
-  // No explosion particles should appear
-  const particles = page.locator('.explosion-particle')
-  await expect(particles).toHaveCount(0)
+  // No fire particles should appear
+  const flameParticles = page.locator('.flame-particle')
+  const smokeParticles = page.locator('.smoke-particle')
+  const emberTrails = page.locator('.ember-trail')
+
+  await expect(flameParticles).toHaveCount(0)
+  await expect(smokeParticles).toHaveCount(0)
+  await expect(emberTrails).toHaveCount(0)
 
   await page.screenshot({ path: 'e2e/screenshots/no-explosions.png' })
 })

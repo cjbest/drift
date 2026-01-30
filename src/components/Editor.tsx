@@ -19,25 +19,71 @@ const firstLineMark = Decoration.mark({ class: 'first-line-title' })
 const checkboxUnchecked = Decoration.mark({ class: 'checkbox-marker checkbox-unchecked' })
 const checkboxChecked = Decoration.mark({ class: 'checkbox-marker checkbox-checked' })
 
-// Explosion particle widget
-class ExplosionParticle extends WidgetType {
-  angle: number
-  distance: number
-  hue: number
+// Fire particle widget - realistic flame
+class FlameParticle extends WidgetType {
+  offsetX: number
+  offsetY: number
+  size: number
+  delay: number
 
-  constructor(angle: number, distance: number, hue: number) {
+  constructor(offsetX: number, offsetY: number, size: number, delay: number) {
     super()
-    this.angle = angle
-    this.distance = distance
-    this.hue = hue
+    this.offsetX = offsetX
+    this.offsetY = offsetY
+    this.size = size
+    this.delay = delay
   }
 
   toDOM() {
     const particle = document.createElement('span')
-    particle.className = 'explosion-particle'
-    particle.style.setProperty('--angle', `${this.angle}deg`)
-    particle.style.setProperty('--distance', `${this.distance}px`)
-    particle.style.setProperty('--hue', `${this.hue}`)
+    particle.className = 'flame-particle'
+    particle.style.setProperty('--offset-x', `${this.offsetX}px`)
+    particle.style.setProperty('--offset-y', `${this.offsetY}px`)
+    particle.style.setProperty('--size', `${this.size}px`)
+    particle.style.setProperty('--delay', `${this.delay}s`)
+    return particle
+  }
+
+  eq() {
+    return false // Always recreate (animations need fresh DOM elements)
+  }
+}
+
+// Smoke particle widget
+class SmokeParticle extends WidgetType {
+  offsetX: number
+  offsetY: number
+  size: number
+  delay: number
+
+  constructor(offsetX: number, offsetY: number, size: number, delay: number) {
+    super()
+    this.offsetX = offsetX
+    this.offsetY = offsetY
+    this.size = size
+    this.delay = delay
+  }
+
+  toDOM() {
+    const particle = document.createElement('span')
+    particle.className = 'smoke-particle'
+    particle.style.setProperty('--offset-x', `${this.offsetX}px`)
+    particle.style.setProperty('--offset-y', `${this.offsetY}px`)
+    particle.style.setProperty('--size', `${this.size}px`)
+    particle.style.setProperty('--delay', `${this.delay}s`)
+    return particle
+  }
+
+  eq() {
+    return false // Always recreate (animations need fresh DOM elements)
+  }
+}
+
+// Ember trail widget - glowing burn mark that fades
+class EmberTrail extends WidgetType {
+  toDOM() {
+    const particle = document.createElement('span')
+    particle.className = 'ember-trail'
     return particle
   }
 
@@ -673,10 +719,11 @@ const selectionHighlighter = ViewPlugin.fromClass(class {
   decorations: v => v.decorations
 })
 
-// Explosion animator - creates particle bursts at cursor when typing
+// Fire animator - creates realistic flame effect at cursor when typing
 const explosionAnimator = ViewPlugin.fromClass(class {
   decorations: DecorationSet
-  explosions: Map<number, number> = new Map() // pos -> timestamp
+  fires: Map<number, number> = new Map() // pos -> timestamp
+  embers: Map<number, number> = new Map() // pos -> timestamp (for trail)
 
   constructor(view: EditorView) {
     this.decorations = Decoration.none
@@ -693,24 +740,39 @@ const explosionAnimator = ViewPlugin.fromClass(class {
       const pos = update.state.selection.main.head
       const now = Date.now()
 
-      // Add explosion at cursor position
-      this.explosions.set(pos, now)
+      // Add fire at cursor position
+      this.fires.set(pos, now)
+      // Add ember trail at the previous position
+      this.embers.set(pos, now)
 
-      // Clean up old explosions (older than 1 second)
-      for (const [oldPos, timestamp] of this.explosions.entries()) {
-        if (now - timestamp > 1000) {
-          this.explosions.delete(oldPos)
+      // Clean up old fires (older than 800ms - duration of flame animation)
+      for (const [oldPos, timestamp] of this.fires.entries()) {
+        if (now - timestamp > 800) {
+          this.fires.delete(oldPos)
+        }
+      }
+
+      // Clean up old embers (older than 500ms - duration of ember fade)
+      for (const [oldPos, timestamp] of this.embers.entries()) {
+        if (now - timestamp > 500) {
+          this.embers.delete(oldPos)
         }
       }
 
       this.decorations = this.buildDecorations(update.view)
-    } else if (this.explosions.size > 0) {
-      // Check if we need to clean up old explosions
+    } else if (this.fires.size > 0 || this.embers.size > 0) {
+      // Check if we need to clean up old effects
       const now = Date.now()
       let needsUpdate = false
-      for (const [oldPos, timestamp] of this.explosions.entries()) {
-        if (now - timestamp > 1000) {
-          this.explosions.delete(oldPos)
+      for (const [oldPos, timestamp] of this.fires.entries()) {
+        if (now - timestamp > 800) {
+          this.fires.delete(oldPos)
+          needsUpdate = true
+        }
+      }
+      for (const [oldPos, timestamp] of this.embers.entries()) {
+        if (now - timestamp > 500) {
+          this.embers.delete(oldPos)
           needsUpdate = true
         }
       }
@@ -722,22 +784,52 @@ const explosionAnimator = ViewPlugin.fromClass(class {
 
   buildDecorations(view: EditorView): DecorationSet {
     const builder = new RangeSetBuilder<Decoration>()
-    const positions = Array.from(this.explosions.keys()).sort((a, b) => a - b)
+
+    // Sort all positions together
+    const allPositions = new Set([...this.fires.keys(), ...this.embers.keys()])
+    const positions = Array.from(allPositions).sort((a, b) => a - b)
 
     for (const pos of positions) {
-      // Create multiple particles at random angles
-      const particleCount = 8
-      for (let i = 0; i < particleCount; i++) {
-        const angle = (360 / particleCount) * i + Math.random() * 30
-        const distance = 20 + Math.random() * 30
-        const hue = Math.random() * 360
-
+      // Add ember trail if this position has one
+      if (this.embers.has(pos)) {
         const widget = Decoration.widget({
-          widget: new ExplosionParticle(angle, distance, hue),
+          widget: new EmberTrail(),
           side: 1
         })
-
         builder.add(pos, pos, widget)
+      }
+
+      // Add fire effect if this position has one
+      if (this.fires.has(pos)) {
+        // Create flame particles - multiple small flames for realistic effect
+        const flameCount = 5
+        for (let i = 0; i < flameCount; i++) {
+          const offsetX = (Math.random() - 0.5) * 8 // Spread horizontally
+          const offsetY = -Math.random() * 8 // Rise upward
+          const size = 6 + Math.random() * 6 // Varying sizes
+          const delay = Math.random() * 0.1 // Slight stagger
+
+          const widget = Decoration.widget({
+            widget: new FlameParticle(offsetX, offsetY, size, delay),
+            side: 1
+          })
+          builder.add(pos, pos, widget)
+        }
+
+        // Create smoke particles - fewer, larger, rising higher
+        const smokeCount = 3
+        for (let i = 0; i < smokeCount; i++) {
+          const offsetX = (Math.random() - 0.5) * 12 // More spread
+          const offsetY = -10 - Math.random() * 5 // Start higher
+          const size = 8 + Math.random() * 8 // Larger particles
+          const delay = 0.2 + Math.random() * 0.2 // Delayed start
+
+          const widget = Decoration.widget({
+            widget: new SmokeParticle(offsetX, offsetY, size, delay),
+            side: 1
+          })
+          builder.add(pos, pos, widget)
+        }
       }
     }
 

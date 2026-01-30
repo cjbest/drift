@@ -443,29 +443,153 @@ body.cmd-held .bare-url {
   text-indent: -6ch;
 }
 
-/* Explosion particles */
-.explosion-particle {
+/* Fire effect - realistic flames */
+.flame-particle {
   position: absolute;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: hsl(var(--hue), 100%, 60%);
+  width: var(--size);
+  height: var(--size);
   pointer-events: none;
-  animation: explosion-burst 0.6s ease-out forwards;
-  box-shadow: 0 0 4px hsl(var(--hue), 100%, 50%);
   z-index: 100;
+  animation: flame-rise 0.6s ease-out forwards;
+  animation-delay: var(--delay);
+
+  /* Flame gradient - orange to yellow with transparency */
+  background: radial-gradient(
+    ellipse at bottom,
+    rgba(255, 170, 0, 1) 0%,
+    rgba(255, 100, 0, 0.9) 30%,
+    rgba(255, 50, 0, 0.6) 60%,
+    rgba(255, 0, 0, 0) 100%
+  );
+
+  /* Organic flame shape */
+  border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+
+  /* Glow effect */
+  filter: blur(1px);
+  box-shadow:
+    0 0 4px rgba(255, 150, 0, 0.8),
+    0 0 8px rgba(255, 100, 0, 0.4);
 }
 
-@keyframes explosion-burst {
+@keyframes flame-rise {
   0% {
-    transform: translate(0, 0) scale(1);
+    transform: translate(var(--offset-x), var(--offset-y)) scale(1) rotate(0deg);
     opacity: 1;
+  }
+  50% {
+    transform: translate(
+      calc(var(--offset-x) + (var(--offset-x) * 0.3)),
+      calc(var(--offset-y) - 15px)
+    ) scale(1.2) rotate(10deg);
+    opacity: 0.8;
   }
   100% {
     transform: translate(
-      calc(cos(var(--angle)) * var(--distance)),
-      calc(sin(var(--angle)) * var(--distance))
-    ) scale(0);
+      calc(var(--offset-x) + (var(--offset-x) * 0.5)),
+      calc(var(--offset-y) - 25px)
+    ) scale(0.3) rotate(20deg);
+    opacity: 0;
+  }
+}
+
+/* Smoke particles */
+.smoke-particle {
+  position: absolute;
+  width: var(--size);
+  height: var(--size);
+  pointer-events: none;
+  z-index: 99;
+  animation: smoke-rise 0.8s ease-out forwards;
+  animation-delay: var(--delay);
+
+  /* Smoke gradient - dark gray fading out */
+  background: radial-gradient(
+    circle,
+    rgba(80, 80, 80, 0.4) 0%,
+    rgba(100, 100, 100, 0.2) 40%,
+    rgba(120, 120, 120, 0) 100%
+  );
+
+  border-radius: 50%;
+  filter: blur(2px);
+}
+
+:root[data-theme="dark"] .smoke-particle {
+  background: radial-gradient(
+    circle,
+    rgba(150, 150, 150, 0.3) 0%,
+    rgba(180, 180, 180, 0.15) 40%,
+    rgba(200, 200, 200, 0) 100%
+  );
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .smoke-particle {
+    background: radial-gradient(
+      circle,
+      rgba(150, 150, 150, 0.3) 0%,
+      rgba(180, 180, 180, 0.15) 40%,
+      rgba(200, 200, 200, 0) 100%
+    );
+  }
+}
+
+@keyframes smoke-rise {
+  0% {
+    transform: translate(var(--offset-x), var(--offset-y)) scale(0.5);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.6;
+  }
+  100% {
+    transform: translate(
+      calc(var(--offset-x) + (var(--offset-x) * 1.5)),
+      calc(var(--offset-y) - 40px)
+    ) scale(2);
+    opacity: 0;
+  }
+}
+
+/* Ember trail - glowing burn mark that fades */
+.ember-trail {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  pointer-events: none;
+  z-index: 98;
+
+  /* Bright ember glow - orange/red */
+  background: radial-gradient(
+    circle,
+    rgba(255, 120, 0, 0.9) 0%,
+    rgba(255, 80, 0, 0.6) 40%,
+    rgba(255, 40, 0, 0.3) 70%,
+    rgba(200, 0, 0, 0) 100%
+  );
+
+  border-radius: 50%;
+  animation: ember-fade 0.5s ease-out forwards;
+
+  /* Strong glow effect */
+  box-shadow:
+    0 0 6px rgba(255, 100, 0, 0.8),
+    0 0 12px rgba(255, 60, 0, 0.4);
+  filter: blur(0.5px);
+}
+
+@keyframes ember-fade {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(0.3);
     opacity: 0;
   }
 }
