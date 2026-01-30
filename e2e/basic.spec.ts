@@ -113,3 +113,30 @@ test('creates new note on Cmd+N', async ({ page }) => {
 
   await page.screenshot({ path: 'e2e/screenshots/new-note.png' })
 })
+
+test('word count shows when typing', async ({ page }) => {
+  await page.goto('/')
+  await expect(page.locator('.cm-editor')).toBeVisible()
+
+  // Initially, word count should not be visible (no content)
+  await expect(page.locator('.word-count')).not.toBeVisible()
+
+  // Click to focus the editor
+  await page.locator('.cm-content').click()
+
+  // Type some content
+  await page.keyboard.type('Hello world this is a test')
+
+  // Word count should now be visible and show 6 words
+  await expect(page.locator('.word-count')).toBeVisible()
+  await expect(page.locator('.word-count')).toContainText('6 words')
+
+  // Take screenshot showing word count
+  await page.screenshot({ path: 'e2e/screenshots/word-count.png' })
+
+  // Add more words
+  await page.keyboard.type(' with more content')
+
+  // Word count should update to 9 words (6 + 3)
+  await expect(page.locator('.word-count')).toContainText('9 words')
+})

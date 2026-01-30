@@ -89,6 +89,12 @@ function App() {
   let saveTimeout: number | undefined
   let statusTimeout: number | undefined
 
+  const wordCount = () => {
+    const text = content().trim()
+    if (!text) return 0
+    return text.split(/\s+/).length
+  }
+
   const applyTheme = (mode: ThemeMode) => {
     document.documentElement.removeAttribute('data-theme')
     if (mode === 'light') {
@@ -520,6 +526,9 @@ function App() {
       </Show>
       <Show when={statusMessage()}>
         <div class="status-message">{statusMessage()}</div>
+      </Show>
+      <Show when={wordCount() > 0}>
+        <div class="word-count">{wordCount()} words</div>
       </Show>
     </div>
   )

@@ -56,3 +56,15 @@ body.cmd-held * {
   opacity: 0.9;
   z-index: 1000;
 }
+
+.word-count {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  color: var(--fg);
+  opacity: 0.4;
+  font-size: 12px;
+  font-weight: 400;
+  z-index: 100;
+  pointer-events: none;
+}
