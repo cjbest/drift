@@ -128,6 +128,15 @@ function App() {
     showStatus(`${THEME_LABELS[mode]} mode`)
   }
 
+  const toggleExplosions = () => {
+    const currentlyEnabled = localStorage.getItem('explosions-enabled') !== 'false'
+    const newState = !currentlyEnabled
+    localStorage.setItem('explosions-enabled', String(newState))
+    showStatus(newState ? 'Explosions on' : 'Explosions off')
+    // Force a page reload to apply the change
+    location.reload()
+  }
+
   const ensureDriftDir = async () => {
     let docDir = await documentDir()
     // Ensure no double slashes
@@ -422,6 +431,9 @@ function App() {
     const unlistenThemeDark = listen('menu-theme-dark', () => {
       if (document.hasFocus()) setThemeMode('dark')
     })
+    const unlistenToggleExplosions = listen('menu-toggle-explosions', () => {
+      if (document.hasFocus()) toggleExplosions()
+    })
 
     // Save on window close and unregister
     const unlistenClose = appWindow.onCloseRequested(() => {
@@ -475,6 +487,7 @@ function App() {
       unlistenThemeSystem.then(fn => fn())
       unlistenThemeLight.then(fn => fn())
       unlistenThemeDark.then(fn => fn())
+      unlistenToggleExplosions.then(fn => fn())
       unlistenClose.then(fn => fn())
       window.removeEventListener('blur', handleBlur)
       window.removeEventListener('focus', handleFocus)
@@ -503,6 +516,7 @@ function App() {
         onNewWindow={() => openNewWindow()}
         onToggleTheme={toggleTheme}
         onSystemTheme={() => setThemeMode('system')}
+        onToggleExplosions={toggleExplosions}
         onScrollPastTitle={setShowTitleInBar}
       />
       <Show when={quickOpenVisible()}>

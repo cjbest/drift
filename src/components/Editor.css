@@ -442,3 +442,30 @@ body.cmd-held .bare-url {
   padding-left: 6ch;
   text-indent: -6ch;
 }
+
+/* Explosion particles */
+.explosion-particle {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: hsl(var(--hue), 100%, 60%);
+  pointer-events: none;
+  animation: explosion-burst 0.6s ease-out forwards;
+  box-shadow: 0 0 4px hsl(var(--hue), 100%, 50%);
+  z-index: 100;
+}
+
+@keyframes explosion-burst {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(
+      calc(cos(var(--angle)) * var(--distance)),
+      calc(sin(var(--angle)) * var(--distance))
+    ) scale(0);
+    opacity: 0;
+  }
+}

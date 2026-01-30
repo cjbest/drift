@@ -19,6 +19,36 @@ const firstLineMark = Decoration.mark({ class: 'first-line-title' })
 const checkboxUnchecked = Decoration.mark({ class: 'checkbox-marker checkbox-unchecked' })
 const checkboxChecked = Decoration.mark({ class: 'checkbox-marker checkbox-checked' })
 
+// Explosion particle widget
+class ExplosionParticle extends WidgetType {
+  angle: number
+  distance: number
+  hue: number
+
+  constructor(angle: number, distance: number, hue: number) {
+    super()
+    this.angle = angle
+    this.distance = distance
+    this.hue = hue
+  }
+
+  toDOM() {
+    const particle = document.createElement('span')
+    particle.className = 'explosion-particle'
+    particle.style.setProperty('--angle', `${this.angle}deg`)
+    particle.style.setProperty('--distance', `${this.distance}px`)
+    particle.style.setProperty('--hue', `${this.hue}`)
+    return particle
+  }
+
+  eq() {
+    return false // Always recreate (animations need fresh DOM elements)
+  }
+}
+
+// Global state for explosions toggle
+let explosionsEnabled = localStorage.getItem('explosions-enabled') !== 'false'
+
 // Heading decorations
 const headingMarker = Decoration.mark({ class: 'heading-marker' })
 const heading1 = Decoration.mark({ class: 'heading heading-1' })
@@ -643,6 +673,80 @@ const selectionHighlighter = ViewPlugin.fromClass(class {
   decorations: v => v.decorations
 })
 
+// Explosion animator - creates particle bursts at cursor when typing
+const explosionAnimator = ViewPlugin.fromClass(class {
+  decorations: DecorationSet
+  explosions: Map<number, number> = new Map() // pos -> timestamp
+
+  constructor(view: EditorView) {
+    this.decorations = Decoration.none
+  }
+
+  update(update: ViewUpdate) {
+    if (!explosionsEnabled) {
+      this.decorations = Decoration.none
+      return
+    }
+
+    // Detect typing (doc changed and selection moved forward)
+    if (update.docChanged && update.transactions.some(tr => tr.isUserEvent('input'))) {
+      const pos = update.state.selection.main.head
+      const now = Date.now()
+
+      // Add explosion at cursor position
+      this.explosions.set(pos, now)
+
+      // Clean up old explosions (older than 1 second)
+      for (const [oldPos, timestamp] of this.explosions.entries()) {
+        if (now - timestamp > 1000) {
+          this.explosions.delete(oldPos)
+        }
+      }
+
+      this.decorations = this.buildDecorations(update.view)
+    } else if (this.explosions.size > 0) {
+      // Check if we need to clean up old explosions
+      const now = Date.now()
+      let needsUpdate = false
+      for (const [oldPos, timestamp] of this.explosions.entries()) {
+        if (now - timestamp > 1000) {
+          this.explosions.delete(oldPos)
+          needsUpdate = true
+        }
+      }
+      if (needsUpdate) {
+        this.decorations = this.buildDecorations(update.view)
+      }
+    }
+  }
+
+  buildDecorations(view: EditorView): DecorationSet {
+    const builder = new RangeSetBuilder<Decoration>()
+    const positions = Array.from(this.explosions.keys()).sort((a, b) => a - b)
+
+    for (const pos of positions) {
+      // Create multiple particles at random angles
+      const particleCount = 8
+      for (let i = 0; i < particleCount; i++) {
+        const angle = (360 / particleCount) * i + Math.random() * 30
+        const distance = 20 + Math.random() * 30
+        const hue = Math.random() * 360
+
+        const widget = Decoration.widget({
+          widget: new ExplosionParticle(angle, distance, hue),
+          side: 1
+        })
+
+        builder.add(pos, pos, widget)
+      }
+    }
+
+    return builder.finish()
+  }
+}, {
+  decorations: v => v.decorations
+})
+
 interface EditorProps {
   content: string
   onChange: (content: string) => void
@@ -651,6 +755,7 @@ interface EditorProps {
   onNewWindow: () => void
   onToggleTheme: () => void
   onSystemTheme: () => void
+  onToggleExplosions: () => void
   onScrollPastTitle: (scrolled: boolean) => void
 }
 
@@ -743,6 +848,13 @@ export function Editor(props: EditorProps) {
         key: 'Mod-Shift-d',
         run: () => {
           props.onSystemTheme()
+          return true
+        },
+      },
+      {
+        key: 'Mod-e',
+        run: () => {
+          props.onToggleExplosions()
           return true
         },
       },
@@ -991,6 +1103,7 @@ export function Editor(props: EditorProps) {
         scrollPastEnd(),
         EditorView.scrollMargins.of(() => ({ bottom: 50 })),
         selectionHighlighter,
+        explosionAnimator,
         firstLineHighlighter,
         checkboxHighlighter,
         headingHighlighter,
