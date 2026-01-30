@@ -64,6 +64,7 @@ pub fn run() {
       let theme_system = MenuItem::with_id(app, "theme_system", "System", true, None::<&str>)?;
       let theme_light = MenuItem::with_id(app, "theme_light", "Light", true, None::<&str>)?;
       let theme_dark = MenuItem::with_id(app, "theme_dark", "Dark", true, None::<&str>)?;
+      let toggle_explosions = MenuItem::with_id(app, "toggle_explosions", "Toggle Explosions", true, Some("CmdOrCtrl+E"))?;
 
       let view_menu = Submenu::with_items(
         app,
@@ -75,6 +76,8 @@ pub fn run() {
           &theme_system,
           &theme_light,
           &theme_dark,
+          &PredefinedMenuItem::separator(app)?,
+          &toggle_explosions,
         ],
       )?;
 
@@ -93,6 +96,7 @@ pub fn run() {
         "theme_system" => { let _ = app.emit("menu-theme-system", ()); }
         "theme_light" => { let _ = app.emit("menu-theme-light", ()); }
         "theme_dark" => { let _ = app.emit("menu-theme-dark", ()); }
+        "toggle_explosions" => { let _ = app.emit("menu-toggle-explosions", ()); }
         _ => {}
       }
     })
