@@ -97,6 +97,8 @@ jobs:
 
       - name: Push branch
         run: |
+          # Delete remote branch if it exists, then push
+          git push origin --delete "$BRANCH_NAME" 2>/dev/null || true
           git push -u origin "$BRANCH_NAME"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
