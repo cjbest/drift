@@ -121,8 +121,7 @@ jobs:
           ---
           🤖 Generated with Claude Code
           EOF
-          )" \
-            --label "automated" || echo "PR may already exist"
+          )" || echo "PR may already exist"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
