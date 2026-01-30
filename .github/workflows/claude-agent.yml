@@ -109,7 +109,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          GIF_URL="https://raw.githubusercontent.com/${{ github.repository }}/${BRANCH_NAME}/demo.gif"
+          # Use commit SHA as cache buster for GIF
+          COMMIT_SHA=$(git rev-parse HEAD)
+          GIF_URL="https://raw.githubusercontent.com/${{ github.repository }}/${BRANCH_NAME}/demo.gif?${COMMIT_SHA}"
 
           # Read Claude's summary if it exists
           if [ -f PR_SUMMARY.md ]; then
@@ -122,11 +124,11 @@ jobs:
             --title "Implement #${{ github.event.issue.number }}: ${{ github.event.issue.title }}" \
             --body "Closes #${{ github.event.issue.number }}
 
-          ## Summary
-          ${SUMMARY}
-
           ## Demo
           ![Demo](${GIF_URL})
+
+          ## Summary
+          ${SUMMARY}
 
           ---
           🤖 Generated with Claude Code" || echo "PR may already exist"
