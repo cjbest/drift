@@ -61,10 +61,12 @@ jobs:
           2. Run TypeScript check: npx tsc --noEmit
           3. Run tests: npm test
           4. If you created a new feature, add a test that demonstrates it
-          5. Create a demo GIF by running a Playwright test and converting to GIF
-          6. Keep changes minimal and focused
+          5. Keep changes minimal and focused
 
-          When done, summarize what you did.
+          When done, write a file called PR_SUMMARY.md with:
+          - A brief description of what you implemented
+          - Key files changed and why
+          - Any design decisions you made
           PROMPT_EOF
 
           # Run Claude Code in non-interactive mode
@@ -79,7 +81,7 @@ jobs:
           # Find and convert video to GIF
           VIDEO=$(find test-results -name "*.webm" | head -1)
           if [ -n "$VIDEO" ]; then
-            ffmpeg -y -i "$VIDEO" -vf "fps=12,scale=600:-1:flags=lanczos" -loop 0 demo.gif
+            ffmpeg -y -i "$VIDEO" -vf "fps=12,scale=800:-1:flags=lanczos" -loop 0 demo.gif
             echo "DEMO_GIF=demo.gif" >> $GITHUB_ENV
           fi
 
@@ -108,12 +110,20 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           GIF_URL="https://raw.githubusercontent.com/${{ github.repository }}/${BRANCH_NAME}/demo.gif"
+
+          # Read Claude's summary if it exists
+          if [ -f PR_SUMMARY.md ]; then
+            SUMMARY=$(cat PR_SUMMARY.md)
+          else
+            SUMMARY="This PR was automatically created by Claude Agent."
+          fi
+
           gh pr create \
             --title "Implement #${{ github.event.issue.number }}: ${{ github.event.issue.title }}" \
             --body "Closes #${{ github.event.issue.number }}
 
           ## Summary
-          This PR was automatically created by Claude Agent.
+          ${SUMMARY}
 
           ## Demo
           ![Demo](${GIF_URL})

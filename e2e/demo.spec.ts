@@ -9,7 +9,7 @@ test('demo: writing a note with bullets and theme toggle', async ({ page }) => {
   // Slow down for demo effect
   test.slow()
 
-  await page.setViewportSize({ width: 800, height: 600 })
+  await page.setViewportSize({ width: 600, height: 450 })
   await page.goto('/')
   await expect(page.locator('.cm-editor')).toBeVisible()
   await page.locator('.cm-content').click()
