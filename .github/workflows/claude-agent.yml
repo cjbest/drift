@@ -1,0 +1,125 @@
+name: Claude Agent
+
+on:
+  issues:
+    types: [labeled]
+
+jobs:
+  agent:
+    # Only run when the 'claude' label is added
+    if: github.event.label.name == 'claude'
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install chromium
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Create branch
+        run: |
+          BRANCH_NAME="claude/issue-${{ github.event.issue.number }}"
+          git checkout -b "$BRANCH_NAME"
+          echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
+
+      - name: Run Claude Agent
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          # Create a prompt file with the issue details
+          cat > /tmp/prompt.txt << 'PROMPT_EOF'
+          You are working on the Drift app codebase. A user has requested the following:
+
+          Issue #${{ github.event.issue.number }}: ${{ github.event.issue.title }}
+
+          ${{ github.event.issue.body }}
+
+          Instructions:
+          1. Implement the requested feature or fix
+          2. Run TypeScript check: npx tsc --noEmit
+          3. Run tests: npm test
+          4. If you created a new feature, add a test that demonstrates it
+          5. Create a demo GIF by running a Playwright test and converting to GIF
+          6. Keep changes minimal and focused
+
+          When done, summarize what you did.
+          PROMPT_EOF
+
+          # Run Claude Code in non-interactive mode
+          claude --print --dangerously-skip-permissions -p "$(cat /tmp/prompt.txt)"
+
+      - name: Generate demo GIF
+        if: success()
+        run: |
+          # Run the demo test to capture video
+          npx playwright test demo.spec.ts --workers=1 || true
+
+          # Find and convert video to GIF
+          VIDEO=$(find test-results -name "*.webm" | head -1)
+          if [ -n "$VIDEO" ]; then
+            ffmpeg -y -i "$VIDEO" -vf "fps=12,scale=600:-1:flags=lanczos" -loop 0 demo.gif
+            echo "DEMO_GIF=demo.gif" >> $GITHUB_ENV
+          fi
+
+      - name: Commit changes
+        run: |
+          git config user.name "Claude Agent"
+          git config user.email "claude@anthropic.com"
+          git add -A
+          git diff --staged --quiet || git commit -m "$(cat << 'EOF'
+          Implement #${{ github.event.issue.number }}: ${{ github.event.issue.title }}
+
+          Co-Authored-By: Claude <claude@anthropic.com>
+          EOF
+          )"
+
+      - name: Push branch
+        run: |
+          git push -u origin "$BRANCH_NAME"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: ${{ env.BRANCH_NAME }}
+          base: main
+          title: "Implement #${{ github.event.issue.number }}: ${{ github.event.issue.title }}"
+          body: |
+            Closes #${{ github.event.issue.number }}
+
+            ## Summary
+            This PR was automatically created by Claude Agent.
+
+            ## Demo
+            ![Demo](demo.gif)
+
+            ---
+            🤖 Generated with Claude Code
+          labels: |
+            automated
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: demo-artifacts
+          path: |
+            demo.gif
+            e2e/screenshots/
+            test-results/
