@@ -433,12 +433,5 @@ body.cmd-held .bare-url {
 }
 
 /* Hanging indent for wrapped lines in bullets and checklists */
-.cm-line.line-bullet-indent {
-  padding-left: 2ch;
-  text-indent: -2ch;
-}
-
-.cm-line.line-checkbox-indent {
-  padding-left: 6ch;
-  text-indent: -6ch;
-}
+/* Note: indent styles are now applied via inline styles in Editor.tsx
+   to work around a WebKit rendering bug with text-indent on wrapped lines */

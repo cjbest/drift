@@ -33,9 +33,8 @@ const blockquoteText = Decoration.mark({ class: 'blockquote-text' })
 const boldText = Decoration.mark({ class: 'bold-text' })
 const italicText = Decoration.mark({ class: 'italic-text' })
 
-// Line indent decorations for hanging indent on wrap
-const bulletIndent = Decoration.line({ class: 'line-bullet-indent' })
-const checkboxIndent = Decoration.line({ class: 'line-checkbox-indent' })
+// Line indent decorations are now created dynamically with pixel values
+// in indentHighlighter to work around WebKit text-indent rendering bugs
 
 const headingHighlighter = ViewPlugin.fromClass(class {
   decorations: DecorationSet
@@ -175,15 +174,41 @@ const emphasisHighlighter = ViewPlugin.fromClass(class {
   decorations: v => v.decorations
 })
 
+// Widget to create a negative-margin spacer that pulls the bullet back
+class BulletSpacerWidget extends WidgetType {
+  offset: number
+  constructor(offset: number) {
+    super()
+    this.offset = offset
+  }
+
+  toDOM() {
+    const span = document.createElement('span')
+    span.style.marginLeft = `-${this.offset}px`
+    span.style.display = 'inline-block'
+    span.style.width = '0'
+    return span
+  }
+
+  eq(other: BulletSpacerWidget) {
+    return this.offset === other.offset
+  }
+}
+
 const indentHighlighter = ViewPlugin.fromClass(class {
   decorations: DecorationSet
+  charWidth: number = 0
 
   constructor(view: EditorView) {
+    this.charWidth = view.defaultCharacterWidth
     this.decorations = this.buildDecorations(view)
   }
 
   update(update: ViewUpdate) {
-    if (update.docChanged || update.viewportChanged) {
+    const newCharWidth = update.view.defaultCharacterWidth
+    // Rebuild on doc change, viewport change, OR character width change
+    if (update.docChanged || update.viewportChanged || this.charWidth !== newCharWidth) {
+      this.charWidth = newCharWidth
       this.decorations = this.buildDecorations(update.view)
     }
   }
@@ -191,18 +216,53 @@ const indentHighlighter = ViewPlugin.fromClass(class {
   buildDecorations(view: EditorView): DecorationSet {
     const builder = new RangeSetBuilder<Decoration>()
     const doc = view.state.doc
+    const charWidth = view.defaultCharacterWidth
 
     for (let i = 1; i <= doc.lines; i++) {
       const line = doc.line(i)
       const text = line.text
 
       // Checkbox lines: - [ ] or - [x] (with optional leading whitespace)
-      if (text.match(/^\s*- \[[x ]\] /)) {
-        builder.add(line.from, line.from, checkboxIndent)
+      const checkboxMatch = text.match(/^(\s*)- \[[x ]\] /)
+      if (checkboxMatch) {
+        // 6 chars for "- [ ] " plus any leading whitespace
+        const leadingSpaces = checkboxMatch[1].length
+        const offset = (6 + leadingSpaces) * charWidth
+        // Add margin-left to the line
+        const lineDeco = Decoration.line({
+          attributes: {
+            style: `margin-left: ${offset}px;`
+          }
+        })
+        builder.add(line.from, line.from, lineDeco)
+        // Add widget at start of line to pull bullet back
+        const widget = Decoration.widget({
+          widget: new BulletSpacerWidget(offset),
+          side: -1
+        })
+        builder.add(line.from, line.from, widget)
+        continue
       }
+
       // Bullet lines: * or - (with optional leading whitespace)
-      else if (text.match(/^\s*[*-] /)) {
-        builder.add(line.from, line.from, bulletIndent)
+      const bulletMatch = text.match(/^(\s*)[*-] /)
+      if (bulletMatch) {
+        // 2 chars for "- " plus any leading whitespace
+        const leadingSpaces = bulletMatch[1].length
+        const offset = (2 + leadingSpaces) * charWidth
+        // Add margin-left to the line
+        const lineDeco = Decoration.line({
+          attributes: {
+            style: `margin-left: ${offset}px;`
+          }
+        })
+        builder.add(line.from, line.from, lineDeco)
+        // Add widget at start of line to pull bullet back
+        const widget = Decoration.widget({
+          widget: new BulletSpacerWidget(offset),
+          side: -1
+        })
+        builder.add(line.from, line.from, widget)
       }
     }
 
