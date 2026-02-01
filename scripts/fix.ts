@@ -72,30 +72,49 @@ Playwright will auto-start the dev server.
 - Update the test to save an "after" screenshot
 - The assertScreenshot() assertion should PASS confirming the fix
 
-### Phase 5: Report Results
+### Phase 5: Create Demo
+Create a compelling demo that shows off the fix:
+1. Write a demo test in e2e/demo-fix.spec.ts that:
+   - Uses test.slow() for pacing
+   - Shows the feature/fix in action with realistic usage
+   - Types with { delay: 40 } for human-like speed
+   - Uses waitForTimeout() between actions for visual clarity
+2. Run it: npx playwright test demo-fix --project=chromium
+3. Playwright will record a video automatically
+
+Example demo test:
+\`\`\`typescript
+test('demo: feature in action', async ({ page }) => {
+  test.slow()
+  await page.setViewportSize({ width: 800, height: 600 })
+  await page.goto('/')
+  // ... show the feature working with realistic interactions
+})
+\`\`\`
+
+### Phase 6: Report Results
 Output the PR content in this EXACT format:
 
 ---PR---
 title: <short PR title, under 70 chars>
 status: success|failure
+demo_video: <path to the .webm video file in test-results/>
+
+## Demo
+<leave this line exactly as-is, the video will be converted to GIF and inserted here>
 
 ## Summary
 <2-3 sentences explaining what was fixed and how>
 
-## Before
-![before](<relative path to before screenshot>)
-<caption explaining what's wrong>
-
-## After
-![after](<relative path to after screenshot>)
-<caption explaining the fix>
+## Before & After
+| Before | After |
+|--------|-------|
+| ![before](<path>) | ![after](<path>) |
+| <caption> | <caption> |
 
 ## Files Changed
 - <file1>: <what changed>
 - <file2>: <what changed>
-
-## Test
-<name of the e2e test file that verifies this fix>
 ---END---
 
 ## CRITICAL RULES
@@ -367,12 +386,30 @@ async function main() {
         const prBlock = prMatch[1]
         const titleMatch = prBlock.match(/title:\s*(.+)/)
         const statusMatch = prBlock.match(/status:\s*(success|failure)/)
+        const videoMatch = prBlock.match(/demo_video:\s*(.+)/)
         const title = titleMatch?.[1]?.trim() || 'Fix'
         const status = statusMatch?.[1] || 'unknown'
+        const videoPath = videoMatch?.[1]?.trim()
 
-        // Extract the markdown body (everything after the title/status lines)
-        const bodyMatch = prBlock.match(/status:.*\n([\s\S]*)/)
-        const body = bodyMatch?.[1]?.trim() || ''
+        // Extract the markdown body (everything after the header lines)
+        const bodyMatch = prBlock.match(/demo_video:.*\n([\s\S]*)/)
+        let body = bodyMatch?.[1]?.trim() || ''
+
+        // Convert video to GIF if we have one
+        let gifPath: string | undefined
+        if (videoPath && fs.existsSync(videoPath)) {
+          console.log('🎬 Converting video to GIF...')
+          gifPath = path.join(process.cwd(), 'demo.gif')
+          try {
+            execSync(`ffmpeg -y -i "${videoPath}" -vf "fps=12,scale=800:-1:flags=lanczos" -loop 0 "${gifPath}"`,
+              { stdio: 'pipe' })
+            console.log('✓ GIF created: demo.gif')
+            // Replace the demo placeholder with the actual GIF
+            body = body.replace(/## Demo\n.*$/m, `## Demo\n![Demo](file://${gifPath})`)
+          } catch (e) {
+            console.log('⚠️  ffmpeg not available, skipping GIF conversion')
+          }
+        }
 
         // Generate HTML preview
         await generatePreview(title, body, status)
