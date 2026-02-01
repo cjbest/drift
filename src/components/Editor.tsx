@@ -37,7 +37,7 @@ const italicText = Decoration.mark({ class: 'italic-text' })
 const rainbowDecorations = Array.from({ length: 360 }, (_, i) =>
   Decoration.mark({
     attributes: {
-      style: `color: hsl(${i}, 100%, 50%);`
+      style: `color: hsl(${i}, 100%, 60%);`
     }
   })
 )
