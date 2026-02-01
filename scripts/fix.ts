@@ -104,6 +104,27 @@ status: success|failure
 3. Even for "non-visual" changes, find a way to show proof (console output, dev tools, etc)
 4. If you truly cannot capture evidence, report status: failure with explanation
 5. Use e2e/helpers/screenshots.ts assertScreenshot() for all visual assertions
+
+## IMPORTANT: Visual Assertion Integrity
+The assertScreenshot() system is critical infrastructure we are actively developing.
+If you encounter a case where:
+- The assertion returns a result that seems CLEARLY WRONG (e.g., says "not blue" when text is obviously blue)
+- You are tempted to bypass or work around the assertion
+
+DO NOT work around it. Instead:
+1. STOP the workflow immediately
+2. Report status: failure
+3. Include a detailed "assertion_bug" section in your output:
+
+---ASSERTION_BUG---
+screenshot_path: <path to the screenshot that was checked>
+assertion: <the exact assertion text you used>
+result: <what assertScreenshot returned>
+expected: <what you believe the correct result should be>
+explanation: <why you believe the assertion is wrong>
+---END_BUG---
+
+This helps us fix the visual assertion system. Never silently work around it.
 `
 
 interface StreamMessage {
@@ -365,6 +386,19 @@ async function main() {
           process.exit(1)
         }
       } else {
+        // Check if there's an assertion bug report
+        const bugMatch = fullOutput.match(/---ASSERTION_BUG---([\s\S]*?)---END_BUG---/)
+        if (bugMatch) {
+          console.log('🐛 ASSERTION SYSTEM BUG DETECTED')
+          console.log('─'.repeat(40))
+          console.log(bugMatch[1].trim())
+          console.log('─'.repeat(40))
+          console.log('')
+          console.log('The visual assertion system returned an incorrect result.')
+          console.log('Please investigate and fix the assertion logic.')
+          process.exit(2)  // Special exit code for assertion bugs
+        }
+
         console.log('⚠️  Workflow did not complete (no PR block found)')
         console.log('')
         console.log('This usually means Claude ran out of turns. Check:')
