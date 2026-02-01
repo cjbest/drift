@@ -20,6 +20,14 @@ Replaced the monospace SF Mono font with an elegant serif font stack (Charter, G
 - `src/components/Editor.css`: Enhanced first-line title with SF Pro Display at 1.75em and bold weight, added size/spacing differentiation for heading levels (H1/H2/H3), improved bold/italic letter-spacing, refined blockquote opacity
 - `src/index.css`: Updated body font to SF Pro Text for UI consistency
 
-## Tests
-- `e2e/issues/10/verify.spec.ts` - Verification test with before/after screenshots in light and dark modes
-- `e2e/issues/10/demo.spec.ts` - Demo recording showing typography elegance and theme switching
+## Adjustment Made
+Re-recorded the demo with significantly more content to better showcase the typography improvements:
+- Added more body text to demonstrate reading comfort with the serif fonts
+- Expanded heading hierarchy with descriptive text under each heading level (H1, H2, H3)
+- Included task list items with checkboxes to show vertical rhythm and alignment
+- Added longer blockquote to showcase italic elegance
+- Included multiple paragraphs demonstrating the refined letter-spacing and line-height
+- Extended scrolling sequences to show the full document in both light and dark modes
+- Increased pacing to give viewers more time to appreciate the typography details
+
+The new demo provides a much more comprehensive view of the typographic improvements, showcasing headings, body text, emphasis, lists, blockquotes, and theme switching all in a single cohesive recording.
