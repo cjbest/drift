@@ -1,0 +1,139 @@
+name: Claude PR Adjust
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  adjust:
+    # Only run on PR comments (not issue comments) that mention @claude
+    if: |
+      github.event.issue.pull_request &&
+      contains(github.event.comment.body, '@claude')
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Get PR details
+        id: pr
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER=${{ github.event.issue.number }}
+          echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
+
+          # Get the PR branch
+          BRANCH=$(gh pr view $PR_NUMBER --json headRefName -q .headRefName)
+          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
+
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.pr.outputs.branch }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install chromium
+
+      - name: Install ffmpeg
+        run: brew install ffmpeg
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Extract adjustment request
+        id: request
+        run: |
+          # Get the comment body, remove the @claude mention
+          COMMENT='${{ github.event.comment.body }}'
+          ADJUSTMENT=$(echo "$COMMENT" | sed 's/@claude//g' | xargs)
+          echo "adjustment=$ADJUSTMENT" >> $GITHUB_OUTPUT
+
+      - name: Run adjust script
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CI: true
+        run: |
+          npm run fix -- --pr ${{ steps.pr.outputs.pr_number }} "${{ steps.request.outputs.adjustment }}"
+
+      - name: Commit changes
+        run: |
+          git config user.name "Claude Agent"
+          git config user.email "claude@anthropic.com"
+          git add -A
+          git diff --staged --quiet || git commit -m "$(cat << 'EOF'
+          Adjust based on feedback
+
+          ${{ github.event.comment.body }}
+
+          Co-Authored-By: Claude <claude@anthropic.com>
+          EOF
+          )"
+
+      - name: Push changes
+        run: git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update PR body
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER=${{ steps.pr.outputs.pr_number }}
+
+          # Find issue ID from existing PR body
+          ISSUE_ID=$(gh pr view $PR_NUMBER --json body -q .body | grep -oE 'Closes #[0-9]+' | grep -oE '[0-9]+' | head -1)
+          if [ -z "$ISSUE_ID" ]; then
+            ISSUE_ID=$PR_NUMBER
+          fi
+
+          ISSUE_DIR="e2e/issues/${ISSUE_ID}"
+          COMMIT_SHA=$(git rev-parse HEAD)
+          RAW_BASE="https://raw.githubusercontent.com/${{ github.repository }}/${{ steps.pr.outputs.branch }}"
+          GIF_URL="${RAW_BASE}/${ISSUE_DIR}/demo.gif?${COMMIT_SHA}"
+
+          # Read updated PR body
+          if [ -f "${ISSUE_DIR}/pr-body.md" ]; then
+            PR_BODY=$(cat "${ISSUE_DIR}/pr-body.md" | sed -E "s|\]\(e2e/|\](${RAW_BASE}/e2e/|g")
+          else
+            PR_BODY="Adjusted based on feedback."
+          fi
+
+          # Update the PR
+          gh pr edit $PR_NUMBER --body "Closes #${ISSUE_ID}
+
+          ## Demo
+          ![Demo](${GIF_URL})
+
+          ${PR_BODY}
+
+          ---
+          🤖 Generated with [Claude Code](https://claude.ai/code)"
+
+      - name: React to comment
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api repos/${{ github.repository }}/issues/comments/${{ github.event.comment.id }}/reactions -f content='+1'
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: adjust-artifacts
+          path: |
+            e2e/issues/*/
+            test-results/

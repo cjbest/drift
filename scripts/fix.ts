@@ -6,8 +6,9 @@
  * Can be run locally or in CI.
  *
  * Usage:
- *   npx tsx scripts/fix.ts "the bug description"
- *   npm run fix -- "the bug description"
+ *   npm run fix -- --issue 123 "description"     # New fix from issue
+ *   npm run fix -- --pr 8 "adjustment request"   # Adjust existing PR
+ *   npm run fix -- "description"                 # Local adhoc testing
  */
 
 import { spawn, execSync } from 'child_process'
@@ -153,6 +154,64 @@ explanation: <why you believe the assertion is wrong>
 ---END_BUG---
 
 This helps us fix the visual assertion system. Never silently work around it.
+`
+
+const ADJUST_PROMPT = `You are adjusting an existing fix for Drift, a minimalist note-taking app.
+
+## Original Issue
+{ORIGINAL_ISSUE}
+
+## What Was Implemented
+{PR_SUMMARY}
+
+## Conversation
+{COMMENTS}
+
+## Adjustment Request
+{ADJUSTMENT}
+
+## Current State
+- Issue directory: e2e/issues/{ISSUE_ID}/
+- Existing tests: verify.spec.ts, demo.spec.ts
+- Screenshots in: e2e/issues/{ISSUE_ID}/screenshots/
+
+## Workflow
+
+1. **Understand the adjustment** - What needs to change?
+2. **Update the implementation** - Modify the code as requested
+3. **Run type check** - \`npx tsc --noEmit\`
+4. **Update verification test** - Modify e2e/issues/{ISSUE_ID}/verify.spec.ts if needed
+5. **Capture new "after" screenshot** - Run the test to get updated screenshot
+6. **Update demo** - Re-record e2e/issues/{ISSUE_ID}/demo.spec.ts if the change is visible
+7. **Report results** - Output the updated PR content
+
+### Report Format
+Output in this EXACT format:
+
+---PR---
+title: <same or updated title>
+status: success|failure
+issue_id: {ISSUE_ID}
+demo_video: <path to .webm if re-recorded>
+
+## Demo
+<leave this line for GIF>
+
+## Summary
+<updated summary reflecting the adjustment>
+
+## Before & After
+| Before | After |
+|--------|-------|
+| ![before](e2e/issues/{ISSUE_ID}/screenshots/before.png) | ![after](e2e/issues/{ISSUE_ID}/screenshots/after.png) |
+| <caption> | <caption> |
+
+## Files Changed
+- <file1>: <what changed>
+
+## Adjustment Made
+<describe what was adjusted based on feedback>
+---END---
 `
 
 interface StreamMessage {
@@ -310,15 +369,34 @@ function formatToolUse(name: string, input: unknown): string {
   return `🔧 ${name}: ${truncated}`
 }
 
-function getIssueId(): { id: string, description: string } {
+interface RunConfig {
+  mode: 'issue' | 'pr' | 'adhoc'
+  id: string
+  description: string
+  prContext?: {
+    originalIssue: string
+    prSummary: string
+    comments: string
+  }
+}
+
+function parseArgs(): RunConfig {
   const args = process.argv.slice(2)
 
-  // Check for --issue flag
+  // Check for --pr flag (adjust mode)
+  const prIdx = args.indexOf('--pr')
+  if (prIdx !== -1 && args[prIdx + 1]) {
+    const id = args[prIdx + 1]
+    const description = args.filter((_, i) => i !== prIdx && i !== prIdx + 1).join(' ')
+    return { mode: 'pr', id, description }
+  }
+
+  // Check for --issue flag (new fix mode)
   const issueIdx = args.indexOf('--issue')
   if (issueIdx !== -1 && args[issueIdx + 1]) {
     const id = args[issueIdx + 1]
     const description = args.filter((_, i) => i !== issueIdx && i !== issueIdx + 1).join(' ')
-    return { id, description }
+    return { mode: 'issue', id, description }
   }
 
   // Generate adhoc ID for local testing
@@ -326,25 +404,92 @@ function getIssueId(): { id: string, description: string } {
   const timestamp = Math.floor(Date.now() / 1000)
   const id = `adhoc-${user}-${timestamp}`
   const description = args.join(' ')
-  return { id, description }
+  return { mode: 'adhoc', id, description }
+}
+
+function fetchPRContext(prNumber: string): { issueId: string, originalIssue: string, prSummary: string, comments: string } {
+  try {
+    // Get PR body
+    const prBody = execSync(`gh pr view ${prNumber} --json body -q .body`, { encoding: 'utf-8' }).trim()
+
+    // Extract issue number from "Closes #N"
+    const issueMatch = prBody.match(/Closes #(\d+)/i)
+    const issueId = issueMatch?.[1] || prNumber
+
+    // Get original issue
+    let originalIssue = ''
+    if (issueMatch) {
+      try {
+        const issueTitle = execSync(`gh issue view ${issueId} --json title -q .title`, { encoding: 'utf-8' }).trim()
+        const issueBody = execSync(`gh issue view ${issueId} --json body -q .body`, { encoding: 'utf-8' }).trim()
+        originalIssue = `#${issueId}: ${issueTitle}\n\n${issueBody}`
+      } catch {
+        originalIssue = `Issue #${issueId} (could not fetch details)`
+      }
+    }
+
+    // Get PR comments
+    const commentsJson = execSync(`gh pr view ${prNumber} --json comments -q '.comments[] | "\\(.author.login): \\(.body)"'`, { encoding: 'utf-8' }).trim()
+    const comments = commentsJson || '(no comments yet)'
+
+    // Extract summary from PR body (between ## Summary and next ##)
+    const summaryMatch = prBody.match(/## Summary\n([\s\S]*?)(?=\n##|$)/)
+    const prSummary = summaryMatch?.[1]?.trim() || prBody.slice(0, 500)
+
+    return { issueId, originalIssue, prSummary, comments }
+  } catch (e) {
+    console.error('Failed to fetch PR context:', e)
+    return { issueId: prNumber, originalIssue: '', prSummary: '', comments: '' }
+  }
 }
 
 async function main() {
-  const { id: issueId, description } = getIssueId()
+  const config = parseArgs()
 
-  if (!description) {
-    console.error('Usage: npx tsx scripts/fix.ts [--issue <number>] "issue description"')
+  if (!config.description) {
+    console.error('Usage:')
+    console.error('  npm run fix -- --issue <number> "description"   # New fix')
+    console.error('  npm run fix -- --pr <number> "adjustment"       # Adjust PR')
+    console.error('  npm run fix -- "description"                    # Local test')
     process.exit(1)
   }
 
-  console.log('🔧 Starting verified fix workflow...')
-  console.log(`📋 Issue: ${issueId}`)
-  console.log(`📝 ${description}`)
-  console.log('─'.repeat(60))
+  let prompt: string
+  let issueId: string
 
-  const prompt = WORKFLOW_PROMPT
-    .replace('{ISSUE}', description)
-    .replace(/{ISSUE_ID}/g, issueId)
+  if (config.mode === 'pr') {
+    // Adjust mode - fetch context from existing PR
+    console.log('🔄 Starting PR adjustment workflow...')
+    console.log(`📋 PR: #${config.id}`)
+    console.log(`📝 ${config.description}`)
+    console.log('─'.repeat(60))
+    console.log('Fetching PR context...')
+
+    const ctx = fetchPRContext(config.id)
+    issueId = ctx.issueId
+
+    console.log(`  Original issue: #${issueId}`)
+    console.log(`  Comments: ${ctx.comments.split('\n').length} messages`)
+    console.log('─'.repeat(60))
+
+    prompt = ADJUST_PROMPT
+      .replace('{ORIGINAL_ISSUE}', ctx.originalIssue)
+      .replace('{PR_SUMMARY}', ctx.prSummary)
+      .replace('{COMMENTS}', ctx.comments)
+      .replace('{ADJUSTMENT}', config.description)
+      .replace(/{ISSUE_ID}/g, issueId)
+  } else {
+    // New fix mode
+    issueId = config.id
+    console.log('🔧 Starting verified fix workflow...')
+    console.log(`📋 Issue: ${issueId}`)
+    console.log(`📝 ${config.description}`)
+    console.log('─'.repeat(60))
+
+    prompt = WORKFLOW_PROMPT
+      .replace('{ISSUE}', config.description)
+      .replace(/{ISSUE_ID}/g, issueId)
+  }
 
   // Run Claude CLI with streaming JSON output
   const claude = spawn('claude', [
