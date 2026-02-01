@@ -10,8 +10,10 @@
  *   npm run fix -- "the bug description"
  */
 
-import { spawn } from 'child_process'
+import { spawn, execSync } from 'child_process'
 import * as readline from 'readline'
+import * as fs from 'fs'
+import * as path from 'path'
 
 const WORKFLOW_PROMPT = `You are fixing a bug or implementing a feature in Drift, a minimalist note-taking app.
 
@@ -71,16 +73,29 @@ Playwright will auto-start the dev server.
 - The assertScreenshot() assertion should PASS confirming the fix
 
 ### Phase 5: Report Results
-Output a final summary in this EXACT format (no variations):
+Output the PR content in this EXACT format:
 
----RESULT---
+---PR---
+title: <short PR title, under 70 chars>
 status: success|failure
-before_screenshot: <actual file path, NOT "N/A">
-after_screenshot: <actual file path, NOT "N/A">
-files_changed:
-  - <file1>
-  - <file2>
-summary: <one line description>
+
+## Summary
+<2-3 sentences explaining what was fixed and how>
+
+## Before
+![before](<relative path to before screenshot>)
+<caption explaining what's wrong>
+
+## After
+![after](<relative path to after screenshot>)
+<caption explaining the fix>
+
+## Files Changed
+- <file1>: <what changed>
+- <file2>: <what changed>
+
+## Test
+<name of the e2e test file that verifies this fix>
 ---END---
 
 ## CRITICAL RULES
@@ -109,6 +124,134 @@ interface StreamMessage {
   result?: {
     output?: string
   }
+}
+
+async function generatePreview(title: string, body: string, status: string): Promise<void> {
+  // Convert relative image paths to absolute file:// URLs
+  const bodyWithAbsolutePaths = body.replace(
+    /!\[([^\]]*)\]\(([^)]+)\)/g,
+    (match, alt, src) => {
+      if (src.startsWith('http') || src.startsWith('file://')) return match
+      const absPath = path.resolve(process.cwd(), src)
+      return `![${alt}](file://${absPath})`
+    }
+  )
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>PR Preview: ${title}</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      max-width: 900px;
+      margin: 40px auto;
+      padding: 20px;
+      background: #f6f8fa;
+    }
+    .pr-container {
+      background: white;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .pr-header {
+      padding: 16px;
+      border-bottom: 1px solid #d0d7de;
+      background: ${status === 'success' ? '#dafbe1' : '#ffebe9'};
+    }
+    .pr-title {
+      font-size: 20px;
+      font-weight: 600;
+      margin: 0;
+    }
+    .pr-status {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      margin-top: 8px;
+      background: ${status === 'success' ? '#1a7f37' : '#cf222e'};
+      color: white;
+    }
+    .pr-body {
+      padding: 16px;
+    }
+    .pr-body h2 {
+      font-size: 16px;
+      border-bottom: 1px solid #d0d7de;
+      padding-bottom: 8px;
+      margin-top: 24px;
+    }
+    .pr-body h2:first-child {
+      margin-top: 0;
+    }
+    .pr-body img {
+      max-width: 100%;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+      margin: 8px 0;
+    }
+    .pr-body ul, .pr-body ol {
+      padding-left: 24px;
+    }
+    .pr-body code {
+      background: #f6f8fa;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 85%;
+    }
+    .pr-body pre {
+      background: #f6f8fa;
+      padding: 16px;
+      border-radius: 6px;
+      overflow-x: auto;
+    }
+  </style>
+</head>
+<body>
+  <div class="pr-container">
+    <div class="pr-header">
+      <h1 class="pr-title">${title}</h1>
+      <span class="pr-status">${status === 'success' ? '✓ Ready to merge' : '✗ Needs work'}</span>
+    </div>
+    <div class="pr-body">
+      ${markdownToHtml(bodyWithAbsolutePaths)}
+    </div>
+  </div>
+</body>
+</html>`
+
+  const previewPath = path.join(process.cwd(), 'pr-preview.html')
+  fs.writeFileSync(previewPath, html)
+  execSync(`open "${previewPath}"`)
+}
+
+function markdownToHtml(md: string): string {
+  return md
+    // Headers
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    // Images
+    .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img alt="$1" src="$2">')
+    // Bold
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    // Italic
+    .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+    // Code blocks
+    .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
+    // Inline code
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    // Unordered lists
+    .replace(/^- (.+)$/gm, '<li>$1</li>')
+    .replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
+    // Paragraphs (lines not already wrapped)
+    .replace(/^(?!<[hluop]|$)(.+)$/gm, '<p>$1</p>')
+    // Clean up
+    .replace(/<\/ul>\n<ul>/g, '')
 }
 
 function formatToolUse(name: string, input: unknown): string {
@@ -194,25 +337,35 @@ async function main() {
   })
 
   return new Promise<void>((resolve) => {
-    claude.on('close', (code) => {
+    claude.on('close', async (code) => {
       console.log('\n' + '─'.repeat(60))
 
-      // Parse the result
-      const resultMatch = fullOutput.match(/---RESULT---([\s\S]*?)---END---/)
-      if (resultMatch) {
-        const resultBlock = resultMatch[1]
-        const statusMatch = resultBlock.match(/status:\s*(success|failure)/)
+      // Parse the PR content
+      const prMatch = fullOutput.match(/---PR---([\s\S]*?)---END---/)
+      if (prMatch) {
+        const prBlock = prMatch[1]
+        const titleMatch = prBlock.match(/title:\s*(.+)/)
+        const statusMatch = prBlock.match(/status:\s*(success|failure)/)
+        const title = titleMatch?.[1]?.trim() || 'Fix'
         const status = statusMatch?.[1] || 'unknown'
+
+        // Extract the markdown body (everything after the title/status lines)
+        const bodyMatch = prBlock.match(/status:.*\n([\s\S]*)/)
+        const body = bodyMatch?.[1]?.trim() || ''
+
+        // Generate HTML preview
+        await generatePreview(title, body, status)
 
         if (status === 'success') {
           console.log('✅ Fix verified successfully!')
+          console.log('📄 PR preview opened in browser')
           process.exit(0)
         } else {
           console.log('❌ Fix verification failed')
           process.exit(1)
         }
       } else {
-        console.log('⚠️  Workflow did not complete (no result block found)')
+        console.log('⚠️  Workflow did not complete (no PR block found)')
         console.log('')
         console.log('This usually means Claude ran out of turns. Check:')
         console.log('  - e2e/screenshots/*/  for any captured screenshots')
