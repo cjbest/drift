@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { getTauriMockScript } from './tauri-mocks'
+import { assertScreenshot } from './helpers/screenshots'
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(getTauriMockScript())
@@ -29,4 +30,14 @@ test('bullet indent is consistent on wrapped lines', async ({ page }) => {
   // Verify the line has margin-left style applied (our fix uses margin-left)
   const style = await bulletLine.getAttribute('style')
   expect(style).toContain('margin-left')
+
+  // Visual assertion with LLM - this is the important one, so we save it
+  const result = await assertScreenshot(
+    page,
+    'All wrapped continuation lines of the bullet point are indented to align with the text after the dash, not starting at the left margin',
+    { save: { testFile: import.meta.url, name: 'wrapped-bullet-indent-correct' } }
+  )
+
+  expect(result.passed).toBe(true)
+  console.log(`Visual assertion: ${result.explanation} (confidence: ${result.confidence})`)
 })
