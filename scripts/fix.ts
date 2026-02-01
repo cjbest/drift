@@ -28,8 +28,8 @@ Follow these phases strictly. DO NOT SKIP ANY PHASE. Output your progress as you
 - Create a verification plan: what will you screenshot to prove it's broken? What will prove it's fixed?
 
 ### Phase 2: Capture "Before" State (REQUIRED)
-- Start the dev server: npm run dev (run in background)
 - Write a Playwright test in e2e/ that captures the current state
+- DO NOT manually start the dev server - Playwright handles this automatically via webServer config
 - The test MUST take a screenshot showing the problem or current state
 - Use assertScreenshot() with save option to persist the screenshot
 - Run the test to capture the "before" evidence
@@ -40,20 +40,24 @@ import { test, expect } from '@playwright/test'
 import { getTauriMockScript } from './tauri-mocks'
 import { assertScreenshot } from './helpers/screenshots'
 
-test('verify issue', async ({ page }) => {
+test.beforeEach(async ({ page }) => {
   await page.addInitScript(getTauriMockScript())
+})
+
+test('verify issue', async ({ page }) => {
   await page.goto('/')
   await expect(page.locator('.cm-editor')).toBeVisible()
 
-  // Setup the state that shows the bug/missing feature
-  // ...
-
-  // Capture and assert
-  const result = await assertScreenshot(page, 'description of expected state', {
+  // Setup state and capture screenshot
+  const result = await assertScreenshot(page, 'description of what to verify', {
     save: { testFile: import.meta.url, name: 'before' }
   })
+  console.log('Assertion:', result)
 })
 \`\`\`
+
+Run tests with: npx playwright test <test-name> --project=chromium
+Playwright will auto-start the dev server.
 
 ### Phase 3: Implement Fix
 - Make the necessary code changes
