@@ -27,8 +27,8 @@ jobs:
           PR_NUMBER=${{ github.event.issue.number }}
           echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
 
-          # Get the PR branch
-          BRANCH=$(gh pr view $PR_NUMBER --json headRefName -q .headRefName)
+          # Get the PR branch (specify repo since we haven't checked out yet)
+          BRANCH=$(gh pr view $PR_NUMBER --repo ${{ github.repository }} --json headRefName -q .headRefName)
           echo "branch=$BRANCH" >> $GITHUB_OUTPUT
 
       - name: Checkout PR branch
