@@ -89,7 +89,8 @@ Example demo test:
 \`\`\`typescript
 test('demo: feature in action', async ({ page }) => {
   test.slow()
-  await page.setViewportSize({ width: 800, height: 600 })
+  // Use a compact viewport - no sidebar, just the editor
+  await page.setViewportSize({ width: 600, height: 450 })
   await page.goto('/')
   // ... show the feature working with realistic interactions
 })
