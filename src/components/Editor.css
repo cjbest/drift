@@ -13,9 +13,25 @@
   }
 }
 
-/* Heading text - just bold */
+/* Heading text - bold with refined spacing */
 .heading {
-  font-weight: 600;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+
+.heading-1 {
+  font-size: 1.4em;
+  line-height: 1.4;
+}
+
+.heading-2 {
+  font-size: 1.2em;
+  line-height: 1.45;
+}
+
+.heading-3 {
+  font-size: 1.05em;
+  line-height: 1.5;
 }
 
 /* Blockquote styling */
@@ -35,15 +51,18 @@
 
 .blockquote-text {
   font-style: italic;
+  opacity: 0.85;
 }
 
 /* Emphasis styling */
 .bold-text {
-  font-weight: 600;
+  font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
 .italic-text {
   font-style: italic;
+  letter-spacing: 0.005em;
 }
 
 /* Link styling */
@@ -141,10 +160,11 @@ body.cmd-held .bare-url {
 
 /* First line as title */
 .first-line-title {
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
-  font-weight: 600;
-  font-size: 1.618em;
-  line-height: 1.4;
+  font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Segoe UI", system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 1.75em;
+  line-height: 1.3;
+  letter-spacing: -0.022em;
 }
 
 .editor-container {
@@ -246,8 +266,9 @@ body.cmd-held .bare-url {
   border: 1px solid rgba(0, 0, 0, 0.12);
   border-radius: 8px;
   padding: 6px 8px;
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  font-family: "SF Pro Text", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   font-size: 13px;
+  font-weight: 400;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -285,8 +306,9 @@ body.cmd-held .bare-url {
 }
 
 .cm-panel.cm-search input[main-field] {
-  font-family: "SF Mono", Menlo, Monaco, monospace;
+  font-family: "SF Mono", "JetBrains Mono", Menlo, "Cascadia Code", Consolas, monospace;
   font-size: 13px;
+  font-weight: 400;
   border-radius: 6px;
   border: 1px solid rgba(0, 0, 0, 0.1);
   background: rgba(0, 0, 0, 0.03);
