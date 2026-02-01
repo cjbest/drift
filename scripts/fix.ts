@@ -15,6 +15,10 @@ import { spawn, execSync } from 'child_process'
 import * as readline from 'readline'
 import * as fs from 'fs'
 import * as path from 'path'
+// @ts-ignore - no types for this package
+import ffmpegInstaller from '@ffmpeg-installer/ffmpeg'
+
+const FFMPEG_PATH = ffmpegInstaller.path
 
 const WORKFLOW_PROMPT = `You are fixing a bug or implementing a feature in Drift, a minimalist note-taking app.
 
@@ -583,7 +587,7 @@ async function main() {
           fs.mkdirSync(issueDir, { recursive: true })
           gifPath = path.join(issueDir, 'demo.gif')
           try {
-            execSync(`ffmpeg -y -i "${videoPath}" -vf "fps=12,scale=800:-1:flags=lanczos" -loop 0 "${gifPath}"`,
+            execSync(`"${FFMPEG_PATH}" -y -i "${videoPath}" -vf "fps=12,scale=800:-1:flags=lanczos" -loop 0 "${gifPath}"`,
               { stdio: 'pipe' })
             console.log(`✓ GIF created: e2e/issues/${prIssueId}/demo.gif`)
             // Replace the demo placeholder with the actual GIF
