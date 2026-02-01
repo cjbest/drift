@@ -1142,7 +1142,7 @@ export function Editor(props: EditorProps) {
           },
         }),
         cursorTitleTracker,
-        drawSelection({ cursorBlinkRate: 0 }),
+        drawSelection({ cursorBlinkRate: 1200 }),
       ],
     })
 

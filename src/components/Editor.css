@@ -183,7 +183,6 @@ body.cmd-held .bare-url {
   border-left: 2px solid #000000 !important;
   height: 1.61em !important;
   transform: translate(-1px, -0.25em);
-  animation: none !important;
 }
 
 /* Title line (larger font): taller cursor */
