@@ -93,8 +93,10 @@ Create a compelling demo that shows off the fix:
    - Shows the feature/fix in action with realistic usage
    - Types with { delay: 40 } for human-like speed
    - Uses waitForTimeout() between actions for visual clarity
-2. Run it: npx playwright test demo-fix --project=chromium
-3. Playwright will record a video automatically
+2. Run it: npx playwright test e2e/issues/{ISSUE_ID}/demo --project=chromium
+3. Playwright will record a video automatically to test-results/
+
+IMPORTANT: Do NOT convert the video to GIF yourself. The fix script handles this automatically after you output the PR block. Just provide the path to the .webm video file.
 
 Example demo test:
 \`\`\`typescript
@@ -195,6 +197,8 @@ const ADJUST_PROMPT = `You are adjusting an existing fix for Drift, a minimalist
 5. **Capture new "after" screenshot** - Run the test, this updates after.png only
 6. **Update demo** - Re-record e2e/issues/{ISSUE_ID}/demo.spec.ts if the change is visible
 7. **Report results** - Output the updated PR content
+
+IMPORTANT: Do NOT convert the video to GIF yourself. The fix script handles GIF conversion automatically after you output the PR block. Just provide the path to the .webm video file in test-results/.
 
 CRITICAL: The "before" screenshot must ALWAYS show the original state before ANY fix was applied.
 Never overwrite before.png during adjustments - only update after.png.
