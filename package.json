@@ -13,6 +13,7 @@
     "test:headed": "playwright test --headed"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.72.1",
     "@codemirror/commands": "^6.10.1",
     "@codemirror/lang-markdown": "^6.5.0",
     "@codemirror/language": "^6.12.1",
@@ -24,6 +25,7 @@
     "@tauri-apps/cli": "^2.9.6",
     "@tauri-apps/plugin-fs": "^2.4.5",
     "@tauri-apps/plugin-shell": "^2.3.4",
+    "dotenv": "^17.2.3",
     "solid-js": "^1.9.10"
   },
   "devDependencies": {
