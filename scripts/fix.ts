@@ -178,16 +178,20 @@ const ADJUST_PROMPT = `You are adjusting an existing fix for Drift, a minimalist
 - Issue directory: e2e/issues/{ISSUE_ID}/
 - Existing tests: verify.spec.ts, demo.spec.ts
 - Screenshots in: e2e/issues/{ISSUE_ID}/screenshots/
+- IMPORTANT: before.png shows the ORIGINAL state before any fix - DO NOT overwrite it!
 
 ## Workflow
 
 1. **Understand the adjustment** - What needs to change?
 2. **Update the implementation** - Modify the code as requested
 3. **Run type check** - \`npx tsc --noEmit\`
-4. **Update verification test** - Modify e2e/issues/{ISSUE_ID}/verify.spec.ts if needed
-5. **Capture new "after" screenshot** - Run the test to get updated screenshot
+4. **Update verification test** - Modify to only capture "after" screenshot (keep original "before")
+5. **Capture new "after" screenshot** - Run the test, this updates after.png only
 6. **Update demo** - Re-record e2e/issues/{ISSUE_ID}/demo.spec.ts if the change is visible
 7. **Report results** - Output the updated PR content
+
+CRITICAL: The "before" screenshot must ALWAYS show the original state before ANY fix was applied.
+Never overwrite before.png during adjustments - only update after.png.
 
 ### Report Format
 Output in this EXACT format:
