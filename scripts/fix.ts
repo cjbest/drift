@@ -30,17 +30,21 @@ Follow these phases strictly. DO NOT SKIP ANY PHASE. Output your progress as you
 - Create a verification plan: what will you screenshot to prove it's broken? What will prove it's fixed?
 
 ### Phase 2: Capture "Before" State (REQUIRED)
-- Write a Playwright test in e2e/ that captures the current state
-- DO NOT manually start the dev server - Playwright handles this automatically via webServer config
+All test files and screenshots go in: e2e/issues/{ISSUE_ID}/
+
+- Create directory: e2e/issues/{ISSUE_ID}/
+- Write test: e2e/issues/{ISSUE_ID}/verify.spec.ts
+- Screenshots save to: e2e/issues/{ISSUE_ID}/screenshots/
+- DO NOT manually start the dev server - Playwright handles this automatically
 - The test MUST take a screenshot showing the problem or current state
 - Use assertScreenshot() with save option to persist the screenshot
 - Run the test to capture the "before" evidence
 
-Example test structure:
+Example test structure (e2e/issues/{ISSUE_ID}/verify.spec.ts):
 \`\`\`typescript
 import { test, expect } from '@playwright/test'
-import { getTauriMockScript } from './tauri-mocks'
-import { assertScreenshot } from './helpers/screenshots'
+import { getTauriMockScript } from '../../tauri-mocks'
+import { assertScreenshot } from '../../helpers/screenshots'
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(getTauriMockScript())
@@ -58,8 +62,7 @@ test('verify issue', async ({ page }) => {
 })
 \`\`\`
 
-Run tests with: npx playwright test <test-name> --project=chromium
-Playwright will auto-start the dev server.
+Run tests with: npx playwright test e2e/issues/{ISSUE_ID}/ --project=chromium
 
 ### Phase 3: Implement Fix
 - Make the necessary code changes
@@ -74,7 +77,7 @@ Playwright will auto-start the dev server.
 
 ### Phase 5: Create Demo
 Create a compelling demo that shows off the fix:
-1. Write a demo test in e2e/demo-fix.spec.ts that:
+1. Write a demo test in e2e/issues/{ISSUE_ID}/demo.spec.ts that:
    - Uses test.slow() for pacing
    - Shows the feature/fix in action with realistic usage
    - Types with { delay: 40 } for human-like speed
@@ -98,6 +101,7 @@ Output the PR content in this EXACT format:
 ---PR---
 title: <short PR title, under 70 chars>
 status: success|failure
+issue_id: {ISSUE_ID}
 demo_video: <path to the .webm video file in test-results/>
 
 ## Demo
@@ -109,12 +113,16 @@ demo_video: <path to the .webm video file in test-results/>
 ## Before & After
 | Before | After |
 |--------|-------|
-| ![before](<path>) | ![after](<path>) |
+| ![before](e2e/issues/{ISSUE_ID}/screenshots/before.png) | ![after](e2e/issues/{ISSUE_ID}/screenshots/after.png) |
 | <caption> | <caption> |
 
 ## Files Changed
 - <file1>: <what changed>
 - <file2>: <what changed>
+
+## Tests
+- \`e2e/issues/{ISSUE_ID}/verify.spec.ts\` - Verification test with before/after assertions
+- \`e2e/issues/{ISSUE_ID}/demo.spec.ts\` - Demo recording
 ---END---
 
 ## CRITICAL RULES
@@ -301,19 +309,41 @@ function formatToolUse(name: string, input: unknown): string {
   return `🔧 ${name}: ${truncated}`
 }
 
-async function main() {
-  const issue = process.argv.slice(2).join(' ')
+function getIssueId(): { id: string, description: string } {
+  const args = process.argv.slice(2)
 
-  if (!issue) {
-    console.error('Usage: npx tsx scripts/fix.ts "issue description"')
+  // Check for --issue flag
+  const issueIdx = args.indexOf('--issue')
+  if (issueIdx !== -1 && args[issueIdx + 1]) {
+    const id = args[issueIdx + 1]
+    const description = args.filter((_, i) => i !== issueIdx && i !== issueIdx + 1).join(' ')
+    return { id, description }
+  }
+
+  // Generate adhoc ID for local testing
+  const user = process.env.USER || 'unknown'
+  const timestamp = Math.floor(Date.now() / 1000)
+  const id = `adhoc-${user}-${timestamp}`
+  const description = args.join(' ')
+  return { id, description }
+}
+
+async function main() {
+  const { id: issueId, description } = getIssueId()
+
+  if (!description) {
+    console.error('Usage: npx tsx scripts/fix.ts [--issue <number>] "issue description"')
     process.exit(1)
   }
 
   console.log('🔧 Starting verified fix workflow...')
-  console.log(`📋 Issue: ${issue}`)
+  console.log(`📋 Issue: ${issueId}`)
+  console.log(`📝 ${description}`)
   console.log('─'.repeat(60))
 
-  const prompt = WORKFLOW_PROMPT.replace('{ISSUE}', issue)
+  const prompt = WORKFLOW_PROMPT
+    .replace('{ISSUE}', description)
+    .replace(/{ISSUE_ID}/g, issueId)
 
   // Run Claude CLI with streaming JSON output
   const claude = spawn('claude', [
@@ -395,15 +425,21 @@ async function main() {
         const bodyMatch = prBlock.match(/demo_video:.*\n([\s\S]*)/)
         let body = bodyMatch?.[1]?.trim() || ''
 
+        // Get issue ID from output
+        const issueIdMatch = prBlock.match(/issue_id:\s*(.+)/)
+        const prIssueId = issueIdMatch?.[1]?.trim() || 'unknown'
+
         // Convert video to GIF if we have one
         let gifPath: string | undefined
         if (videoPath && fs.existsSync(videoPath)) {
           console.log('🎬 Converting video to GIF...')
-          gifPath = path.join(process.cwd(), 'demo.gif')
+          const issueDir = path.join(process.cwd(), 'e2e', 'issues', prIssueId)
+          fs.mkdirSync(issueDir, { recursive: true })
+          gifPath = path.join(issueDir, 'demo.gif')
           try {
             execSync(`ffmpeg -y -i "${videoPath}" -vf "fps=12,scale=800:-1:flags=lanczos" -loop 0 "${gifPath}"`,
               { stdio: 'pipe' })
-            console.log('✓ GIF created: demo.gif')
+            console.log(`✓ GIF created: e2e/issues/${prIssueId}/demo.gif`)
             // Replace the demo placeholder with the actual GIF
             body = body.replace(/## Demo\n.*$/m, `## Demo\n![Demo](file://${gifPath})`)
           } catch (e) {
