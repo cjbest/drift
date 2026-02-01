@@ -43,47 +43,22 @@ jobs:
           BRANCH_NAME="claude/issue-${{ github.event.issue.number }}"
           git checkout -b "$BRANCH_NAME"
           echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
+          echo "ISSUE_ID=${{ github.event.issue.number }}" >> $GITHUB_ENV
 
-      - name: Run Claude Agent
+      - name: Run fix script
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CI: true
         run: |
-          # Create a prompt file with the issue details
-          cat > /tmp/prompt.txt << 'PROMPT_EOF'
-          You are working on the Drift app codebase. A user has requested the following:
+          # Combine issue title and body as the description
+          DESCRIPTION="${{ github.event.issue.title }}"
+          if [ -n "${{ github.event.issue.body }}" ]; then
+            DESCRIPTION="$DESCRIPTION
 
-          Issue #${{ github.event.issue.number }}: ${{ github.event.issue.title }}
-
-          ${{ github.event.issue.body }}
-
-          Instructions:
-          1. Implement the requested feature or fix
-          2. Run TypeScript check: npx tsc --noEmit
-          3. Run tests: npm test
-          4. If you created a new feature, add a test that demonstrates it
-          5. Keep changes minimal and focused
-
-          When done, write a file called PR_SUMMARY.md with:
-          - A brief description of what you implemented
-          - Key files changed and why
-          - Any design decisions you made
-          PROMPT_EOF
-
-          # Run Claude Code in non-interactive mode
-          claude --print --dangerously-skip-permissions -p "$(cat /tmp/prompt.txt)"
-
-      - name: Generate demo GIF
-        if: success()
-        run: |
-          # Run the demo test to capture video
-          npx playwright test demo.spec.ts --workers=1 || true
-
-          # Find and convert video to GIF
-          VIDEO=$(find test-results -name "*.webm" | head -1)
-          if [ -n "$VIDEO" ]; then
-            ffmpeg -y -i "$VIDEO" -vf "fps=12,scale=800:-1:flags=lanczos" -loop 0 demo.gif
-            echo "DEMO_GIF=demo.gif" >> $GITHUB_ENV
+          ${{ github.event.issue.body }}"
           fi
+
+          npm run fix -- --issue ${{ github.event.issue.number }} "$DESCRIPTION"
 
       - name: Commit changes
         run: |
@@ -91,7 +66,7 @@ jobs:
           git config user.email "claude@anthropic.com"
           git add -A
           git diff --staged --quiet || git commit -m "$(cat << 'EOF'
-          Implement #${{ github.event.issue.number }}: ${{ github.event.issue.title }}
+          Fix #${{ github.event.issue.number }}: ${{ github.event.issue.title }}
 
           Co-Authored-By: Claude <claude@anthropic.com>
           EOF
@@ -99,7 +74,6 @@ jobs:
 
       - name: Push branch
         run: |
-          # Delete remote branch if it exists, then push
           git push origin --delete "$BRANCH_NAME" 2>/dev/null || true
           git push -u origin "$BRANCH_NAME"
         env:
@@ -109,36 +83,34 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Use commit SHA as cache buster for GIF
+          ISSUE_DIR="e2e/issues/${{ github.event.issue.number }}"
           COMMIT_SHA=$(git rev-parse HEAD)
-          GIF_URL="https://raw.githubusercontent.com/${{ github.repository }}/${BRANCH_NAME}/demo.gif?${COMMIT_SHA}"
+          GIF_URL="https://raw.githubusercontent.com/${{ github.repository }}/${BRANCH_NAME}/${ISSUE_DIR}/demo.gif?${COMMIT_SHA}"
 
-          # Read Claude's summary if it exists
-          if [ -f PR_SUMMARY.md ]; then
-            SUMMARY=$(cat PR_SUMMARY.md)
+          # Read PR body if generated
+          if [ -f "${ISSUE_DIR}/pr-body.md" ]; then
+            PR_BODY=$(cat "${ISSUE_DIR}/pr-body.md")
           else
-            SUMMARY="This PR was automatically created by Claude Agent."
+            PR_BODY="This PR was automatically created by Claude Agent."
           fi
 
           gh pr create \
-            --title "Implement #${{ github.event.issue.number }}: ${{ github.event.issue.title }}" \
+            --title "Fix #${{ github.event.issue.number }}: ${{ github.event.issue.title }}" \
             --body "Closes #${{ github.event.issue.number }}
 
           ## Demo
           ![Demo](${GIF_URL})
 
-          ## Summary
-          ${SUMMARY}
+          ${PR_BODY}
 
           ---
-          🤖 Generated with Claude Code" || echo "PR may already exist"
+          🤖 Generated with [Claude Code](https://claude.ai/code)" || echo "PR may already exist"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: demo-artifacts
+          name: fix-artifacts
           path: |
-            demo.gif
-            e2e/screenshots/
+            e2e/issues/${{ github.event.issue.number }}/
             test-results/

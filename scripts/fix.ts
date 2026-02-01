@@ -447,8 +447,17 @@ async function main() {
           }
         }
 
-        // Generate HTML preview
-        await generatePreview(title, body, status)
+        // Write PR body markdown for CI
+        const issueDir = path.join(process.cwd(), 'e2e', 'issues', prIssueId)
+        fs.mkdirSync(issueDir, { recursive: true })
+        const prBodyPath = path.join(issueDir, 'pr-body.md')
+        fs.writeFileSync(prBodyPath, body)
+        console.log(`📝 PR body written to: e2e/issues/${prIssueId}/pr-body.md`)
+
+        // Generate HTML preview (skip in CI)
+        if (!process.env.CI) {
+          await generatePreview(title, body, status)
+        }
 
         if (status === 'success') {
           console.log('✅ Fix verified successfully!')
