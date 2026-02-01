@@ -21,13 +21,4 @@ Replaced the monospace SF Mono font with an elegant serif font stack (Charter, G
 - `src/index.css`: Updated body font to SF Pro Text for UI consistency
 
 ## Adjustment Made
-Re-recorded the demo with significantly more content to better showcase the typography improvements:
-- Added more body text to demonstrate reading comfort with the serif fonts
-- Expanded heading hierarchy with descriptive text under each heading level (H1, H2, H3)
-- Included task list items with checkboxes to show vertical rhythm and alignment
-- Added longer blockquote to showcase italic elegance
-- Included multiple paragraphs demonstrating the refined letter-spacing and line-height
-- Extended scrolling sequences to show the full document in both light and dark modes
-- Increased pacing to give viewers more time to appreciate the typography details
-
-The new demo provides a much more comprehensive view of the typographic improvements, showcasing headings, body text, emphasis, lists, blockquotes, and theme switching all in a single cohesive recording.
+Re-recorded the demo GIF with fresh video capture. The demo continues to showcase the comprehensive typography improvements including headings, body text, emphasis, lists, blockquotes, and theme switching in both light and dark modes.
