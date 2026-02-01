@@ -597,7 +597,8 @@ async function main() {
           fs.mkdirSync(issueDir, { recursive: true })
           gifPath = path.join(issueDir, 'demo.gif')
           try {
-            execSync(`"${FFMPEG_PATH}" -y -i "${videoPath}" -vf "fps=12,scale=800:-1:flags=lanczos" -loop 0 "${gifPath}"`,
+            // Crop to 75% width to remove sidebar, then scale
+            execSync(`"${FFMPEG_PATH}" -y -i "${videoPath}" -vf "crop=iw*0.75:ih:0:0,fps=12,scale=600:-1:flags=lanczos" -loop 0 "${gifPath}"`,
               { stdio: 'pipe' })
             console.log(`✓ GIF created: e2e/issues/${prIssueId}/demo.gif`)
             // Replace the demo placeholder with the actual GIF
