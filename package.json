@@ -10,7 +10,8 @@
     "tauri": "tauri",
     "test": "playwright test",
     "test:ui": "playwright test --ui",
-    "test:headed": "playwright test --headed"
+    "test:headed": "playwright test --headed",
+    "fix": "tsx scripts/fix.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.72.1",
@@ -31,6 +32,7 @@
   "devDependencies": {
     "@playwright/test": "^1.58.0",
     "@types/node": "^24.10.1",
+    "tsx": "^4.21.0",
     "typescript": "~5.9.3",
     "vite": "^7.2.4",
     "vite-plugin-checker": "^0.12.0",
