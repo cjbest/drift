@@ -1,6 +1,7 @@
 import { onMount, onCleanup, createEffect, createSignal, Show } from 'solid-js'
 import { open } from '@tauri-apps/plugin-shell'
 import { ApiKeyDialog } from './ApiKeyDialog'
+import { ParticleEffects } from './ParticleEffects'
 import { EditorState, RangeSetBuilder } from '@codemirror/state'
 import { EditorView, keymap, highlightActiveLine, ViewPlugin, Decoration, drawSelection, WidgetType, scrollPastEnd } from '@codemirror/view'
 import type { DecorationSet, ViewUpdate } from '@codemirror/view'
@@ -767,6 +768,18 @@ export function Editor(props: EditorProps) {
     const updateListener = EditorView.updateListener.of((update) => {
       if (update.docChanged) {
         props.onChange(update.state.doc.toString())
+
+        // Emit particles when typing (only on insertions, not deletions)
+        update.changes.iterChanges((fromA, toA, fromB, toB, inserted) => {
+          if (inserted.length > 0) {
+            // Get cursor position and convert to screen coordinates
+            const pos = update.state.selection.main.head
+            const coords = update.view.coordsAtPos(pos)
+            if (coords && typeof (window as any).__emitParticles === 'function') {
+              (window as any).__emitParticles(coords.left, coords.top)
+            }
+          }
+        })
       }
     })
 
@@ -1203,6 +1216,7 @@ export function Editor(props: EditorProps) {
   return (
     <>
       <div ref={containerRef} class="editor-container" />
+      <ParticleEffects />
       <Show when={showApiKeyDialog()}>
         <ApiKeyDialog onSubmit={handleApiKeySubmit} onCancel={handleApiKeyCancel} />
       </Show>
