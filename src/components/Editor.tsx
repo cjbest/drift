@@ -726,13 +726,15 @@ export function Editor(props: EditorProps) {
     const theme = EditorView.theme({
       '&': {
         height: '100%',
-        fontSize: '18px',
+        fontSize: '19px',
       },
       '.cm-content': {
-        fontFamily: '"SF Mono", Menlo, Monaco, "Courier New", monospace',
+        fontFamily: 'Charter, "Bitstream Charter", "Sitka Text", Cambria, Georgia, "Iowan Old Style", "Times New Roman", serif',
         paddingTop: '42px',
         paddingBottom: '20px',
-        lineHeight: '1.6',
+        lineHeight: '1.65',
+        fontWeight: '400',
+        letterSpacing: '-0.011em',
       },
       '.cm-line': {
         paddingLeft: '0',
