@@ -85,11 +85,13 @@ jobs:
         run: |
           ISSUE_DIR="e2e/issues/${{ github.event.issue.number }}"
           COMMIT_SHA=$(git rev-parse HEAD)
-          GIF_URL="https://raw.githubusercontent.com/${{ github.repository }}/${BRANCH_NAME}/${ISSUE_DIR}/demo.gif?${COMMIT_SHA}"
+          RAW_BASE="https://raw.githubusercontent.com/${{ github.repository }}/${BRANCH_NAME}"
+          GIF_URL="${RAW_BASE}/${ISSUE_DIR}/demo.gif?${COMMIT_SHA}"
 
-          # Read PR body if generated
+          # Read PR body if generated, rewrite relative image paths to raw GitHub URLs
           if [ -f "${ISSUE_DIR}/pr-body.md" ]; then
-            PR_BODY=$(cat "${ISSUE_DIR}/pr-body.md")
+            # Replace relative e2e/ paths with full raw GitHub URLs, add cache buster
+            PR_BODY=$(cat "${ISSUE_DIR}/pr-body.md" | sed -E "s|\]\(e2e/([^)]+)\)|\](${RAW_BASE}/e2e/\1?${COMMIT_SHA})|g")
           else
             PR_BODY="This PR was automatically created by Claude Agent."
           fi
