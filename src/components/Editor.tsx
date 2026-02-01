@@ -3,7 +3,7 @@ import { open } from '@tauri-apps/plugin-shell'
 import { ApiKeyDialog } from './ApiKeyDialog'
 import { EditorState, RangeSetBuilder } from '@codemirror/state'
 import { EditorView, keymap, highlightActiveLine, ViewPlugin, Decoration, drawSelection, WidgetType, scrollPastEnd } from '@codemirror/view'
-import type { DecorationSet, ViewUpdate } from '@codemirror/view'
+import type { DecorationSet, ViewUpdate, PluginValue } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap, indentMore, indentLess } from '@codemirror/commands'
 import { markdown } from '@codemirror/lang-markdown'
 import { search, searchKeymap, getSearchQuery } from '@codemirror/search'
@@ -658,6 +658,108 @@ const cursorTitleTracker = ViewPlugin.fromClass(class {
   }
 })
 
+// Minimap plugin - shows document overview on right side
+const minimapPlugin = ViewPlugin.fromClass(class implements PluginValue {
+  minimapEl: HTMLDivElement
+  canvasEl: HTMLCanvasElement
+  viewportEl: HTMLDivElement
+
+  constructor(view: EditorView) {
+    // Create minimap container
+    this.minimapEl = document.createElement('div')
+    this.minimapEl.className = 'minimap'
+
+    // Create canvas for document overview
+    this.canvasEl = document.createElement('canvas')
+    this.canvasEl.className = 'minimap-canvas'
+    this.minimapEl.appendChild(this.canvasEl)
+
+    // Create viewport indicator
+    this.viewportEl = document.createElement('div')
+    this.viewportEl.className = 'minimap-viewport'
+    this.minimapEl.appendChild(this.viewportEl)
+
+    // Add click handler to jump to position
+    this.minimapEl.addEventListener('click', (e) => {
+      const rect = this.minimapEl.getBoundingClientRect()
+      const clickY = e.clientY - rect.top
+      const totalHeight = rect.height
+      const docHeight = view.contentHeight
+      const scrollRatio = clickY / totalHeight
+      const targetPos = Math.floor(view.state.doc.length * scrollRatio)
+
+      view.dispatch({
+        effects: EditorView.scrollIntoView(targetPos, { y: 'center' })
+      })
+    })
+
+    // Append to editor
+    view.dom.appendChild(this.minimapEl)
+
+    // Initial render
+    this.render(view)
+  }
+
+  update(update: ViewUpdate) {
+    if (update.docChanged || update.viewportChanged || update.geometryChanged) {
+      this.render(update.view)
+    }
+  }
+
+  render(view: EditorView) {
+    const doc = view.state.doc
+    const scroller = view.scrollDOM
+    const canvas = this.canvasEl
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    // Set canvas size
+    const minimapWidth = 120
+    const minimapHeight = Math.min(600, view.dom.clientHeight - 80)
+    canvas.width = minimapWidth
+    canvas.height = minimapHeight
+    canvas.style.width = `${minimapWidth}px`
+    canvas.style.height = `${minimapHeight}px`
+
+    // Clear canvas
+    ctx.clearRect(0, 0, minimapWidth, minimapHeight)
+
+    // Calculate scale
+    const docHeight = view.contentHeight
+    const scale = minimapHeight / docHeight
+
+    // Draw document lines
+    const lineHeight = 1.6 * 18 // matches editor line-height * fontSize
+    const scaledLineHeight = Math.max(1, lineHeight * scale)
+
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--fg').trim() || '#000000'
+    ctx.globalAlpha = 0.3
+
+    for (let i = 1; i <= doc.lines; i++) {
+      const line = doc.line(i)
+      const text = line.text.trim()
+      if (text.length > 0) {
+        const linePos = view.lineBlockAt(line.from).top
+        const y = linePos * scale
+        const width = Math.min(minimapWidth - 4, (text.length / 80) * minimapWidth)
+        ctx.fillRect(2, y, width, scaledLineHeight)
+      }
+    }
+
+    // Draw viewport indicator
+    ctx.globalAlpha = 1
+    const viewportTop = scroller.scrollTop * scale
+    const viewportHeight = scroller.clientHeight * scale
+
+    this.viewportEl.style.top = `${viewportTop}px`
+    this.viewportEl.style.height = `${viewportHeight}px`
+  }
+
+  destroy() {
+    this.minimapEl.remove()
+  }
+})
+
 const selectionHighlighter = ViewPlugin.fromClass(class {
   decorations: DecorationSet
 
@@ -1142,6 +1244,7 @@ export function Editor(props: EditorProps) {
           },
         }),
         cursorTitleTracker,
+        minimapPlugin,
         drawSelection({ cursorBlinkRate: 0 }),
       ],
     })
