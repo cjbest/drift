@@ -50,6 +50,9 @@ Example test structure (e2e/issues/{ISSUE_ID}/verify.spec.ts):
 import { test, expect } from '@playwright/test'
 import { getTauriMockScript } from '../../tauri-mocks'
 import { assertScreenshot } from '../../helpers/screenshots'
+import * as path from 'path'
+
+const SCREENSHOTS_DIR = path.join(path.dirname(import.meta.url.replace('file://', '')), 'screenshots')
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(getTauriMockScript())
@@ -59,10 +62,13 @@ test('verify issue', async ({ page }) => {
   await page.goto('/')
   await expect(page.locator('.cm-editor')).toBeVisible()
 
-  // Setup state and capture screenshot
-  const result = await assertScreenshot(page, 'description of what to verify', {
-    save: { testFile: import.meta.url, name: 'before' }
-  })
+  // Setup state...
+
+  // Save screenshot directly to issue directory
+  await page.screenshot({ path: path.join(SCREENSHOTS_DIR, 'before.png') })
+
+  // Optionally verify with assertScreenshot (no save needed)
+  const result = await assertScreenshot(page, 'description of what to verify')
   console.log('Assertion:', result)
 })
 \`\`\`
