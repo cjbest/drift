@@ -29,3 +29,4 @@ test-results
 
 # Local Claude settings
 .claude/settings.local.json
+.env
