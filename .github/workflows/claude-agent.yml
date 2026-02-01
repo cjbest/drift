@@ -32,9 +32,6 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install chromium
 
-      - name: Install ffmpeg
-        run: brew install ffmpeg
-
       - name: Install Claude Code
         run: npm install -g @anthropic-ai/claude-code
 
