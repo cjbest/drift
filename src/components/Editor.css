@@ -139,6 +139,21 @@ body.cmd-held .bare-url {
   }
 }
 
+/* Checked checkbox - green color */
+.checkbox-checked {
+  color: #22c55e;
+}
+
+:root[data-theme="dark"] .checkbox-checked {
+  color: #4ade80;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .checkbox-checked {
+    color: #4ade80;
+  }
+}
+
 /* First line as title */
 .first-line-title {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
