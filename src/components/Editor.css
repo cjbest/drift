@@ -122,11 +122,28 @@ body.cmd-held .bare-url {
 .checkbox-marker {
   cursor: pointer;
   border-radius: 2px;
-  transition: background-color 0.1s ease;
+  transition: background-color 0.1s ease, transform 0.15s ease;
+  display: inline-block;
 }
 
 .checkbox-marker:hover {
   background-color: rgba(0, 0, 0, 0.1);
+}
+
+.checkbox-marker:active {
+  animation: checkbox-bounce 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes checkbox-bounce {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.25);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
 :root[data-theme="dark"] .checkbox-marker:hover {
@@ -183,7 +200,16 @@ body.cmd-held .bare-url {
   border-left: 2px solid #000000 !important;
   height: 1.61em !important;
   transform: translate(-1px, -0.25em);
-  animation: none !important;
+  animation: cursor-pulse 2s ease-in-out infinite !important;
+}
+
+@keyframes cursor-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
 }
 
 /* Title line (larger font): taller cursor */
@@ -252,6 +278,18 @@ body.cmd-held .bare-url {
   align-items: center;
   gap: 6px;
   box-shadow: 0 2px 16px rgba(0, 0, 0, 0.1);
+  animation: slide-in-right 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
 }
 
 :root[data-theme="dark"] .cm-panel.cm-search {
@@ -349,6 +387,12 @@ body.cmd-held .bare-url {
   justify-content: center;
   opacity: 0.5;
   padding: 0;
+  transition: transform 0.1s ease, opacity 0.1s ease, background 0.1s ease;
+}
+
+.cm-panel.cm-search button[name="next"]:active,
+.cm-panel.cm-search button[name="prev"]:active {
+  transform: scale(0.92);
 }
 
 /* Reorder so prev (‹) comes before next (›) */
@@ -405,6 +449,11 @@ body.cmd-held .bare-url {
   cursor: pointer;
   padding: 4px 8px;
   margin-left: 2px;
+  transition: transform 0.1s ease, opacity 0.1s ease, background 0.1s ease;
+}
+
+.cm-panel.cm-search .search-done-btn:active {
+  transform: scale(0.95);
 }
 
 .cm-panel.cm-search .search-done-btn:hover {
