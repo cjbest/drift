@@ -7,6 +7,7 @@ import { readTextFile, writeTextFile, mkdir, exists, readDir, rename, stat } fro
 import { Editor } from './components/Editor'
 import { QuickOpen, getFilename, getPreview } from './components/QuickOpen'
 import type { NoteInfo } from './components/QuickOpen'
+import KeyboardHints from './components/KeyboardHints'
 import './App.css'
 
 const DRIFT_FOLDER = 'Drift'
@@ -85,6 +86,7 @@ function App() {
   const [statusMessage, setStatusMessage] = createSignal<string | null>(null)
   const [cachedNotes, setCachedNotes] = createSignal<NoteInfo[]>([])
   const [showTitleInBar, setShowTitleInBar] = createSignal(false)
+  const [cmdHeld, setCmdHeld] = createSignal(false)
 
   let saveTimeout: number | undefined
   let statusTimeout: number | undefined
@@ -456,11 +458,13 @@ function App() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Meta') {
         document.body.classList.add('cmd-held')
+        setCmdHeld(true)
       }
     }
     const handleKeyUp = (e: KeyboardEvent) => {
       if (e.key === 'Meta') {
         document.body.classList.remove('cmd-held')
+        setCmdHeld(false)
       }
     }
     window.addEventListener('keydown', handleKeyDown)
@@ -483,6 +487,7 @@ function App() {
       window.removeEventListener('keydown', handleKeyDown)
       window.removeEventListener('keyup', handleKeyUp)
       document.body.classList.remove('cmd-held')
+      setCmdHeld(false)
       if (saveTimeout) clearTimeout(saveTimeout)
       if (statusTimeout) clearTimeout(statusTimeout)
     })
@@ -521,6 +526,7 @@ function App() {
       <Show when={statusMessage()}>
         <div class="status-message">{statusMessage()}</div>
       </Show>
+      <KeyboardHints visible={cmdHeld()} />
     </div>
   )
 }
