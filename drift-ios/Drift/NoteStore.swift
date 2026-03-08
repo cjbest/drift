@@ -14,25 +14,116 @@ class NoteStore: ObservableObject {
     @Published var notes: [Note] = []
     @Published var currentNote: Note?
     @Published var currentContent: String = ""
+    @Published var iCloudAvailable: Bool = false
 
     private let fileManager = FileManager.default
     private var saveTimer: Timer?
     private var accessTimes: [String: Date] = [:]
+    private var metadataQuery: NSMetadataQuery?
 
+    /// Returns the iCloud container Documents directory if available,
+    /// otherwise falls back to the local app Documents directory.
     var driftDirectory: URL {
+        if let iCloudURL = fileManager.url(forUbiquityContainerIdentifier: "iCloud.com.drift") {
+            return iCloudURL.appendingPathComponent("Documents")
+        }
+        // Fallback to local storage
         let docs = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first!
         return docs.appendingPathComponent("Drift")
     }
 
     init() {
+        checkiCloudAvailability()
         ensureDriftDirectory()
         loadAccessTimes()
         refreshNotes()
+        startMonitoringICloud()
     }
 
+    deinit {
+        stopMonitoringICloud()
+    }
+
+    // MARK: - iCloud
+
+    private func checkiCloudAvailability() {
+        iCloudAvailable = fileManager.ubiquityIdentityToken != nil
+    }
+
+    private func startMonitoringICloud() {
+        guard iCloudAvailable else { return }
+
+        let query = NSMetadataQuery()
+        query.searchScopes = [NSMetadataQueryUbiquitousDocumentsScope]
+        query.predicate = NSPredicate(format: "%K LIKE '*.md'", NSMetadataItemFSNameKey)
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(metadataQueryDidUpdate),
+            name: .NSMetadataQueryDidUpdate,
+            object: query
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(metadataQueryDidFinishGathering),
+            name: .NSMetadataQueryDidFinishGathering,
+            object: query
+        )
+
+        query.start()
+        metadataQuery = query
+    }
+
+    private func stopMonitoringICloud() {
+        metadataQuery?.stop()
+        metadataQuery = nil
+    }
+
+    @objc private func metadataQueryDidFinishGathering(_ notification: Notification) {
+        downloadPendingFiles()
+        DispatchQueue.main.async { [weak self] in
+            self?.refreshNotes()
+        }
+    }
+
+    @objc private func metadataQueryDidUpdate(_ notification: Notification) {
+        downloadPendingFiles()
+        DispatchQueue.main.async { [weak self] in
+            self?.refreshNotes()
+            // If the current note was modified externally, reload it
+            if let currentPath = self?.currentNote?.path,
+               let content = try? String(contentsOfFile: currentPath, encoding: .utf8),
+               content != self?.currentContent {
+                self?.currentContent = content
+            }
+        }
+    }
+
+    /// Tells iCloud to download any files that exist in the cloud but
+    /// haven't been pulled to the device yet.
+    private func downloadPendingFiles() {
+        guard let query = metadataQuery else { return }
+        query.disableUpdates()
+
+        for item in query.results {
+            guard let mdItem = item as? NSMetadataItem,
+                  let url = mdItem.value(forAttribute: NSMetadataItemURLKey) as? URL,
+                  let status = mdItem.value(forAttribute: NSMetadataUbiquitousItemDownloadingStatusKey) as? String,
+                  status != NSMetadataUbiquitousItemDownloadingStatusCurrent
+            else { continue }
+
+            try? fileManager.startDownloadingUbiquitousItem(at: url)
+        }
+
+        query.enableUpdates()
+    }
+
+    // MARK: - File Management
+
     private func ensureDriftDirectory() {
-        if !fileManager.fileExists(atPath: driftDirectory.path) {
-            try? fileManager.createDirectory(at: driftDirectory, withIntermediateDirectories: true)
+        let dir = driftDirectory
+        if !fileManager.fileExists(atPath: dir.path) {
+            try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
         }
     }
 
@@ -58,7 +149,7 @@ class NoteStore: ObservableObject {
         ensureDriftDirectory()
         guard let files = try? fileManager.contentsOfDirectory(
             at: driftDirectory,
-            includingPropertiesForKeys: [.creationDateKey, .contentModificationDateKey],
+            includingPropertiesForKeys: [.creationDateKey, .contentModificationDateKey, .ubiquitousItemDownloadingStatusKey],
             options: [.skipsHiddenFiles]
         ) else { return }
 
@@ -66,6 +157,22 @@ class NoteStore: ObservableObject {
             .filter { $0.pathExtension == "md" }
             .compactMap { url -> Note? in
                 let path = url.path
+                // Skip files that haven't been downloaded yet
+                let values = try? url.resourceValues(forKeys: [.ubiquitousItemDownloadingStatusKey])
+                if let status = values?.ubiquitousItemDownloadingStatus,
+                   status != .current {
+                    // Trigger download but still show the note with filename as title
+                    try? fileManager.startDownloadingUbiquitousItem(at: url)
+                    let attrs = try? fileManager.attributesOfItem(atPath: path)
+                    return Note(
+                        path: path,
+                        title: url.deletingPathExtension().lastPathComponent,
+                        preview: "Downloading from iCloud…",
+                        createdAt: attrs?[.creationDate] as? Date,
+                        modifiedAt: attrs?[.modificationDate] as? Date
+                    )
+                }
+
                 let content = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
                 let attrs = try? fileManager.attributesOfItem(atPath: path)
                 let created = attrs?[.creationDate] as? Date
@@ -101,7 +208,6 @@ class NoteStore: ObservableObject {
     }
 
     func newNote() {
-        // Save current note first
         if currentContent.trimmingCharacters(in: .whitespacesAndNewlines).count > 0 {
             saveNow()
         }
@@ -111,7 +217,6 @@ class NoteStore: ObservableObject {
 
     func saveContent(_ content: String) {
         currentContent = content
-        // Debounced save
         saveTimer?.invalidate()
         saveTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: false) { [weak self] _ in
             self?.saveNow()
@@ -125,7 +230,6 @@ class NoteStore: ObservableObject {
         ensureDriftDirectory()
 
         if var filePath = currentNote?.path {
-            // Existing note - check if title changed for rename
             let currentFilename = URL(fileURLWithPath: filePath).deletingPathExtension().lastPathComponent
             let newFilename = Self.sanitizeFilename(from: content)
 
@@ -133,7 +237,6 @@ class NoteStore: ObservableObject {
                 let newURL = driftDirectory.appendingPathComponent("\(newFilename).md")
                 var newPath = newURL.path
 
-                // Handle duplicates
                 var counter = 1
                 while fileManager.fileExists(atPath: newPath) && newPath != filePath {
                     let numberedURL = driftDirectory.appendingPathComponent("\(newFilename) \(counter).md")
@@ -143,7 +246,6 @@ class NoteStore: ObservableObject {
 
                 if newPath != filePath {
                     try? fileManager.moveItem(atPath: filePath, toPath: newPath)
-                    // Update access times
                     if let oldTime = accessTimes[filePath] {
                         accessTimes.removeValue(forKey: filePath)
                         accessTimes[newPath] = oldTime
@@ -163,7 +265,6 @@ class NoteStore: ObservableObject {
             )
             recordAccess(for: filePath)
         } else {
-            // New note
             let filename = Self.sanitizeFilename(from: content)
             var url = driftDirectory.appendingPathComponent("\(filename).md")
 
@@ -205,14 +306,11 @@ class NoteStore: ObservableObject {
         guard let first = lines.first else { return "Untitled" }
 
         var title = first
-        // Remove markdown heading prefix
         if let range = title.range(of: #"^#+\s*"#, options: .regularExpression) {
             title.removeSubrange(range)
         }
-        // Remove unsafe filename characters
         let unsafe = CharacterSet(charactersIn: "<>:\"/\\|?*")
         title = title.components(separatedBy: unsafe).joined()
-        // Limit length
         if title.count > 50 {
             title = String(title.prefix(50))
         }
