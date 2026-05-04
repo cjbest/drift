@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 
+@MainActor
 @Observable
 final class NoteStore {
     private let bookmarkKey = "drift.folderBookmark"
@@ -10,6 +11,7 @@ final class NoteStore {
     var errorMessage: String?
 
     private var folderAccessing = false
+    private var enrichTask: Task<Void, Never>?
 
     init() {
         if let testPath = ProcessInfo.processInfo.environment["DRIFT_TEST_FOLDER"] {
@@ -22,11 +24,8 @@ final class NoteStore {
         restoreFolder()
     }
 
-    deinit {
-        if folderAccessing, let url = folderURL {
-            url.stopAccessingSecurityScopedResource()
-        }
-    }
+    // No deinit cleanup: NoteStore lives for the lifetime of the app, so the
+    // OS reclaims the security-scoped resource and pending tasks at exit.
 
     func setFolder(_ url: URL) {
         if folderAccessing, let current = folderURL {
@@ -52,6 +51,7 @@ final class NoteStore {
     }
 
     func clearFolder() {
+        enrichTask?.cancel()
         if folderAccessing, let url = folderURL {
             url.stopAccessingSecurityScopedResource()
         }
@@ -61,6 +61,13 @@ final class NoteStore {
         UserDefaults.standard.removeObject(forKey: bookmarkKey)
     }
 
+    /// Two-pass load. Fast pass (synchronous, on the main thread) lists the
+    /// directory and creates `Note`s with the filename as a fallback title — so
+    /// the list paints immediately even if the folder is large or some files
+    /// live in iCloud and aren't downloaded yet. Slow pass (off the main
+    /// thread) reads each body, derives real title/preview, and applies the
+    /// cache back on main. Without the split, a launch from a fat iCloud
+    /// folder would block the first frame past the iOS launch watchdog.
     func loadNotes() {
         guard let folderURL else {
             notes = []
@@ -75,32 +82,73 @@ final class NoteStore {
                 options: [.skipsHiddenFiles]
             )
 
-            let mdNotes: [Note] = urls.compactMap { url in
+            let fastNotes: [Note] = urls.compactMap { url in
                 guard url.pathExtension.lowercased() == "md" else { return nil }
                 let values = try? url.resourceValues(forKeys: [.contentModificationDateKey, .isRegularFileKey])
                 if values?.isRegularFile == false { return nil }
                 let modified = values?.contentModificationDate ?? .distantPast
-                let body = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
-                let derived = Note.derive(from: body)
-                return Note(url: url, modified: modified, title: derived.title, preview: derived.preview)
+                let fallbackTitle = url.deletingPathExtension().lastPathComponent
+                // Preserve any cache we already have for this URL so a refresh
+                // doesn't flicker titles back to filenames before the slow pass.
+                if let existing = notes.first(where: { $0.url == url }) {
+                    return Note(url: url, modified: modified, title: existing.title, preview: existing.preview)
+                }
+                return Note(url: url, modified: modified, title: fallbackTitle, preview: "")
             }
 
-            notes = mdNotes.sorted { $0.modified > $1.modified }
+            notes = fastNotes.sorted { $0.modified > $1.modified }
             errorMessage = nil
+
+            enrichTask?.cancel()
+            let urlsToEnrich = notes.map(\.url)
+            enrichTask = Task { [weak self] in
+                await self?.enrichTitlesAndPreviews(for: urlsToEnrich)
+            }
         } catch {
             errorMessage = "Couldn't load folder: \(error.localizedDescription)"
             notes = []
         }
     }
 
+    private func enrichTitlesAndPreviews(for urls: [URL]) async {
+        let derived: [URL: (title: String, preview: String)] = await Task.detached(priority: .userInitiated) {
+            var result: [URL: (String, String)] = [:]
+            for url in urls {
+                if Task.isCancelled { return result }
+                // Skip iCloud files that aren't downloaded yet — touching them
+                // would block on a network fetch. They'll get picked up next
+                // time we reload.
+                if let status = try? url.resourceValues(forKeys: [.ubiquitousItemDownloadingStatusKey]).ubiquitousItemDownloadingStatus,
+                   status == .notDownloaded {
+                    continue
+                }
+                let body = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+                let d = Note.derive(from: body)
+                result[url] = (d.title, d.preview)
+            }
+            return result
+        }.value
+
+        if Task.isCancelled { return }
+        notes = notes.map { note in
+            guard let d = derived[note.url] else { return note }
+            var copy = note
+            copy.title = d.title
+            copy.preview = d.preview
+            return copy
+        }
+    }
+
+    /// Used by tests: wait for the background enrichment pass to finish so
+    /// assertions can read the final cached titles/previews.
+    func awaitEnrichmentForTesting() async {
+        await enrichTask?.value
+    }
+
     func readContents(of note: Note) -> String {
         (try? String(contentsOf: note.url, encoding: .utf8)) ?? ""
     }
 
-    /// Writes `text` to the note's file. If the derived title (first non-blank
-    /// line) has changed, also renames the file to match (with " 2", " 3"…
-    /// suffixes on collision). Returns the updated `Note` — callers holding a
-    /// stale reference (e.g. an editor view) should adopt the returned value.
     @discardableResult
     func saveContents(_ text: String, for note: Note) -> Note {
         let derived = Note.derive(from: text)

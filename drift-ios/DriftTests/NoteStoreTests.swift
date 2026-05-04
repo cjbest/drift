@@ -16,10 +16,11 @@ struct NoteStoreTests {
         try? FileManager.default.removeItem(at: url)
     }
 
-    private func storeWithFolder(_ url: URL) -> NoteStore {
+    private func storeWithFolder(_ url: URL) async -> NoteStore {
         let store = NoteStore()
         store.folderURL = url
         store.loadNotes()
+        await store.awaitEnrichmentForTesting()
         return store
     }
 
@@ -72,7 +73,7 @@ struct NoteStoreTests {
     // MARK: - Loading
 
     @Test
-    func loadNotesPicksUpMarkdownFilesAndDerivesTitles() throws {
+    func loadNotesPicksUpMarkdownFilesAndDerivesTitles() async throws {
         let folder = try makeTempFolder()
         defer { cleanup(folder) }
 
@@ -80,14 +81,14 @@ struct NoteStoreTests {
         try "ignored".write(to: folder.appendingPathComponent("b.txt"), atomically: true, encoding: .utf8)
         try "Just text".write(to: folder.appendingPathComponent("c.md"), atomically: true, encoding: .utf8)
 
-        let store = storeWithFolder(folder)
+        let store = await storeWithFolder(folder)
         #expect(store.notes.count == 2)
         let titles = Set(store.notes.map(\.title))
         #expect(titles == ["Hello", "Just text"])
     }
 
     @Test
-    func notesAreSortedByModifiedDescending() throws {
+    func notesAreSortedByModifiedDescending() async throws {
         let folder = try makeTempFolder()
         defer { cleanup(folder) }
 
@@ -100,7 +101,7 @@ struct NoteStoreTests {
         )
         try "new body".write(to: newer, atomically: true, encoding: .utf8)
 
-        let store = storeWithFolder(folder)
+        let store = await storeWithFolder(folder)
         #expect(store.notes.first?.title == "new body")
         #expect(store.notes.last?.title == "old body")
     }
@@ -108,11 +109,11 @@ struct NoteStoreTests {
     // MARK: - Create
 
     @Test
-    func createNoteAddsUniqueUntitled() throws {
+    func createNoteAddsUniqueUntitled() async throws {
         let folder = try makeTempFolder()
         defer { cleanup(folder) }
 
-        let store = storeWithFolder(folder)
+        let store = await storeWithFolder(folder)
         let first = store.createNote()
         let second = store.createNote()
 
@@ -130,7 +131,7 @@ struct NoteStoreTests {
         let folder = try makeTempFolder()
         defer { cleanup(folder) }
 
-        let store = storeWithFolder(folder)
+        let store = await storeWithFolder(folder)
         guard let note = store.createNote() else {
             Issue.record("createNote returned nil")
             return
@@ -147,11 +148,11 @@ struct NoteStoreTests {
     }
 
     @Test
-    func saveRenamesFileWhenTitleChanges() throws {
+    func saveRenamesFileWhenTitleChanges() async throws {
         let folder = try makeTempFolder()
         defer { cleanup(folder) }
 
-        let store = storeWithFolder(folder)
+        let store = await storeWithFolder(folder)
         guard let note = store.createNote() else {
             Issue.record("createNote returned nil")
             return
@@ -165,13 +166,13 @@ struct NoteStoreTests {
     }
 
     @Test
-    func saveRenameSuffixesOnCollision() throws {
+    func saveRenameSuffixesOnCollision() async throws {
         let folder = try makeTempFolder()
         defer { cleanup(folder) }
 
         try "existing".write(to: folder.appendingPathComponent("Hello.md"), atomically: true, encoding: .utf8)
 
-        let store = storeWithFolder(folder)
+        let store = await storeWithFolder(folder)
         guard let note = store.createNote() else {
             Issue.record("createNote returned nil")
             return
@@ -183,13 +184,13 @@ struct NoteStoreTests {
     }
 
     @Test
-    func saveDoesNotRenameWhenTitleMatchesFilename() throws {
+    func saveDoesNotRenameWhenTitleMatchesFilename() async throws {
         let folder = try makeTempFolder()
         defer { cleanup(folder) }
 
         let url = folder.appendingPathComponent("Stable.md")
         try "Stable\nbody".write(to: url, atomically: true, encoding: .utf8)
-        let store = storeWithFolder(folder)
+        let store = await storeWithFolder(folder)
         let note = try #require(store.notes.first)
 
         let result = store.saveContents("Stable\nupdated body", for: note)
@@ -198,11 +199,11 @@ struct NoteStoreTests {
     }
 
     @Test
-    func saveSanitizesUnsafeCharsInRename() throws {
+    func saveSanitizesUnsafeCharsInRename() async throws {
         let folder = try makeTempFolder()
         defer { cleanup(folder) }
 
-        let store = storeWithFolder(folder)
+        let store = await storeWithFolder(folder)
         guard let note = store.createNote() else {
             Issue.record("createNote returned nil")
             return
@@ -214,11 +215,11 @@ struct NoteStoreTests {
     }
 
     @Test
-    func saveEmptyContentKeepsUntitled() throws {
+    func saveEmptyContentKeepsUntitled() async throws {
         let folder = try makeTempFolder()
         defer { cleanup(folder) }
 
-        let store = storeWithFolder(folder)
+        let store = await storeWithFolder(folder)
         guard let note = store.createNote() else {
             Issue.record("createNote returned nil")
             return
@@ -232,11 +233,11 @@ struct NoteStoreTests {
     // MARK: - Delete
 
     @Test
-    func deleteRemovesFileAndEntry() throws {
+    func deleteRemovesFileAndEntry() async throws {
         let folder = try makeTempFolder()
         defer { cleanup(folder) }
 
-        let store = storeWithFolder(folder)
+        let store = await storeWithFolder(folder)
         guard let note = store.createNote() else {
             Issue.record("createNote returned nil")
             return
