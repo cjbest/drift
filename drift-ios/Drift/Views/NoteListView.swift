@@ -54,6 +54,7 @@ struct NoteListView: View {
                 } label: {
                     Image(systemName: "square.and.pencil")
                 }
+                .keyboardShortcut("n", modifiers: .command)
             }
         }
         .refreshable { store.loadNotes() }

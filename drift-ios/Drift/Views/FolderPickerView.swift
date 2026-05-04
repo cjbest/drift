@@ -17,10 +17,15 @@ struct FolderPickerView: View {
                 Text("Drift")
                     .font(.largeTitle.weight(.semibold))
 
-                Text("Pick the folder where your notes live.\niCloud Drive works great.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
+                VStack(spacing: 6) {
+                    Text("Pick the folder where your notes live.")
+                    Text("If you use the desktop app, look for iCloud Drive › Documents › Drift.")
+                        .foregroundStyle(.tertiary)
+                }
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 20)
             }
 
             Spacer()
