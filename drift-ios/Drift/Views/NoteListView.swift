@@ -5,6 +5,10 @@ struct NoteListView: View {
     @State private var selectedNote: Note?
     @State private var query = ""
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
+    /// Note ID to auto-focus on appear — set when the user taps the compose
+    /// button so the keyboard rises during the navigation push. Cleared as
+    /// soon as the editor consumes it.
+    @State private var pendingFocusID: Note.ID?
 
     private var filteredNotes: [Note] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -17,7 +21,12 @@ struct NoteListView: View {
             sidebar
         } detail: {
             if let selectedNote {
-                NoteEditorView(note: selectedNote)
+                NoteEditorView(
+                    note: selectedNote,
+                    autoFocus: pendingFocusID == selectedNote.id
+                )
+                .id(selectedNote.id)
+                .onAppear { pendingFocusID = nil }
             } else {
                 detailEmpty
             }
@@ -49,6 +58,7 @@ struct NoteListView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     if let note = store.createNote() {
+                        pendingFocusID = note.id
                         selectedNote = note
                     }
                 } label: {
