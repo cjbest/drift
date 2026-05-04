@@ -80,7 +80,9 @@ final class NoteStore {
                 let values = try? url.resourceValues(forKeys: [.contentModificationDateKey, .isRegularFileKey])
                 if values?.isRegularFile == false { return nil }
                 let modified = values?.contentModificationDate ?? .distantPast
-                return Note(url: url, modified: modified)
+                let body = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+                let derived = Note.derive(from: body)
+                return Note(url: url, modified: modified, title: derived.title, preview: derived.preview)
             }
 
             notes = mdNotes.sorted { $0.modified > $1.modified }
@@ -95,62 +97,52 @@ final class NoteStore {
         (try? String(contentsOf: note.url, encoding: .utf8)) ?? ""
     }
 
-    func saveContents(_ text: String, for note: Note) {
+    /// Writes `text` to the note's file. If the derived title (first non-blank
+    /// line) has changed, also renames the file to match (with " 2", " 3"…
+    /// suffixes on collision). Returns the updated `Note` — callers holding a
+    /// stale reference (e.g. an editor view) should adopt the returned value.
+    @discardableResult
+    func saveContents(_ text: String, for note: Note) -> Note {
+        let derived = Note.derive(from: text)
+
         do {
             try text.write(to: note.url, atomically: true, encoding: .utf8)
-            if let idx = notes.firstIndex(where: { $0.id == note.id }) {
-                notes[idx].modified = Date()
-                notes.sort { $0.modified > $1.modified }
-            }
         } catch {
             errorMessage = "Save failed: \(error.localizedDescription)"
+            return note
         }
+
+        var updated = Note(url: note.url, modified: Date(), title: derived.title, preview: derived.preview)
+
+        let currentBaseName = note.url.deletingPathExtension().lastPathComponent
+        if derived.title != currentBaseName, let folderURL {
+            let target = uniqueURL(forBaseName: derived.title, in: folderURL, excluding: note.url)
+            do {
+                try FileManager.default.moveItem(at: note.url, to: target)
+                updated = Note(url: target, modified: Date(), title: derived.title, preview: derived.preview)
+            } catch {
+                // Keep original URL if rename fails (e.g. permissions).
+            }
+        }
+
+        if let idx = notes.firstIndex(where: { $0.id == note.id }) {
+            notes[idx] = updated
+            notes.sort { $0.modified > $1.modified }
+        }
+        return updated
     }
 
     @discardableResult
     func createNote() -> Note? {
         guard let folderURL else { return nil }
-        let base = "Untitled"
-        var name = "\(base).md"
-        var counter = 2
-        while FileManager.default.fileExists(atPath: folderURL.appendingPathComponent(name).path) {
-            name = "\(base) \(counter).md"
-            counter += 1
-        }
-        let url = folderURL.appendingPathComponent(name)
+        let url = uniqueURL(forBaseName: Note.untitled, in: folderURL, excluding: nil)
         do {
             try "".write(to: url, atomically: true, encoding: .utf8)
-            let note = Note(url: url, modified: Date())
+            let note = Note(url: url, modified: Date(), title: Note.untitled, preview: "")
             notes.insert(note, at: 0)
             return note
         } catch {
             errorMessage = "Couldn't create note: \(error.localizedDescription)"
-            return nil
-        }
-    }
-
-    func rename(_ note: Note, to newTitle: String) -> Note? {
-        guard let folderURL else { return nil }
-        let trimmed = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return note }
-
-        let safe = trimmed.replacingOccurrences(of: "/", with: "-")
-        let newURL = folderURL.appendingPathComponent("\(safe).md")
-        guard newURL != note.url else { return note }
-
-        do {
-            if FileManager.default.fileExists(atPath: newURL.path) {
-                errorMessage = "A note with that name already exists."
-                return nil
-            }
-            try FileManager.default.moveItem(at: note.url, to: newURL)
-            let updated = Note(url: newURL, modified: Date())
-            if let idx = notes.firstIndex(where: { $0.id == note.id }) {
-                notes[idx] = updated
-            }
-            return updated
-        } catch {
-            errorMessage = "Rename failed: \(error.localizedDescription)"
             return nil
         }
     }
@@ -162,6 +154,22 @@ final class NoteStore {
         } catch {
             errorMessage = "Delete failed: \(error.localizedDescription)"
         }
+    }
+
+    private func uniqueURL(forBaseName base: String, in folder: URL, excluding: URL?) -> URL {
+        let candidate = folder.appendingPathComponent("\(base).md")
+        if !exists(candidate, excluding: excluding) { return candidate }
+        var counter = 2
+        while true {
+            let next = folder.appendingPathComponent("\(base) \(counter).md")
+            if !exists(next, excluding: excluding) { return next }
+            counter += 1
+        }
+    }
+
+    private func exists(_ url: URL, excluding: URL?) -> Bool {
+        if let excluding, url.standardizedFileURL == excluding.standardizedFileURL { return false }
+        return FileManager.default.fileExists(atPath: url.path)
     }
 
     private func restoreFolder() {

@@ -64,7 +64,7 @@ struct NoteListView: View {
         List(selection: $selectedNote) {
             ForEach(filteredNotes) { note in
                 NavigationLink(value: note) {
-                    NoteRow(note: note, store: store)
+                    NoteRow(note: note)
                 }
                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                     Button(role: .destructive) {
@@ -108,21 +108,6 @@ struct NoteListView: View {
 
 private struct NoteRow: View {
     let note: Note
-    let store: NoteStore
-
-    private var preview: String {
-        let raw = (try? String(contentsOf: note.url, encoding: .utf8)) ?? ""
-        let firstLine = raw
-            .split(whereSeparator: \.isNewline)
-            .first
-            .map(String.init) ?? ""
-        let trimmed = firstLine.trimmingCharacters(in: .whitespaces)
-        if trimmed.isEmpty {
-            let body = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-            return body.isEmpty ? "Empty note" : String(body.prefix(80))
-        }
-        return trimmed
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -131,9 +116,11 @@ private struct NoteRow: View {
                 .lineLimit(1)
             HStack(spacing: 6) {
                 Text(note.modified, style: .date)
-                Text("·")
-                Text(preview)
-                    .lineLimit(1)
+                if !note.preview.isEmpty {
+                    Text("·")
+                    Text(note.preview)
+                        .lineLimit(1)
+                }
             }
             .font(.footnote)
             .foregroundStyle(.secondary)

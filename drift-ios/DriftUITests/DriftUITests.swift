@@ -15,8 +15,12 @@ final class DriftUITests: XCTestCase {
         try? FileManager.default.removeItem(at: tempFolder)
     }
 
-    private func seed(_ name: String, body: String) throws {
-        let url = tempFolder.appendingPathComponent("\(name).md")
+    /// Seeds a `.md` file whose first line matches `title` (so the derived
+    /// in-app title equals `title`, since the desktop convention is "first
+    /// line is the title"). Pass `extraBody` for everything after.
+    private func seed(title: String, extraBody: String = "") throws {
+        let url = tempFolder.appendingPathComponent("\(title).md")
+        let body = extraBody.isEmpty ? title : "\(title)\n\(extraBody)"
         try body.write(to: url, atomically: true, encoding: .utf8)
     }
 
@@ -28,8 +32,8 @@ final class DriftUITests: XCTestCase {
     }
 
     func testListShowsSeededNotes() throws {
-        try seed("First Note", body: "# Hello\nThis is the first note.")
-        try seed("Second Note", body: "Just some content.")
+        try seed(title: "First Note", extraBody: "This is the first note.")
+        try seed(title: "Second Note", extraBody: "Just some content.")
 
         let app = launchApp()
 
@@ -38,7 +42,7 @@ final class DriftUITests: XCTestCase {
     }
 
     func testTappingNoteOpensEditorWithContent() throws {
-        try seed("Welcome", body: "# Welcome to Drift\nA note editor.")
+        try seed(title: "Welcome", extraBody: "A note editor.")
 
         let app = launchApp()
         let row = app.staticTexts["Welcome"]
@@ -48,14 +52,13 @@ final class DriftUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Welcome"].waitForExistence(timeout: 3))
         let editor = app.textViews.firstMatch
         XCTAssertTrue(editor.waitForExistence(timeout: 3))
-        XCTAssertTrue(editor.value as? String == "# Welcome to Drift\nA note editor.")
+        XCTAssertEqual(editor.value as? String, "Welcome\nA note editor.")
     }
 
     func testCaptureScreenshots() throws {
-        // Demo screenshots written to /tmp on the host (via simulator's tmp).
-        try seed("Welcome to Drift", body: "# Welcome to Drift\n\nA simple note editor for iOS.\n\n- Notes sync via iCloud Drive\n- Each note is a plain `.md` file\n- Auto-saves as you type")
-        try seed("Grocery list", body: "- milk\n- bread\n- coffee beans\n- eggs")
-        try seed("Meeting notes 2026-05-03", body: "# Weekly sync\n\n- shipping iOS app overnight\n- iCloud Drive folder model is wildly simple\n- ship it")
+        try seed(title: "Welcome to Drift", extraBody: "\nA simple note editor for iOS.\n\n- Notes sync via iCloud Drive\n- Each note is a plain `.md` file\n- Auto-saves as you type")
+        try seed(title: "Grocery list", extraBody: "- milk\n- bread\n- coffee beans\n- eggs")
+        try seed(title: "Meeting notes 2026-05-03", extraBody: "\n# Weekly sync\n\n- shipping iOS app overnight\n- iCloud Drive folder model is wildly simple\n- ship it")
 
         let app = launchApp()
         XCTAssertTrue(app.staticTexts["Welcome to Drift"].waitForExistence(timeout: 5))
@@ -77,20 +80,21 @@ final class DriftUITests: XCTestCase {
 
     func testCreateNoteAndType() throws {
         let app = launchApp()
-        // Empty state — tap the compose button (square.and.pencil).
         app.buttons["square.and.pencil"].tap()
 
         let editor = app.textViews.firstMatch
         XCTAssertTrue(editor.waitForExistence(timeout: 3))
         editor.tap()
-        editor.typeText("hello from the test")
+        editor.typeText("Shopping list")
 
-        // Wait for autosave (400ms debounce).
-        Thread.sleep(forTimeInterval: 0.8)
+        // Wait for autosave (400ms debounce) plus the file rename.
+        Thread.sleep(forTimeInterval: 1.0)
 
-        // Verify file written to disk.
-        let url = tempFolder.appendingPathComponent("Untitled.md")
-        let body = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
-        XCTAssertEqual(body, "hello from the test")
+        // The file should have been renamed from "Untitled.md" to "Shopping list.md".
+        let renamed = tempFolder.appendingPathComponent("Shopping list.md")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: renamed.path))
+        let body = (try? String(contentsOf: renamed, encoding: .utf8)) ?? ""
+        XCTAssertEqual(body, "Shopping list")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: tempFolder.appendingPathComponent("Untitled.md").path))
     }
 }

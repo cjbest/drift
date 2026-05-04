@@ -9,8 +9,6 @@ struct NoteEditorView: View {
     @State private var text: String = ""
     @State private var initialText: String = ""
     @State private var saveTask: Task<Void, Never>?
-    @State private var showingRename = false
-    @State private var renameDraft = ""
 
     init(note: Note) {
         self.note = note
@@ -28,10 +26,6 @@ struct NoteEditorView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
-                        Button("Rename…", systemImage: "pencil") {
-                            renameDraft = workingNote.title
-                            showingRename = true
-                        }
                         Button("Delete", systemImage: "trash", role: .destructive) {
                             store.delete(workingNote)
                             dismiss()
@@ -49,28 +43,17 @@ struct NoteEditorView: View {
             .onChange(of: text) { _, newValue in
                 guard newValue != initialText else { return }
                 saveTask?.cancel()
-                saveTask = Task {
+                saveTask = Task { @MainActor in
                     try? await Task.sleep(for: .milliseconds(400))
                     if Task.isCancelled { return }
-                    await MainActor.run {
-                        store.saveContents(newValue, for: workingNote)
-                        initialText = newValue
-                    }
+                    workingNote = store.saveContents(newValue, for: workingNote)
+                    initialText = newValue
                 }
             }
             .onDisappear {
                 saveTask?.cancel()
                 if text != initialText {
-                    store.saveContents(text, for: workingNote)
-                }
-            }
-            .alert("Rename Note", isPresented: $showingRename) {
-                TextField("Title", text: $renameDraft)
-                Button("Cancel", role: .cancel) {}
-                Button("Save") {
-                    if let renamed = store.rename(workingNote, to: renameDraft) {
-                        workingNote = renamed
-                    }
+                    workingNote = store.saveContents(text, for: workingNote)
                 }
             }
     }
