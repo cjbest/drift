@@ -4,6 +4,7 @@ struct NoteListView: View {
     @Environment(NoteStore.self) private var store
     @State private var selectedNote: Note?
     @State private var query = ""
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
     private var filteredNotes: [Note] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -12,55 +13,61 @@ struct NoteListView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            Group {
-                if store.notes.isEmpty {
-                    emptyState
-                } else {
-                    list
-                }
+        NavigationSplitView(columnVisibility: $columnVisibility) {
+            sidebar
+        } detail: {
+            if let selectedNote {
+                NoteEditorView(note: selectedNote)
+            } else {
+                detailEmpty
             }
-            .navigationTitle("Drift")
-            .navigationBarTitleDisplayMode(.inline)
-            .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search notes")
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Menu {
-                        Button("Refresh", systemImage: "arrow.clockwise") { store.loadNotes() }
-                        Button("Change Folder…", systemImage: "folder") { store.clearFolder() }
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
-                    }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        if let note = store.createNote() {
-                            selectedNote = note
-                        }
-                    } label: {
-                        Image(systemName: "square.and.pencil")
-                    }
-                }
-            }
-            .navigationDestination(item: $selectedNote) { note in
-                NoteEditorView(note: note)
-            }
-            .refreshable { store.loadNotes() }
-            .onAppear { store.loadNotes() }
         }
+        .navigationSplitViewStyle(.balanced)
+        .onAppear { store.loadNotes() }
+    }
+
+    private var sidebar: some View {
+        Group {
+            if store.notes.isEmpty {
+                emptyState
+            } else {
+                list
+            }
+        }
+        .navigationTitle("Drift")
+        .navigationBarTitleDisplayMode(.inline)
+        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search notes")
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Menu {
+                    Button("Refresh", systemImage: "arrow.clockwise") { store.loadNotes() }
+                    Button("Change Folder…", systemImage: "folder") { store.clearFolder() }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    if let note = store.createNote() {
+                        selectedNote = note
+                    }
+                } label: {
+                    Image(systemName: "square.and.pencil")
+                }
+            }
+        }
+        .refreshable { store.loadNotes() }
     }
 
     private var list: some View {
-        List {
+        List(selection: $selectedNote) {
             ForEach(filteredNotes) { note in
-                Button {
-                    selectedNote = note
-                } label: {
+                NavigationLink(value: note) {
                     NoteRow(note: note, store: store)
                 }
-                .buttonStyle(.plain)
                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                     Button(role: .destructive) {
+                        if selectedNote?.id == note.id { selectedNote = nil }
                         store.delete(note)
                     } label: {
                         Label("Delete", systemImage: "trash")
@@ -69,6 +76,18 @@ struct NoteListView: View {
             }
         }
         .listStyle(.plain)
+    }
+
+    private var detailEmpty: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "doc.text")
+                .font(.system(size: 56, weight: .light))
+                .foregroundStyle(.tertiary)
+            Text("Select a note")
+                .font(.headline)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var emptyState: some View {

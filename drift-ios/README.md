@@ -43,6 +43,6 @@ SIMCTL_CHILD_DRIFT_TEST_FOLDER=/path/to/notes xcrun simctl launch booted com.dri
 
 ## Screenshots
 
-| Empty | Notes list | Editor | Dark mode |
-|---|---|---|---|
-| ![empty](screenshots/01-folder-picker.png) | ![list](screenshots/02-notes-list.png) | ![editor](screenshots/03-note-editor.png) | ![dark](screenshots/04-dark-mode.png) |
+| Empty | Notes list | Editor | Dark mode | iPad split |
+|---|---|---|---|---|
+| ![empty](screenshots/01-folder-picker.png) | ![list](screenshots/02-notes-list.png) | ![editor](screenshots/03-note-editor.png) | ![dark](screenshots/04-dark-mode.png) | ![ipad](screenshots/05-ipad-split.png) |
