@@ -20,42 +20,45 @@ struct NoteEditorView: View {
         EditorTextView(text: $text, isEditable: !isReadMode)
             .ignoresSafeArea(.keyboard, edges: .bottom)
             .background(EditorChrome())
+            .toolbar(.hidden, for: .navigationBar)
             .navigationTitle(workingNote.title)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
+            .overlay(alignment: .topLeading) {
                 if isReadMode {
-                    ToolbarItem(placement: .principal) {
-                        HStack(spacing: 6) {
-                            Image(systemName: "lock.fill")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                            Text(workingNote.title)
-                                .font(.headline)
-                                .lineLimit(1)
-                        }
-                    }
+                    Image(systemName: "lock.fill")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .padding(10)
+                        .background(.ultraThinMaterial, in: Circle())
+                        .padding(.leading, 16)
+                        .padding(.top, 8)
                 }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        Button {
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                isReadMode.toggle()
-                            }
-                        } label: {
-                            Label(
-                                isReadMode ? "Exit Read Mode" : "Read Mode",
-                                systemImage: isReadMode ? "lock.open" : "lock"
-                            )
-                        }
-                        Divider()
-                        Button("Delete", systemImage: "trash", role: .destructive) {
-                            store.delete(workingNote)
-                            dismiss()
+            }
+            .overlay(alignment: .topTrailing) {
+                Menu {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            isReadMode.toggle()
                         }
                     } label: {
-                        Image(systemName: "ellipsis.circle")
+                        Label(
+                            isReadMode ? "Exit Read Mode" : "Read Mode",
+                            systemImage: isReadMode ? "lock.open" : "lock"
+                        )
                     }
+                    Divider()
+                    Button("Delete", systemImage: "trash", role: .destructive) {
+                        store.delete(workingNote)
+                        dismiss()
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 36, height: 36)
+                        .background(.ultraThinMaterial, in: Circle())
                 }
+                .padding(.trailing, 16)
+                .padding(.top, 8)
             }
             .onAppear {
                 let loaded = store.readContents(of: workingNote)
@@ -77,7 +80,6 @@ struct NoteEditorView: View {
                 if text != initialText {
                     workingNote = store.saveContents(text, for: workingNote)
                 }
-                // Read mode is per-session; leaving the note ends it.
                 isReadMode = false
             }
     }

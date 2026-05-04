@@ -49,7 +49,6 @@ final class DriftUITests: XCTestCase {
         XCTAssertTrue(row.waitForExistence(timeout: 5))
         row.tap()
 
-        XCTAssertTrue(app.navigationBars["Welcome"].waitForExistence(timeout: 3))
         let editor = app.textViews.firstMatch
         XCTAssertTrue(editor.waitForExistence(timeout: 3))
         XCTAssertEqual(editor.value as? String, "Welcome\nA note editor.")
@@ -69,7 +68,8 @@ final class DriftUITests: XCTestCase {
         add(listShot)
 
         app.staticTexts["Welcome to Drift"].tap()
-        XCTAssertTrue(app.navigationBars["Welcome to Drift"].waitForExistence(timeout: 3))
+        let editor = app.textViews.firstMatch
+        XCTAssertTrue(editor.waitForExistence(timeout: 3))
         Thread.sleep(forTimeInterval: 0.4)
 
         let editorShot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
