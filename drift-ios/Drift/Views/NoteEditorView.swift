@@ -9,6 +9,8 @@ struct NoteEditorView: View {
     @State private var text: String = ""
     @State private var initialText: String = ""
     @State private var saveTask: Task<Void, Never>?
+    @State private var isToolbarHidden: Bool = false
+    @State private var isReadMode: Bool = false
 
     init(note: Note) {
         self.note = note
@@ -16,45 +18,79 @@ struct NoteEditorView: View {
     }
 
     var body: some View {
-        TextEditor(text: $text)
-            .font(.system(.body, design: .default))
-            .scrollContentBackground(.hidden)
-            .padding(.horizontal, 16)
-            .padding(.top, 8)
-            .navigationTitle(workingNote.title)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        Button("Delete", systemImage: "trash", role: .destructive) {
-                            store.delete(workingNote)
-                            dismiss()
-                        }
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
+        EditorTextView(
+            text: $text,
+            isEditable: !isReadMode,
+            onScrollDirection: { direction in
+                let shouldHide = (direction == .down)
+                guard shouldHide != isToolbarHidden else { return }
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isToolbarHidden = shouldHide
+                }
+            }
+        )
+        .ignoresSafeArea(.keyboard, edges: .bottom)
+        .navigationTitle(workingNote.title)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(isToolbarHidden ? .hidden : .visible, for: .navigationBar)
+        .toolbar {
+            if isReadMode {
+                ToolbarItem(placement: .principal) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "lock.fill")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        Text(workingNote.title)
+                            .font(.headline)
+                            .lineLimit(1)
                     }
                 }
             }
-            .onAppear {
-                let loaded = store.readContents(of: workingNote)
-                text = loaded
-                initialText = loaded
-            }
-            .onChange(of: text) { _, newValue in
-                guard newValue != initialText else { return }
-                saveTask?.cancel()
-                saveTask = Task { @MainActor in
-                    try? await Task.sleep(for: .milliseconds(400))
-                    if Task.isCancelled { return }
-                    workingNote = store.saveContents(newValue, for: workingNote)
-                    initialText = newValue
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            isReadMode.toggle()
+                        }
+                    } label: {
+                        Label(
+                            isReadMode ? "Exit Read Mode" : "Read Mode",
+                            systemImage: isReadMode ? "lock.open" : "lock"
+                        )
+                    }
+                    Divider()
+                    Button("Delete", systemImage: "trash", role: .destructive) {
+                        store.delete(workingNote)
+                        dismiss()
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
                 }
             }
-            .onDisappear {
-                saveTask?.cancel()
-                if text != initialText {
-                    workingNote = store.saveContents(text, for: workingNote)
-                }
+        }
+        .onAppear {
+            let loaded = store.readContents(of: workingNote)
+            text = loaded
+            initialText = loaded
+        }
+        .onChange(of: text) { _, newValue in
+            guard newValue != initialText else { return }
+            saveTask?.cancel()
+            saveTask = Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(400))
+                if Task.isCancelled { return }
+                workingNote = store.saveContents(newValue, for: workingNote)
+                initialText = newValue
             }
+        }
+        .onDisappear {
+            saveTask?.cancel()
+            if text != initialText {
+                workingNote = store.saveContents(text, for: workingNote)
+            }
+            // Read mode is per-session; leaving the note ends it.
+            isReadMode = false
+            isToolbarHidden = false
+        }
     }
 }
