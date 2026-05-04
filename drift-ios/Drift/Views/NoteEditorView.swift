@@ -32,15 +32,13 @@ struct NoteEditorView: View {
         .background(EditorChrome())
         .toolbar(.hidden, for: .navigationBar)
         .navigationTitle(workingNote.title)
-        .overlay(alignment: .topLeading) {
+        .overlay(alignment: .topTrailing) {
             if isReadMode {
                 Image(systemName: "lock.fill")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .padding(10)
-                    .background(.ultraThinMaterial, in: Circle())
-                    .padding(.leading, 16)
-                    .padding(.top, 8)
+                    .font(.footnote)
+                    .foregroundStyle(.tertiary)
+                    .padding(.trailing, 16)
+                    .padding(.top, 12)
             }
         }
         .onAppear {
