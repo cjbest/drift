@@ -11,9 +11,7 @@ struct NoteListView: View {
     @State private var pendingFocusID: Note.ID?
 
     private var filteredNotes: [Note] {
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return store.notes }
-        return store.notes.filter { $0.title.localizedCaseInsensitiveContains(trimmed) }
+        store.search(query)
     }
 
     var body: some View {
