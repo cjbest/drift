@@ -19,7 +19,7 @@ struct NoteEditorView: View {
     var body: some View {
         EditorTextView(text: $text, isEditable: !isReadMode)
             .ignoresSafeArea(.keyboard, edges: .bottom)
-            .background(HidesNavigationBarOnSwipe())
+            .background(EditorChrome())
             .navigationTitle(workingNote.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

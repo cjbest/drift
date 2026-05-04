@@ -2,9 +2,8 @@ import SwiftUI
 import UIKit
 
 /// UITextView wrapper with a true read-only mode (no keyboard, no selection,
-/// scroll-only). Auto-shows the host navigation bar when the user reaches
-/// the top of the content — a reliable way out when the bar has been hidden
-/// by `hidesBarsOnSwipe`, especially on notes too short to scroll.
+/// scroll-only) and a manual nav-bar hide/show driven by scroll direction:
+/// any upward scroll reveals the bar, downward scroll past the top hides it.
 struct EditorTextView: UIViewRepresentable {
     @Binding var text: String
     let isEditable: Bool
@@ -48,6 +47,7 @@ struct EditorTextView: UIViewRepresentable {
 
     final class Coordinator: NSObject, UITextViewDelegate {
         private var parent: EditorTextView
+        private var lastY: CGFloat = 0
 
         init(_ parent: EditorTextView) {
             self.parent = parent
@@ -57,15 +57,33 @@ struct EditorTextView: UIViewRepresentable {
             parent.text = textView.text ?? ""
         }
 
+        func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+            lastY = scrollView.contentOffset.y
+        }
+
         func scrollViewDidScroll(_ scrollView: UIScrollView) {
-            // Only react to user-driven scrolling (drag or its deceleration)
-            // so initial layout / keyboard insets don't trigger this.
+            let y = scrollView.contentOffset.y
+            defer { lastY = y }
+
+            // Only react to user-driven scrolling (drag or its deceleration).
+            // Skip large jumps — those are layout/keyboard insets shifting the
+            // offset, not scrolling.
             guard scrollView.isDragging || scrollView.isDecelerating else { return }
-            // When the user reaches the top (or pulls into rubber-band above),
-            // force the nav bar back. Covers short notes where there's nowhere
-            // to scroll up to.
-            if scrollView.contentOffset.y <= 0 {
-                scrollView.findNavigationController()?.setNavigationBarHidden(false, animated: true)
+            let diff = y - lastY
+            guard abs(diff) < 60 else { return }
+            guard let nav = scrollView.findNavigationController() else { return }
+
+            if diff < 0 {
+                // ANY upward scroll → show. setNavigationBarHidden is a no-op
+                // when already in the requested state, so this is cheap.
+                if nav.isNavigationBarHidden {
+                    nav.setNavigationBarHidden(false, animated: true)
+                }
+            } else if diff > 4 && y > 40 {
+                // Downward, past the top, more than the dead zone → hide.
+                if !nav.isNavigationBarHidden {
+                    nav.setNavigationBarHidden(true, animated: true)
+                }
             }
         }
     }

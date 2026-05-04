@@ -13,11 +13,11 @@
 		4C31E5F32057829ABAA0840A /* DriftApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC6712FB46945A6FE1AAB0E0 /* DriftApp.swift */; };
 		7371B021000134AEC703DFA5 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 700E71AD936866504EB358D8 /* Assets.xcassets */; };
 		7C50C70689D09384C1EBAF65 /* DriftUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7752D6432DE02B67907C5B8B /* DriftUITests.swift */; };
+		7DD5B3B0802C1E3ADB5D92DE /* EditorChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5092C2C7014A82A6AEDE455 /* EditorChrome.swift */; };
 		8B050B5BC292813D718DD13E /* NoteListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DA896751F9219F54C331D63 /* NoteListView.swift */; };
 		988563B226383EAA4DECDF85 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67F7F2782E0E89288BF90445 /* ContentView.swift */; };
 		B6B1640AEB6154CAEE950E20 /* Note.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FE374511B001A93F6053A96 /* Note.swift */; };
 		C91F7E14E090253EA3B30681 /* NoteEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DF71CBD2827ED789FBFBC18 /* NoteEditorView.swift */; };
-		DB4A0F353E1B59B0AE6ECE5A /* HidesBarsOnSwipe.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B80F10D5E72944048AC32DE /* HidesBarsOnSwipe.swift */; };
 		E1F383205220EF41037C935E /* NoteStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19EE46162AD95E4072FABE5C /* NoteStoreTests.swift */; };
 /* End PBXBuildFile section */
 
@@ -49,10 +49,10 @@
 		67F7F2782E0E89288BF90445 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		700E71AD936866504EB358D8 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		7752D6432DE02B67907C5B8B /* DriftUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriftUITests.swift; sourceTree = "<group>"; };
-		7B80F10D5E72944048AC32DE /* HidesBarsOnSwipe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HidesBarsOnSwipe.swift; sourceTree = "<group>"; };
 		7DA896751F9219F54C331D63 /* NoteListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteListView.swift; sourceTree = "<group>"; };
 		84E15134154EEDC11DF745B9 /* EditorTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorTextView.swift; sourceTree = "<group>"; };
 		8DF71CBD2827ED789FBFBC18 /* NoteEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteEditorView.swift; sourceTree = "<group>"; };
+		C5092C2C7014A82A6AEDE455 /* EditorChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorChrome.swift; sourceTree = "<group>"; };
 		DC6712FB46945A6FE1AAB0E0 /* DriftApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriftApp.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -89,9 +89,9 @@
 			isa = PBXGroup;
 			children = (
 				67F7F2782E0E89288BF90445 /* ContentView.swift */,
+				C5092C2C7014A82A6AEDE455 /* EditorChrome.swift */,
 				84E15134154EEDC11DF745B9 /* EditorTextView.swift */,
 				5E8B49F7556182914855734B /* FolderPickerView.swift */,
-				7B80F10D5E72944048AC32DE /* HidesBarsOnSwipe.swift */,
 				8DF71CBD2827ED789FBFBC18 /* NoteEditorView.swift */,
 				7DA896751F9219F54C331D63 /* NoteListView.swift */,
 			);
@@ -246,9 +246,9 @@
 			files = (
 				988563B226383EAA4DECDF85 /* ContentView.swift in Sources */,
 				4C31E5F32057829ABAA0840A /* DriftApp.swift in Sources */,
+				7DD5B3B0802C1E3ADB5D92DE /* EditorChrome.swift in Sources */,
 				0B236A849636CFEB331A01C3 /* EditorTextView.swift in Sources */,
 				09EB7141697E34BBCEE8B986 /* FolderPickerView.swift in Sources */,
-				DB4A0F353E1B59B0AE6ECE5A /* HidesBarsOnSwipe.swift in Sources */,
 				B6B1640AEB6154CAEE950E20 /* Note.swift in Sources */,
 				C91F7E14E090253EA3B30681 /* NoteEditorView.swift in Sources */,
 				8B050B5BC292813D718DD13E /* NoteListView.swift in Sources */,
