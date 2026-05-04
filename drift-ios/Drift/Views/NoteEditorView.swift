@@ -2,7 +2,6 @@ import SwiftUI
 
 struct NoteEditorView: View {
     @Environment(NoteStore.self) private var store
-    @Environment(\.dismiss) private var dismiss
 
     let note: Note
     let autoFocus: Bool
@@ -27,10 +26,6 @@ struct NoteEditorView: View {
                 withAnimation(.easeInOut(duration: 0.2)) {
                     isReadMode.toggle()
                 }
-            },
-            onDelete: {
-                store.delete(workingNote)
-                dismiss()
             }
         )
         .ignoresSafeArea(.keyboard, edges: .bottom)

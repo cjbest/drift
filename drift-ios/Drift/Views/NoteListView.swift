@@ -76,14 +76,6 @@ struct NoteListView: View {
                 NavigationLink(value: note) {
                     NoteRow(note: note)
                 }
-                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                    Button(role: .destructive) {
-                        if selectedNote?.id == note.id { selectedNote = nil }
-                        store.delete(note)
-                    } label: {
-                        Label("Delete", systemImage: "trash")
-                    }
-                }
             }
         }
         .listStyle(.plain)
