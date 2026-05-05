@@ -189,14 +189,56 @@ final class NoteStore {
         }
     }
 
-    /// Returns the line in `body` that contains `range`, trimmed and capped
-    /// at ~140 chars so it fits a list row.
-    private static func snippet(in body: String, around range: Range<String.Index>) -> String {
-        let ns = body as NSString
-        let nsRange = NSRange(range, in: body)
-        let lineRange = ns.lineRange(for: NSRange(location: nsRange.location, length: 0))
-        let line = ns.substring(with: lineRange).trimmingCharacters(in: .whitespacesAndNewlines)
-        return line.count <= 140 ? line : String(line.prefix(140)) + "…"
+    /// Returns the line in `body` that contains `matchRange`, trimmed, and
+    /// pre-windowed so the match itself is visible with ~18 chars of context
+    /// before it. Without this, a match deep in a long line gets cut off by
+    /// the row's `lineLimit(1)` truncation. Adds leading/trailing "…"
+    /// markers when content was dropped on either side.
+    private static func snippet(in body: String, around matchRange: Range<String.Index>) -> String {
+        // Walk back to the start of the line.
+        var lineStart = matchRange.lowerBound
+        while lineStart > body.startIndex {
+            let prev = body.index(before: lineStart)
+            if body[prev].isNewline { break }
+            lineStart = prev
+        }
+        // Walk forward to the end of the line.
+        var lineEnd = matchRange.lowerBound
+        while lineEnd < body.endIndex, !body[lineEnd].isNewline {
+            lineEnd = body.index(after: lineEnd)
+        }
+
+        let line = String(body[lineStart..<lineEnd])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Re-locate the match within the trimmed line. Easier than juggling
+        // index offsets across the trim, and robust to leading/trailing
+        // whitespace shifts.
+        let needle = String(body[matchRange])
+        guard let inLine = line.range(of: needle, options: .caseInsensitive) else {
+            return line.count <= 200 ? line : String(line.prefix(200)) + "…"
+        }
+
+        let prefixContext = 18
+        let maxLength = 200
+
+        let charsBefore = line.distance(from: line.startIndex, to: inLine.lowerBound)
+        var working = line
+        var leadingEllipsis = false
+        if charsBefore > prefixContext {
+            let dropCount = charsBefore - prefixContext
+            let dropIdx = line.index(line.startIndex, offsetBy: dropCount)
+            working = String(line[dropIdx...])
+            leadingEllipsis = true
+        }
+
+        var trailingEllipsis = false
+        if working.count > maxLength {
+            working = String(working.prefix(maxLength))
+            trailingEllipsis = true
+        }
+
+        return (leadingEllipsis ? "…" : "") + working + (trailingEllipsis ? "…" : "")
     }
 
     /// Used by tests: wait for the background enrichment pass to finish so

@@ -356,17 +356,38 @@ struct NoteStoreTests {
     }
 
     @Test
-    func searchSnippetTruncatesLongLines() async throws {
+    func searchSnippetWindowsAroundMatchDeepInLongLine() async throws {
         let folder = try makeTempFolder()
         defer { cleanup(folder) }
-        let longLine = String(repeating: "x", count: 200) + " keyword " + String(repeating: "y", count: 50)
+        // Match is ~200 chars into the line — way past where lineLimit(1)
+        // would cut off if we showed the line from the start.
+        let longLine = String(repeating: "filler ", count: 30) + "keyword tail"
         try "Title\n\n\(longLine)".write(to: folder.appendingPathComponent("a.md"), atomically: true, encoding: .utf8)
 
         let store = await storeWithFolder(folder)
         let hit = try #require(store.search("keyword").first)
         let snippet = try #require(hit.snippet)
-        #expect(snippet.hasSuffix("…"))
-        #expect(snippet.count <= 141)  // 140 chars + ellipsis
+        // Should start with an ellipsis (we trimmed the front) and contain
+        // the match within the first ~25 chars.
+        #expect(snippet.hasPrefix("…"))
+        #expect(snippet.contains("keyword"))
+        let needleStart = try #require(snippet.range(of: "keyword")?.lowerBound)
+        let charsBefore = snippet.distance(from: snippet.startIndex, to: needleStart)
+        #expect(charsBefore <= 25)
+    }
+
+    @Test
+    func searchSnippetDoesNotEllipsizeWhenMatchIsNearStart() async throws {
+        let folder = try makeTempFolder()
+        defer { cleanup(folder) }
+        try "Title\n\nkeyword is right at the start"
+            .write(to: folder.appendingPathComponent("a.md"), atomically: true, encoding: .utf8)
+
+        let store = await storeWithFolder(folder)
+        let hit = try #require(store.search("keyword").first)
+        let snippet = try #require(hit.snippet)
+        #expect(!snippet.hasPrefix("…"))
+        #expect(snippet == "keyword is right at the start")
     }
 
     @Test

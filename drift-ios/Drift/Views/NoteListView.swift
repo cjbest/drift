@@ -69,14 +69,7 @@ struct NoteListView: View {
     }
 
     private var list: some View {
-        List(selection: $selectedNote) {
-            ForEach(hits) { hit in
-                NavigationLink(value: hit.note) {
-                    NoteRow(note: hit.note, searchSnippet: hit.snippet)
-                }
-            }
-        }
-        .listStyle(.plain)
+        SearchableNoteList(hits: hits, selectedNote: $selectedNote)
     }
 
     private var detailEmpty: some View {
@@ -103,6 +96,30 @@ struct NoteListView: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// The list of search results. Lives inside the `.searchable` modifier so it
+/// can read `dismissSearch` from the environment — without dismissing search
+/// when a note is selected, the search bar persists into the editor's chrome
+/// and the editor's `.toolbar(.hidden)` doesn't take effect.
+private struct SearchableNoteList: View {
+    let hits: [NoteStore.SearchHit]
+    @Binding var selectedNote: Note?
+    @Environment(\.dismissSearch) private var dismissSearch
+
+    var body: some View {
+        List(selection: $selectedNote) {
+            ForEach(hits) { hit in
+                NavigationLink(value: hit.note) {
+                    NoteRow(note: hit.note, searchSnippet: hit.snippet)
+                }
+            }
+        }
+        .listStyle(.plain)
+        .onChange(of: selectedNote) { _, newValue in
+            if newValue != nil { dismissSearch() }
+        }
     }
 }
 
