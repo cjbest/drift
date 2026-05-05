@@ -28,7 +28,6 @@ struct NoteEditorView: View {
                 }
             }
         )
-        .ignoresSafeArea(.keyboard, edges: .bottom)
         .background(EditorChrome())
         .toolbar(.hidden, for: .navigationBar)
         .navigationTitle(workingNote.title)
