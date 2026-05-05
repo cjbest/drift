@@ -272,7 +272,9 @@ struct NoteStoreTests {
         let store = await storeWithFolder(folder)
         let hits = store.search("shopping")
         #expect(hits.count == 1)
-        #expect(hits.first?.title == "Shopping list")
+        #expect(hits.first?.note.title == "Shopping list")
+        // Title-only match: no body snippet (row falls back to default preview).
+        #expect(hits.first?.snippet == nil)
     }
 
     @Test
@@ -285,7 +287,7 @@ struct NoteStoreTests {
         let store = await storeWithFolder(folder)
         let hits = store.search("overnight")
         #expect(hits.count == 1)
-        #expect(hits.first?.title == "Meeting notes")
+        #expect(hits.first?.note.title == "Meeting notes")
     }
 
     @Test
@@ -326,6 +328,45 @@ struct NoteStoreTests {
         let note = try #require(store.notes.first)
         store.delete(note)
         #expect(store.search("uniquetoken").isEmpty)
+    }
+
+    @Test
+    func searchSnippetReturnsMatchingLine() async throws {
+        let folder = try makeTempFolder()
+        defer { cleanup(folder) }
+        try "Title\n\nFirst paragraph.\nThe magic word is overnight here.\nAnother line."
+            .write(to: folder.appendingPathComponent("a.md"), atomically: true, encoding: .utf8)
+
+        let store = await storeWithFolder(folder)
+        let hit = try #require(store.search("overnight").first)
+        let snippet = try #require(hit.snippet)
+        #expect(snippet == "The magic word is overnight here.")
+    }
+
+    @Test
+    func searchSnippetPreservesOriginalCase() async throws {
+        let folder = try makeTempFolder()
+        defer { cleanup(folder) }
+        try "Welcome\n\nHello WORLD!".write(to: folder.appendingPathComponent("a.md"), atomically: true, encoding: .utf8)
+
+        let store = await storeWithFolder(folder)
+        let hit = try #require(store.search("world").first)
+        // Case-insensitive match, but the snippet keeps the source casing.
+        #expect(hit.snippet == "Hello WORLD!")
+    }
+
+    @Test
+    func searchSnippetTruncatesLongLines() async throws {
+        let folder = try makeTempFolder()
+        defer { cleanup(folder) }
+        let longLine = String(repeating: "x", count: 200) + " keyword " + String(repeating: "y", count: 50)
+        try "Title\n\n\(longLine)".write(to: folder.appendingPathComponent("a.md"), atomically: true, encoding: .utf8)
+
+        let store = await storeWithFolder(folder)
+        let hit = try #require(store.search("keyword").first)
+        let snippet = try #require(hit.snippet)
+        #expect(snippet.hasSuffix("…"))
+        #expect(snippet.count <= 141)  // 140 chars + ellipsis
     }
 
     @Test
