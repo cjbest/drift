@@ -4,7 +4,6 @@ struct NoteListView: View {
     @Environment(NoteStore.self) private var store
     @State private var selectedNote: Note?
     @State private var query = ""
-    @State private var isSearchPresented = false
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     /// Note ID to auto-focus on appear — set when the user taps the compose
     /// button so the keyboard rises during the navigation push. Cleared as
@@ -32,15 +31,6 @@ struct NoteListView: View {
         }
         .navigationSplitViewStyle(.balanced)
         .onAppear { store.loadNotes() }
-        // Force-collapse the search field when navigating to a note. Without
-        // this, the .searchable bar stays in the navigation chrome and shows
-        // on top of the editor — its `.toolbar(.hidden)` doesn't override the
-        // search field, only the bar itself.
-        .onChange(of: selectedNote) { _, newValue in
-            if newValue != nil {
-                isSearchPresented = false
-            }
-        }
     }
 
     private var sidebar: some View {
@@ -53,12 +43,7 @@ struct NoteListView: View {
         }
         .navigationTitle("Drift")
         .navigationBarTitleDisplayMode(.inline)
-        .searchable(
-            text: $query,
-            isPresented: $isSearchPresented,
-            placement: .navigationBarDrawer(displayMode: .always),
-            prompt: "Search notes"
-        )
+        .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search notes")
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Menu {
