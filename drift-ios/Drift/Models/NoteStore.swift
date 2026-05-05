@@ -12,6 +12,10 @@ final class NoteStore {
 
     private var folderAccessing = false
     private var enrichTask: Task<Void, Never>?
+    /// Lower-cased body text per note URL, populated by the background
+    /// enrichment pass. Used by `search(_:)` so we can match against full
+    /// document content without re-reading files on every keystroke.
+    private var bodyCache: [URL: String] = [:]
 
     init() {
         if let testPath = ProcessInfo.processInfo.environment["DRIFT_TEST_FOLDER"] {
@@ -58,6 +62,7 @@ final class NoteStore {
         folderAccessing = false
         folderURL = nil
         notes = []
+        bodyCache.removeAll()
         UserDefaults.standard.removeObject(forKey: bookmarkKey)
     }
 
@@ -111,8 +116,14 @@ final class NoteStore {
     }
 
     private func enrichTitlesAndPreviews(for urls: [URL]) async {
-        let derived: [URL: (title: String, preview: String)] = await Task.detached(priority: .userInitiated) {
-            var result: [URL: (String, String)] = [:]
+        struct Enriched {
+            let title: String
+            let preview: String
+            let bodyLowercased: String
+        }
+
+        let derived: [URL: Enriched] = await Task.detached(priority: .userInitiated) {
+            var result: [URL: Enriched] = [:]
             for url in urls {
                 if Task.isCancelled { return result }
                 // Skip iCloud files that aren't downloaded yet — touching them
@@ -124,7 +135,11 @@ final class NoteStore {
                 }
                 let body = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
                 let d = Note.derive(from: body)
-                result[url] = (d.title, d.preview)
+                result[url] = Enriched(
+                    title: d.title,
+                    preview: d.preview,
+                    bodyLowercased: body.lowercased()
+                )
             }
             return result
         }.value
@@ -136,6 +151,28 @@ final class NoteStore {
             copy.title = d.title
             copy.preview = d.preview
             return copy
+        }
+        // Drop body cache entries for URLs that no longer exist in the folder
+        // (e.g. deleted out-of-band) so search results stay clean.
+        let liveURLs = Set(notes.map(\.url))
+        bodyCache = bodyCache.filter { liveURLs.contains($0.key) }
+        for (url, d) in derived {
+            bodyCache[url] = d.bodyLowercased
+        }
+    }
+
+    /// Filters notes by query against title and full body content. The body
+    /// match uses a lower-cased cache built off-main during enrichment, so
+    /// every keystroke is just an in-memory `contains` over already-resident
+    /// strings — no disk I/O.
+    func search(_ query: String) -> [Note] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return notes }
+        let needle = trimmed.lowercased()
+        return notes.filter { note in
+            if note.title.lowercased().contains(needle) { return true }
+            if let body = bodyCache[note.url], body.contains(needle) { return true }
+            return false
         }
     }
 
@@ -177,6 +214,12 @@ final class NoteStore {
             notes[idx] = updated
             notes.sort { $0.modified > $1.modified }
         }
+        // Keep the body cache in sync so the search results don't lag behind
+        // the user's edits.
+        if updated.url != note.url {
+            bodyCache.removeValue(forKey: note.url)
+        }
+        bodyCache[updated.url] = text.lowercased()
         return updated
     }
 
@@ -188,6 +231,7 @@ final class NoteStore {
             try "".write(to: url, atomically: true, encoding: .utf8)
             let note = Note(url: url, modified: Date(), title: Note.untitled, preview: "")
             notes.insert(note, at: 0)
+            bodyCache[url] = ""
             return note
         } catch {
             errorMessage = "Couldn't create note: \(error.localizedDescription)"
@@ -199,6 +243,7 @@ final class NoteStore {
         do {
             try FileManager.default.removeItem(at: note.url)
             notes.removeAll { $0.id == note.id }
+            bodyCache.removeValue(forKey: note.url)
         } catch {
             errorMessage = "Delete failed: \(error.localizedDescription)"
         }

@@ -248,6 +248,86 @@ struct NoteStoreTests {
         #expect(!FileManager.default.fileExists(atPath: note.url.path))
     }
 
+    // MARK: - Search
+
+    @Test
+    func searchEmptyReturnsAllNotes() async throws {
+        let folder = try makeTempFolder()
+        defer { cleanup(folder) }
+        try "alpha".write(to: folder.appendingPathComponent("a.md"), atomically: true, encoding: .utf8)
+        try "beta".write(to: folder.appendingPathComponent("b.md"), atomically: true, encoding: .utf8)
+
+        let store = await storeWithFolder(folder)
+        #expect(store.search("").count == 2)
+        #expect(store.search("   ").count == 2)
+    }
+
+    @Test
+    func searchMatchesTitle() async throws {
+        let folder = try makeTempFolder()
+        defer { cleanup(folder) }
+        try "Shopping list\n- milk".write(to: folder.appendingPathComponent("a.md"), atomically: true, encoding: .utf8)
+        try "Meeting notes".write(to: folder.appendingPathComponent("b.md"), atomically: true, encoding: .utf8)
+
+        let store = await storeWithFolder(folder)
+        let hits = store.search("shopping")
+        #expect(hits.count == 1)
+        #expect(hits.first?.title == "Shopping list")
+    }
+
+    @Test
+    func searchMatchesBodyContent() async throws {
+        let folder = try makeTempFolder()
+        defer { cleanup(folder) }
+        try "Meeting notes\n\n- ship the iOS app overnight".write(to: folder.appendingPathComponent("a.md"), atomically: true, encoding: .utf8)
+        try "Random ideas\n\nthoughts about pasta".write(to: folder.appendingPathComponent("b.md"), atomically: true, encoding: .utf8)
+
+        let store = await storeWithFolder(folder)
+        let hits = store.search("overnight")
+        #expect(hits.count == 1)
+        #expect(hits.first?.title == "Meeting notes")
+    }
+
+    @Test
+    func searchIsCaseInsensitive() async throws {
+        let folder = try makeTempFolder()
+        defer { cleanup(folder) }
+        try "Welcome\n\nHello WORLD!".write(to: folder.appendingPathComponent("a.md"), atomically: true, encoding: .utf8)
+
+        let store = await storeWithFolder(folder)
+        #expect(store.search("world").count == 1)
+        #expect(store.search("WORLD").count == 1)
+        #expect(store.search("WoRlD").count == 1)
+    }
+
+    @Test
+    func searchUpdatesAfterSave() async throws {
+        let folder = try makeTempFolder()
+        defer { cleanup(folder) }
+        try "Welcome\n\noriginal body".write(to: folder.appendingPathComponent("a.md"), atomically: true, encoding: .utf8)
+
+        let store = await storeWithFolder(folder)
+        #expect(store.search("freshly-typed").isEmpty)
+
+        let note = try #require(store.notes.first)
+        _ = store.saveContents("Welcome\n\nfreshly-typed text", for: note)
+        #expect(store.search("freshly-typed").count == 1)
+        // And the previous body content shouldn't match anymore.
+        #expect(store.search("original body").isEmpty)
+    }
+
+    @Test
+    func searchDropsDeletedNotes() async throws {
+        let folder = try makeTempFolder()
+        defer { cleanup(folder) }
+        try "alpha\n\nuniquetoken".write(to: folder.appendingPathComponent("a.md"), atomically: true, encoding: .utf8)
+
+        let store = await storeWithFolder(folder)
+        let note = try #require(store.notes.first)
+        store.delete(note)
+        #expect(store.search("uniquetoken").isEmpty)
+    }
+
     @Test
     func readContentsReturnsEmptyForMissingFile() {
         let store = NoteStore()
