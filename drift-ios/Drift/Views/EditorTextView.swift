@@ -3,9 +3,8 @@ import UIKit
 
 /// UITextView wrapper. Three responsibilities:
 ///   - True read-only mode (no keyboard, no selection, scroll-only).
-///   - Style the first non-blank line as a heading (semibold, 1.618× body),
-///     matching the desktop's `.first-line-title`, with breathing room before
-///     the body.
+///   - Style the first non-blank line as a heading (Newsreader italic, large),
+///     with breathing room before the body.
 ///   - Hide all chrome from the visible area; expose a single Read Mode
 ///     toggle by overscrolling above the top of content (pull-to-toggle).
 struct EditorTextView: UIViewRepresentable {
@@ -18,9 +17,10 @@ struct EditorTextView: UIViewRepresentable {
         let tv = StyledTextView()
         tv.delegate = context.coordinator
         tv.font = Self.bodyFont
-        tv.adjustsFontForContentSizeCategory = true
+        tv.textColor = Theme.inkUIColor
+        tv.tintColor = Theme.accentUIColor
         tv.backgroundColor = .clear
-        tv.textContainerInset = UIEdgeInsets(top: 4, left: 12, bottom: 32, right: 12)
+        tv.textContainerInset = UIEdgeInsets(top: 8, left: 16, bottom: 40, right: 16)
         tv.alwaysBounceVertical = true
         tv.keyboardDismissMode = .interactive
         tv.text = text
@@ -86,17 +86,16 @@ struct EditorTextView: UIViewRepresentable {
     // MARK: - Styling
 
     private static var bodyFont: UIFont {
-        UIFont.preferredFont(forTextStyle: .body)
+        Theme.bodyUIFont()
     }
 
     private static var headingFont: UIFont {
-        let body = UIFont.preferredFont(forTextStyle: .body).pointSize
-        return UIFont.systemFont(ofSize: body * 1.618, weight: .semibold)
+        Theme.editorTitleUIFont()
     }
 
     private static var headingParagraphStyle: NSParagraphStyle {
         let style = NSMutableParagraphStyle()
-        style.paragraphSpacing = 14
+        style.paragraphSpacing = 16
         return style
     }
 
@@ -108,6 +107,7 @@ struct EditorTextView: UIViewRepresentable {
         storage.beginEditing()
         storage.removeAttribute(.paragraphStyle, range: full)
         storage.addAttribute(.font, value: bodyFont, range: full)
+        storage.addAttribute(.foregroundColor, value: Theme.inkUIColor, range: full)
         if let firstLine = firstNonBlankLineRange(in: textView.text ?? "") {
             storage.addAttribute(.font, value: headingFont, range: firstLine)
             storage.addAttribute(.paragraphStyle, value: headingParagraphStyle, range: firstLine)
@@ -158,8 +158,9 @@ final class StyledTextView: UITextView {
 
     init() {
         super.init(frame: .zero, textContainer: nil)
-        pullLabel.textColor = .tertiaryLabel
-        pullLabel.font = .systemFont(ofSize: 13, weight: .medium)
+        pullLabel.textColor = Theme.accentUIColor.withAlphaComponent(0.4)
+        pullLabel.font = UIFont(name: "JetBrainsMono-Regular", size: 12)
+            ?? UIFont.monospacedSystemFont(ofSize: 12, weight: .regular)
         pullLabel.textAlignment = .center
         addSubview(pullLabel)
     }
@@ -181,7 +182,9 @@ final class StyledTextView: UITextView {
         // Visual cue: label brightens once past the trigger threshold so the
         // user knows releasing now will fire the action.
         let primed = contentOffset.y <= -triggerThreshold
-        pullLabel.textColor = primed ? .label : .tertiaryLabel
+        pullLabel.textColor = primed
+            ? Theme.accentUIColor
+            : Theme.accentUIColor.withAlphaComponent(0.4)
     }
 
     func handleEndDragging() {

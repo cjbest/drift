@@ -12,18 +12,19 @@ struct FolderPickerView: View {
             VStack(spacing: 12) {
                 Image(systemName: "doc.text")
                     .font(.system(size: 56, weight: .light))
-                    .foregroundStyle(.tint)
+                    .foregroundStyle(Theme.accent.opacity(0.55))
 
                 Text("Drift")
-                    .font(.largeTitle.weight(.semibold))
+                    .font(.custom("Newsreader16pt-Italic", size: 48))
+                    .foregroundStyle(Theme.ink)
 
                 VStack(spacing: 6) {
                     Text("Pick the folder where your notes live.")
                     Text("If you use the desktop app, look for iCloud Drive › Documents › Drift.")
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Theme.ink.opacity(0.45))
                 }
-                .font(.callout)
-                .foregroundStyle(.secondary)
+                .font(Theme.rowSub())
+                .foregroundStyle(Theme.ink.opacity(0.65))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 20)
             }
@@ -34,15 +35,16 @@ struct FolderPickerView: View {
                 showingPicker = true
             } label: {
                 Text("Choose Folder")
-                    .font(.headline)
+                    .font(.custom("JetBrainsMono-Regular", size: 16).weight(.medium))
+                    .foregroundStyle(Theme.paper)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
+                    .background(Theme.accent, in: RoundedRectangle(cornerRadius: 10))
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
             .padding(.horizontal, 24)
             .padding(.bottom, 40)
         }
+        .background(Theme.paper.ignoresSafeArea())
         .fileImporter(
             isPresented: $showingPicker,
             allowedContentTypes: [.folder],
