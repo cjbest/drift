@@ -2,10 +2,13 @@ import SwiftUI
 import UIKit
 
 /// Background hook for NoteEditorView that:
+///  - Imperatively hides the navigation bar on appear and restores it on
+///    disappear. SwiftUI's `.toolbar(.hidden, for: .navigationBar)` doesn't
+///    fully take effect when the parent has `.searchable` applied — the back
+///    chevron leaks through. Calling `setNavigationBarHidden(true)` directly
+///    on the underlying UINavigationController is the reliable hammer.
 ///  - Keeps the back-edge swipe-to-pop alive even when the nav bar is hidden
 ///    (UIKit disables it by default once the bar goes away).
-///  - Restores the nav bar to visible on the way out so the list view always
-///    starts with a clean slate.
 struct EditorChrome: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> Host { Host() }
     func updateUIViewController(_ uiViewController: Host, context: Context) {}
@@ -13,6 +16,7 @@ struct EditorChrome: UIViewControllerRepresentable {
     final class Host: UIViewController, UIGestureRecognizerDelegate {
         override func viewWillAppear(_ animated: Bool) {
             super.viewWillAppear(animated)
+            navigationController?.setNavigationBarHidden(true, animated: animated)
             navigationController?.interactivePopGestureRecognizer?.delegate = self
         }
 

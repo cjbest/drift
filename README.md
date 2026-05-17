@@ -23,6 +23,15 @@ Most note apps are slow, bloated, or want to own your data. Drift is different:
 | **Cmd+F** | Find in document |
 | **Cmd+D** | Toggle dark/light |
 
+## iOS
+
+Same notes folder, same markdown, on your phone.
+
+<p align="center">
+  <img src="assets/ios-list.png" alt="Drift on iOS — notes list" width="280">
+  <img src="assets/ios-editor.png" alt="Drift on iOS — editor" width="280">
+</p>
+
 ## Development
 
 ```bash

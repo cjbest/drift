@@ -10,7 +10,7 @@ struct NoteListView: View {
     /// soon as the editor consumes it.
     @State private var pendingFocusID: Note.ID?
 
-    private var filteredNotes: [Note] {
+    private var hits: [NoteStore.SearchHit] {
         store.search(query)
     }
 
@@ -70,9 +70,9 @@ struct NoteListView: View {
 
     private var list: some View {
         List(selection: $selectedNote) {
-            ForEach(filteredNotes) { note in
-                NavigationLink(value: note) {
-                    NoteRow(note: note)
+            ForEach(hits) { hit in
+                NavigationLink(value: hit.note) {
+                    NoteRow(note: hit.note, searchSnippet: hit.snippet, query: query)
                 }
             }
         }
@@ -108,6 +108,29 @@ struct NoteListView: View {
 
 private struct NoteRow: View {
     let note: Note
+    /// When non-nil, the line of body content where the search query matched.
+    /// Replaces the regular preview line.
+    var searchSnippet: String? = nil
+    /// Active search query — used to bold the matching span in the snippet.
+    var query: String = ""
+
+    private var contextText: AttributedString {
+        if let snippet = searchSnippet {
+            var attr = AttributedString(snippet)
+            let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty,
+               let r = attr.range(of: trimmed, options: .caseInsensitive) {
+                attr[r].font = .footnote.weight(.semibold)
+                attr[r].foregroundColor = .primary
+            }
+            return attr
+        }
+        return AttributedString(note.preview)
+    }
+
+    private var hasContext: Bool {
+        searchSnippet?.isEmpty == false || (searchSnippet == nil && !note.preview.isEmpty)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -116,9 +139,9 @@ private struct NoteRow: View {
                 .lineLimit(1)
             HStack(spacing: 6) {
                 Text(note.modified, style: .date)
-                if !note.preview.isEmpty {
+                if hasContext {
                     Text("·")
-                    Text(note.preview)
+                    Text(contextText)
                         .lineLimit(1)
                 }
             }

@@ -379,17 +379,28 @@ function App() {
     if (fileParam) {
       openFile(fileParam)
     } else {
-      // On refresh, reload the file if this window has one registered
-      const files = getOpenFiles()
-      const myFile = Object.entries(files).find(([_, label]) => label === appWindow.label)?.[0]
-      if (myFile) {
-        readTextFile(myFile).then(content => {
-          setContent(content)
-          setCurrentFilePath(myFile)
-        }).catch(() => {
-          // File no longer exists, clean up
-          unregisterWindow(appWindow.label)
-        })
+      // sessionStorage is wiped when the webview is destroyed (app quit), but
+      // survives HMR and page reloads — so it distinguishes a fresh launch
+      // from a dev refresh.
+      const isFreshLaunch = !sessionStorage.getItem('drift-window-initialized')
+      sessionStorage.setItem('drift-window-initialized', '1')
+
+      if (isFreshLaunch) {
+        // Fresh launch: start with a new doc, drop any stale registration for this label
+        unregisterWindow(appWindow.label)
+      } else {
+        // Refresh/HMR: reload the file this window had open
+        const files = getOpenFiles()
+        const myFile = Object.entries(files).find(([_, label]) => label === appWindow.label)?.[0]
+        if (myFile) {
+          readTextFile(myFile).then(content => {
+            setContent(content)
+            setCurrentFilePath(myFile)
+          }).catch(() => {
+            // File no longer exists, clean up
+            unregisterWindow(appWindow.label)
+          })
+        }
       }
     }
 

@@ -12,9 +12,10 @@ final class NoteStore {
 
     private var folderAccessing = false
     private var enrichTask: Task<Void, Never>?
-    /// Lower-cased body text per note URL, populated by the background
-    /// enrichment pass. Used by `search(_:)` so we can match against full
-    /// document content without re-reading files on every keystroke.
+    /// Body text per note URL (original case), populated by the background
+    /// enrichment pass. Used by `search(_:)` to match full document content
+    /// and to extract a snippet of the matching line — without re-reading
+    /// files on every keystroke.
     private var bodyCache: [URL: String] = [:]
 
     init() {
@@ -119,7 +120,7 @@ final class NoteStore {
         struct Enriched {
             let title: String
             let preview: String
-            let bodyLowercased: String
+            let body: String
         }
 
         let derived: [URL: Enriched] = await Task.detached(priority: .userInitiated) {
@@ -135,11 +136,7 @@ final class NoteStore {
                 }
                 let body = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
                 let d = Note.derive(from: body)
-                result[url] = Enriched(
-                    title: d.title,
-                    preview: d.preview,
-                    bodyLowercased: body.lowercased()
-                )
+                result[url] = Enriched(title: d.title, preview: d.preview, body: body)
             }
             return result
         }.value
@@ -157,23 +154,91 @@ final class NoteStore {
         let liveURLs = Set(notes.map(\.url))
         bodyCache = bodyCache.filter { liveURLs.contains($0.key) }
         for (url, d) in derived {
-            bodyCache[url] = d.bodyLowercased
+            bodyCache[url] = d.body
         }
     }
 
+    /// One search result: a matched note, plus an optional snippet of the
+    /// body line that contained the first match. `snippet` is nil when the
+    /// query was empty or matched only the title (in which case the row
+    /// falls back to the note's regular preview line).
+    struct SearchHit: Identifiable {
+        let note: Note
+        let snippet: String?
+        var id: Note.ID { note.id }
+    }
+
     /// Filters notes by query against title and full body content. The body
-    /// match uses a lower-cased cache built off-main during enrichment, so
-    /// every keystroke is just an in-memory `contains` over already-resident
-    /// strings — no disk I/O.
-    func search(_ query: String) -> [Note] {
+    /// is matched against an in-memory cache populated off-main during
+    /// enrichment, so every keystroke is just `range(of:options:)` over
+    /// already-resident strings — no disk I/O. When the match is in the
+    /// body, attaches a snippet of the matching line for display.
+    func search(_ query: String) -> [SearchHit] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return notes }
-        let needle = trimmed.lowercased()
-        return notes.filter { note in
-            if note.title.lowercased().contains(needle) { return true }
-            if let body = bodyCache[note.url], body.contains(needle) { return true }
-            return false
+        guard !trimmed.isEmpty else {
+            return notes.map { SearchHit(note: $0, snippet: nil) }
         }
+        return notes.compactMap { note in
+            if note.title.range(of: trimmed, options: .caseInsensitive) != nil {
+                return SearchHit(note: note, snippet: nil)
+            }
+            guard let body = bodyCache[note.url],
+                  let matchRange = body.range(of: trimmed, options: .caseInsensitive)
+            else { return nil }
+            return SearchHit(note: note, snippet: Self.snippet(in: body, around: matchRange))
+        }
+    }
+
+    /// Returns the line in `body` that contains `matchRange`, trimmed, and
+    /// pre-windowed so the match itself is visible with ~18 chars of context
+    /// before it. Without this, a match deep in a long line gets cut off by
+    /// the row's `lineLimit(1)` truncation. Adds leading/trailing "…"
+    /// markers when content was dropped on either side.
+    private static func snippet(in body: String, around matchRange: Range<String.Index>) -> String {
+        // Walk back to the start of the line.
+        var lineStart = matchRange.lowerBound
+        while lineStart > body.startIndex {
+            let prev = body.index(before: lineStart)
+            if body[prev].isNewline { break }
+            lineStart = prev
+        }
+        // Walk forward to the end of the line.
+        var lineEnd = matchRange.lowerBound
+        while lineEnd < body.endIndex, !body[lineEnd].isNewline {
+            lineEnd = body.index(after: lineEnd)
+        }
+
+        let line = String(body[lineStart..<lineEnd])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Re-locate the match within the trimmed line. Easier than juggling
+        // index offsets across the trim, and robust to leading/trailing
+        // whitespace shifts.
+        let needle = String(body[matchRange])
+        guard let inLine = line.range(of: needle, options: .caseInsensitive) else {
+            return line.count <= 200 ? line : String(line.prefix(200)) + "…"
+        }
+
+        let prefixContext = 18
+        let maxLength = 200
+
+        let charsBefore = line.distance(from: line.startIndex, to: inLine.lowerBound)
+        var working = line
+        var leadingEllipsis = false
+        if charsBefore > prefixContext {
+            let dropCount = charsBefore - prefixContext
+            let dropIdx = line.index(line.startIndex, offsetBy: dropCount)
+            working = String(line[dropIdx...])
+            leadingEllipsis = true
+        }
+
+        var trailingEllipsis = false
+        if working.count > maxLength {
+            working = String(working.prefix(maxLength))
+            trailingEllipsis = true
+        }
+
+        return (leadingEllipsis ? "…" : "") + working + (trailingEllipsis ? "…" : "")
     }
 
     /// Used by tests: wait for the background enrichment pass to finish so
@@ -219,7 +284,7 @@ final class NoteStore {
         if updated.url != note.url {
             bodyCache.removeValue(forKey: note.url)
         }
-        bodyCache[updated.url] = text.lowercased()
+        bodyCache[updated.url] = text
         return updated
     }
 
