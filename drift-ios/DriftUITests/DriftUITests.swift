@@ -78,6 +78,44 @@ final class DriftUITests: XCTestCase {
         add(editorShot)
     }
 
+    func testCaptureReadmeScreenshots() throws {
+        try seed(title: "Welcome to Drift", extraBody: "\nPlain markdown notes that follow you everywhere.\n\nPick a folder. Drop it in iCloud Drive. Your phone, laptop, and iPad all see the same notes.\n\n- Auto-saves as you type\n- Search across every note\n- Tap the pencil to start a new one\n- Swipe left on a row to delete\n\nNo accounts. No lock-in. Just notes.")
+        try seed(title: "Trip to Lisbon", extraBody: "\nThree days in May. Stay in Alfama.\n\nFood\n- Cervejaria Ramiro, go early\n- Pastéis de Belém, worth the line once\n\nWalks\n- Sunset at Miradouro da Senhora do Monte\n- Tram 28 end to end on a weekday morning")
+        try seed(title: "Sourdough notes", extraBody: "\nThe 80% hydration loaf works at my altitude if I drop the bulk by 30 minutes.\n\n- Mix at 9am, autolyse 1hr\n- 4 sets of folds, 30 min apart\n- Bulk until 50% rise (about 4hr in summer)\n- Shape, cold proof overnight\n- Bake at 500F covered 20min, uncovered 20min")
+        try seed(title: "Grocery list", extraBody: "\n- milk\n- bread\n- coffee beans\n- eggs\n- olive oil\n- tomatoes\n- garlic")
+
+        let app = launchApp()
+        XCTAssertTrue(app.staticTexts["Welcome to Drift"].waitForExistence(timeout: 10))
+        Thread.sleep(forTimeInterval: 0.6) // let the list settle
+
+        // Marker-file sync with the host orchestrator: simulator apps see the
+        // host's /tmp, so we drop a sentinel and wait for the host to remove it
+        // after taking a screencapture of the Simulator window (which includes
+        // the device bezel — XCUIScreen.screenshot() does not).
+        let listMarker = "/tmp/drift-marker-list"
+        let editorMarker = "/tmp/drift-marker-editor"
+        let fm = FileManager.default
+        try? fm.removeItem(atPath: listMarker)
+        try? fm.removeItem(atPath: editorMarker)
+
+        fm.createFile(atPath: listMarker, contents: nil)
+        let listDeadline = Date().addingTimeInterval(45)
+        while fm.fileExists(atPath: listMarker) && Date() < listDeadline {
+            Thread.sleep(forTimeInterval: 0.2)
+        }
+
+        app.staticTexts["Welcome to Drift"].tap()
+        let editor = app.textViews.firstMatch
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
+        Thread.sleep(forTimeInterval: 0.6)
+
+        fm.createFile(atPath: editorMarker, contents: nil)
+        let editorDeadline = Date().addingTimeInterval(45)
+        while fm.fileExists(atPath: editorMarker) && Date() < editorDeadline {
+            Thread.sleep(forTimeInterval: 0.2)
+        }
+    }
+
     func testCreateNoteAndType() throws {
         let app = launchApp()
         app.buttons["square.and.pencil"].tap()
