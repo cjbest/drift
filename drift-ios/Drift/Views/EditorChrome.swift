@@ -1,10 +1,8 @@
 import SwiftUI
 import UIKit
 
-/// Keeps the back-edge swipe-to-pop gesture alive while we hide SwiftUI's
-/// default back button and supply our own subtle one. iOS disables the
-/// interactive pop gesture when the default back button isn't visible;
-/// taking over the gesture's delegate re-enables it.
+/// Keeps the back-edge swipe-to-pop gesture alive while the editor hides the
+/// navigation bar and supplies its own manuscript-style back button.
 struct EditorChrome: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> Host { Host() }
     func updateUIViewController(_ uiViewController: Host, context: Context) {}
@@ -12,11 +10,13 @@ struct EditorChrome: UIViewControllerRepresentable {
     final class Host: UIViewController, UIGestureRecognizerDelegate {
         override func viewWillAppear(_ animated: Bool) {
             super.viewWillAppear(animated)
+            navigationController?.setNavigationBarHidden(true, animated: animated)
             navigationController?.interactivePopGestureRecognizer?.delegate = self
         }
 
         override func viewWillDisappear(_ animated: Bool) {
             super.viewWillDisappear(animated)
+            navigationController?.setNavigationBarHidden(false, animated: animated)
             navigationController?.interactivePopGestureRecognizer?.delegate = nil
         }
 

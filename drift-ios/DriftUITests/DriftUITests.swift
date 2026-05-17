@@ -80,7 +80,7 @@ final class DriftUITests: XCTestCase {
 
     func testCreateNoteAndType() throws {
         let app = launchApp()
-        app.buttons["square.and.pencil"].tap()
+        app.buttons["New Note"].tap()
 
         let editor = app.textViews.firstMatch
         XCTAssertTrue(editor.waitForExistence(timeout: 3))

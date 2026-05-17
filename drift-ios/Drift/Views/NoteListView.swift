@@ -88,6 +88,7 @@ struct NoteListView: View {
                     Image(systemName: "plus")
                         .foregroundStyle(Theme.accent)
                 }
+                .accessibilityLabel("New Note")
                 .keyboardShortcut("n", modifiers: .command)
             }
         }
@@ -97,12 +98,10 @@ struct NoteListView: View {
     private var list: some View {
         List(selection: $selectedNote) {
             ForEach(hits) { note in
-                Button {
-                    selectedNote = note
-                } label: {
-                    NoteRow(note: note)
+                SearchableNoteRow(note: note) { picked in
+                    query = ""
+                    selectedNote = picked
                 }
-                .buttonStyle(RowPressStyle())
                 .listRowBackground(Theme.paper)
                 .listRowSeparatorTint(Theme.hairline)
                 .listRowSeparator(.hidden, edges: .top)
@@ -148,13 +147,13 @@ private struct NoteRow: View {
     let note: Note
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 4) {
             Text(note.title)
                 .font(Theme.rowTitle())
                 .foregroundStyle(Theme.ink)
                 .lineLimit(1)
             HStack(spacing: 6) {
-                Text(note.modified, style: .date)
+                Text(Self.compactDate(note.modified))
                 if !note.preview.isEmpty {
                     Text("·")
                     Text(note.preview)
@@ -166,19 +165,93 @@ private struct NoteRow: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
+
+    /// Smart-compact relative date label, à la Mail / Notes.
+    /// - Today → "3:01 PM"
+    /// - Yesterday → "Yesterday"
+    /// - Within the last week → "Mon"
+    /// - Within this year → "Apr 10"
+    /// - Older → "Apr 10, 2025"
+    private static func compactDate(_ date: Date) -> String {
+        let cal = Calendar.current
+        let now = Date()
+        if cal.isDateInToday(date) {
+            return timeFormatter.string(from: date)
+        }
+        if cal.isDateInYesterday(date) {
+            return "Yesterday"
+        }
+        if let days = cal.dateComponents([.day], from: cal.startOfDay(for: date), to: cal.startOfDay(for: now)).day,
+           days > 0, days < 7 {
+            return weekdayFormatter.string(from: date)
+        }
+        if cal.component(.year, from: date) == cal.component(.year, from: now) {
+            return monthDayFormatter.string(from: date)
+        }
+        return monthDayYearFormatter.string(from: date)
+    }
+
+    private static let timeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.timeStyle = .short
+        f.dateStyle = .none
+        return f
+    }()
+
+    private static let weekdayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "EEE"
+        return f
+    }()
+
+    private static let monthDayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "MMM d"
+        return f
+    }()
+
+    private static let monthDayYearFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "MMM d, yyyy"
+        return f
+    }()
+}
+
+/// Row that dismisses the search controller in the same action as setting
+/// the selected note — important because if dismiss happens *after* the
+/// navigation push (e.g. via onChange), the detail view's safe-area inset
+/// is computed while search is still active, and the H1 ends up rendered
+/// higher than the back chevron.
+private struct SearchableNoteRow: View {
+    let note: Note
+    let onPick: (Note) -> Void
+    @Environment(\.dismissSearch) private var dismissSearch
+
+    var body: some View {
+        Button {
+            dismissSearch()
+            onPick(note)
+        } label: {
+            NoteRow(note: note)
+        }
+        .buttonStyle(RowPressStyle())
+    }
 }
 
 /// Button style for list rows: stretches the hit area to the full row,
 /// applies the visual padding the List would normally add, and tints
 /// sepia-on-press so users get tap feedback (the default `.plain` style
-/// strips it).
+/// strips it). The press feedback is rendered with no transition so the
+/// visual reaction lands in the same frame as touch-down — anything less
+/// feels sluggish.
 private struct RowPressStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .padding(.horizontal, 18)
-            .padding(.vertical, 12)
+            .padding(.vertical, 18)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(configuration.isPressed ? Theme.accent.opacity(0.10) : Color.clear)
+            .background(configuration.isPressed ? Theme.accent.opacity(0.22) : Color.clear)
             .contentShape(Rectangle())
+            .animation(nil, value: configuration.isPressed)
     }
 }

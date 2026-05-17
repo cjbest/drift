@@ -1,25 +1,50 @@
 import SwiftUI
+import UIKit
 
 /// Manuscript v1 design tokens. Mirrors `drift-design/spec.md` in the cb workspace.
 /// Wordmark + app icon are placeholders — branding round to follow.
 enum Theme {
     // MARK: Colors
+    //
+    // Each base color is defined as a UIColor with a dynamic provider so the
+    // entire palette adapts to the system colorScheme. The SwiftUI `Color`
+    // values bridge through `Color(uiColor:)`. Light is "manuscript on cream";
+    // dark is "manuscript at night" — warm dark background, warm light ink,
+    // brighter sepia accent so contrast holds.
 
-    static let ink     = Color(red: 0x1A/255, green: 0x14/255, blue: 0x10/255)
-    static let paper   = Color(red: 0xF7/255, green: 0xF3/255, blue: 0xE9/255)
-    static let accent  = Color(red: 0x6B/255, green: 0x3F/255, blue: 0x1A/255)
+    static let inkUIColor: UIColor = UIColor { trait in
+        trait.userInterfaceStyle == .dark
+            ? UIColor(red: 0xF0/255, green: 0xE8/255, blue: 0xDC/255, alpha: 1)
+            : UIColor(red: 0x1A/255, green: 0x14/255, blue: 0x10/255, alpha: 1)
+    }
+
+    static let paperUIColor: UIColor = UIColor { trait in
+        trait.userInterfaceStyle == .dark
+            ? UIColor(red: 0x18/255, green: 0x14/255, blue: 0x12/255, alpha: 1)
+            : UIColor(red: 0xF7/255, green: 0xF3/255, blue: 0xE9/255, alpha: 1)
+    }
+
+    static let accentUIColor: UIColor = UIColor { trait in
+        trait.userInterfaceStyle == .dark
+            ? UIColor(red: 0xC8/255, green: 0x91/255, blue: 0x67/255, alpha: 1)
+            : UIColor(red: 0x6B/255, green: 0x3F/255, blue: 0x1A/255, alpha: 1)
+    }
+
+    static var ink:    Color { Color(uiColor: inkUIColor) }
+    static var paper:  Color { Color(uiColor: paperUIColor) }
+    static var accent: Color { Color(uiColor: accentUIColor) }
 
     /// 0.5pt row dividers — accent at 15% alpha.
-    static let hairline = accent.opacity(0.15)
+    static var hairline: Color { accent.opacity(0.15) }
 
     /// Background for the tinted nav circle buttons.
-    static let tintBg = accent.opacity(0.10)
+    static var tintBg: Color { accent.opacity(0.10) }
 
     /// Background for the search field.
-    static let fieldBg = accent.opacity(0.06)
+    static var fieldBg: Color { accent.opacity(0.06) }
 
     /// Stroke for the editor's hairline-outlined back button.
-    static let backOutline = accent.opacity(0.30)
+    static var backOutline: Color { accent.opacity(0.30) }
 
     // MARK: Font names (PostScript)
 
@@ -72,7 +97,4 @@ enum Theme {
         UIFont(name: displayItalicName, size: 34) ?? UIFont.systemFont(ofSize: 34, weight: .semibold)
     }
 
-    static var inkUIColor: UIColor    { UIColor(ink) }
-    static var paperUIColor: UIColor  { UIColor(paper) }
-    static var accentUIColor: UIColor { UIColor(accent) }
 }

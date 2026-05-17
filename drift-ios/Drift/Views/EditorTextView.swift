@@ -21,6 +21,7 @@ struct EditorTextView: UIViewRepresentable {
         tv.tintColor = Theme.accentUIColor
         tv.backgroundColor = .clear
         tv.textContainerInset = UIEdgeInsets(top: 8, left: 16, bottom: 40, right: 16)
+        tv.contentInsetAdjustmentBehavior = .never
         tv.alwaysBounceVertical = true
         tv.keyboardDismissMode = .interactive
         tv.text = text
@@ -28,6 +29,8 @@ struct EditorTextView: UIViewRepresentable {
         tv.isSelectable = isEditable
         configurePull(on: tv)
         Self.applyFirstLineHeading(to: tv)
+        tv.selectedRange = NSRange(location: 0, length: 0)
+        tv.setContentOffset(.zero, animated: false)
         if autoFocus {
             DispatchQueue.main.async { tv.becomeFirstResponder() }
         }
@@ -35,6 +38,9 @@ struct EditorTextView: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: StyledTextView, context: Context) {
+        if uiView.contentInsetAdjustmentBehavior != .never {
+            uiView.contentInsetAdjustmentBehavior = .never
+        }
         if uiView.text != text {
             let cursor = uiView.selectedRange
             uiView.text = text
