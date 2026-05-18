@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// Manuscript v1 design tokens. Mirrors `drift-design/spec.md` in the cb workspace.
+/// Manuscript v1 design tokens.
 /// Wordmark + app icon are placeholders — branding round to follow.
 enum Theme {
     // MARK: Colors
