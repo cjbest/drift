@@ -85,19 +85,29 @@ struct NoteListView: View {
     }
 
     private func open(_ note: Note) {
+        let focusOnOpen = shouldAutofocus(note)
         latchOpeningState(for: note)
 
-        if shouldAutofocus(note) {
+        if focusOnOpen {
             pendingFocusID = note.id
         } else if pendingFocusID == note.id {
             pendingFocusID = nil
         }
 
-        if horizontalSizeClass == .compact {
-            compactPath.append(note)
-        } else {
-            selectedNote = note
+        let navigate = {
+            if horizontalSizeClass == .compact {
+                compactPath.append(note)
+            } else {
+                selectedNote = note
+            }
         }
+
+        if focusOnOpen, horizontalSizeClass == .compact, KeyboardTransitionPrimer.shared.primeForEditor() {
+            DispatchQueue.main.async(execute: navigate)
+            return
+        }
+
+        navigate()
     }
 
     private func latchOpeningState(for note: Note) {
@@ -561,5 +571,104 @@ private struct InstantRowButtonStyle: ButtonStyle {
             .contentShape(Rectangle())
             .animation(nil, value: configuration.isPressed)
             .animation(nil, value: isLatched)
+    }
+}
+
+private final class KeyboardTransitionPrimer {
+    static let shared = KeyboardTransitionPrimer()
+
+    private weak var activeInputView: KeyboardPrimerInputView?
+
+    @discardableResult
+    func primeForEditor() -> Bool {
+        guard let window = UIApplication.shared.connectedScenes
+            .compactMap({ ($0 as? UIWindowScene)?.keyWindow })
+            .first
+        else { return false }
+
+        let inputView = KeyboardPrimerInputView()
+        inputView.frame = CGRect(x: -1000, y: -1000, width: 1, height: 1)
+        window.addSubview(inputView)
+        inputView.configureForEditor()
+        inputView.becomeFirstResponder()
+        activeInputView = inputView
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self, weak inputView] in
+            if inputView?.isFirstResponder == true {
+                inputView?.resignFirstResponder()
+            }
+            inputView?.removeFromSuperview()
+            if self?.activeInputView === inputView {
+                self?.activeInputView = nil
+            }
+        }
+
+        return true
+    }
+}
+
+private final class KeyboardPrimerInputView: UIView, UIKeyInput, UITextInputTraits {
+    var hasText: Bool { false }
+    var keyboardType: UIKeyboardType = .default
+    var keyboardAppearance: UIKeyboardAppearance = .default
+    var returnKeyType: UIReturnKeyType = .default
+    var textContentType: UITextContentType?
+    var autocapitalizationType: UITextAutocapitalizationType = .sentences
+    var autocorrectionType: UITextAutocorrectionType = .default
+    var spellCheckingType: UITextSpellCheckingType = .default
+    var smartQuotesType: UITextSmartQuotesType = .yes
+    var smartDashesType: UITextSmartDashesType = .yes
+    var smartInsertDeleteType: UITextSmartInsertDeleteType = .yes
+    var enablesReturnKeyAutomatically: Bool = false
+
+    @available(iOS 17.0, *)
+    var inlinePredictionType: UITextInlinePredictionType {
+        get { storedInlinePredictionType }
+        set { storedInlinePredictionType = newValue }
+    }
+
+    @available(iOS 17.0, *)
+    private var storedInlinePredictionType: UITextInlinePredictionType = .default
+
+    init() {
+        super.init(frame: .zero)
+        configureForEditor()
+        backgroundColor = .clear
+        accessibilityElementsHidden = true
+        isAccessibilityElement = false
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override var canBecomeFirstResponder: Bool { true }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        configureForEditor()
+    }
+
+    func insertText(_ text: String) {}
+
+    func deleteBackward() {}
+
+    func configureForEditor() {
+        keyboardType = .default
+        returnKeyType = .default
+        textContentType = nil
+        autocapitalizationType = .sentences
+        autocorrectionType = .default
+        spellCheckingType = .default
+        smartQuotesType = .yes
+        smartDashesType = .yes
+        smartInsertDeleteType = .yes
+        enablesReturnKeyAutomatically = false
+        inputAssistantItem.leadingBarButtonGroups = []
+        inputAssistantItem.trailingBarButtonGroups = []
+        if #available(iOS 17.0, *) {
+            inlinePredictionType = .default
+        }
+        keyboardAppearance = (window?.traitCollection ?? traitCollection).userInterfaceStyle == .dark
+            ? .dark
+            : .light
     }
 }
