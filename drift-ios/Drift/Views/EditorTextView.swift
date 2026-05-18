@@ -12,6 +12,7 @@ struct EditorTextView: UIViewRepresentable {
     let isEditable: Bool
     var autoFocus: Bool = false
     var topContentInset: CGFloat = 8
+    var bottomContentInset: CGFloat = 40
     var onToggleReadMode: () -> Void = {}
     var onScroll: (CGFloat) -> Void = { _ in }
 
@@ -23,8 +24,10 @@ struct EditorTextView: UIViewRepresentable {
             : Self.bodyFont
         tv.textColor = Theme.inkUIColor
         tv.tintColor = Theme.accentUIColor
-        tv.backgroundColor = .clear
-        tv.textContainerInset = UIEdgeInsets(top: topContentInset, left: 16, bottom: 40, right: 16)
+        tv.applyPaperChrome()
+        tv.setBaseTextContainerInset(
+            UIEdgeInsets(top: topContentInset, left: 16, bottom: bottomContentInset, right: 16)
+        )
         tv.contentInsetAdjustmentBehavior = .never
         tv.alwaysBounceVertical = true
         tv.keyboardDismissMode = .interactive
@@ -37,7 +40,7 @@ struct EditorTextView: UIViewRepresentable {
         Self.updateTypingAttributes(for: tv)
         tv.setContentOffset(.zero, animated: false)
         if autoFocus {
-            DispatchQueue.main.async { tv.becomeFirstResponder() }
+            tv.focusWhenReady()
         }
         return tv
     }
@@ -47,9 +50,10 @@ struct EditorTextView: UIViewRepresentable {
         if uiView.contentInsetAdjustmentBehavior != .never {
             uiView.contentInsetAdjustmentBehavior = .never
         }
-        if abs(uiView.textContainerInset.top - topContentInset) > 0.5 {
-            uiView.textContainerInset.top = topContentInset
-        }
+        uiView.applyPaperChrome()
+        uiView.setBaseTextContainerInset(
+            UIEdgeInsets(top: topContentInset, left: 16, bottom: bottomContentInset, right: 16)
+        )
         if uiView.text != text {
             let cursor = uiView.selectedRange
             uiView.text = text
@@ -220,6 +224,10 @@ struct EditorTextView: UIViewRepresentable {
 /// past `triggerThreshold`, releases, and `onPullTrigger` fires.
 final class StyledTextView: UITextView {
     private let pullLabel = UILabel()
+    private var userInterfaceStyleRegistration: (any UITraitChangeRegistration)?
+    private var keyboardObservers: [NSObjectProtocol] = []
+    private var baseTextContainerInset = UIEdgeInsets(top: 8, left: 16, bottom: 40, right: 16)
+    private var keyboardOverlap: CGFloat = 0
     var lastStyledHeadingKey: String?
 
     /// Title shown in the overscroll area (e.g. "Read Mode" / "Exit Read Mode").
@@ -238,14 +246,129 @@ final class StyledTextView: UITextView {
 
     init() {
         super.init(frame: .zero, textContainer: nil)
+        applyPaperChrome()
         pullLabel.textColor = Theme.accentUIColor.withAlphaComponent(0.4)
         pullLabel.font = UIFont(name: "JetBrainsMono-Regular", size: 12)
             ?? UIFont.monospacedSystemFont(ofSize: 12, weight: .regular)
         pullLabel.textAlignment = .center
         addSubview(pullLabel)
+        userInterfaceStyleRegistration = registerForTraitChanges([UITraitUserInterfaceStyle.self]) {
+            (textView: StyledTextView, _) in
+            textView.applyPaperChrome()
+        }
+        observeKeyboard()
     }
 
     required init?(coder: NSCoder) { fatalError() }
+
+    deinit {
+        for observer in keyboardObservers {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        applyPaperChrome()
+        window?.backgroundColor = Theme.paperUIColor
+        window?.rootViewController?.view.backgroundColor = Theme.paperUIColor
+    }
+
+    func applyPaperChrome() {
+        let interfaceStyle: UIUserInterfaceStyle = (window?.traitCollection ?? traitCollection).userInterfaceStyle == .dark
+            ? .dark
+            : .light
+        backgroundColor = Theme.paperUIColor
+        isOpaque = true
+        keyboardAppearance = interfaceStyle == .dark ? .dark : .light
+    }
+
+    func setBaseTextContainerInset(_ inset: UIEdgeInsets) {
+        guard abs(baseTextContainerInset.top - inset.top) > 0.5
+            || abs(baseTextContainerInset.left - inset.left) > 0.5
+            || abs(baseTextContainerInset.bottom - inset.bottom) > 0.5
+            || abs(baseTextContainerInset.right - inset.right) > 0.5
+        else {
+            applyEffectiveInsets()
+            return
+        }
+
+        baseTextContainerInset = inset
+        applyEffectiveInsets()
+    }
+
+    private func observeKeyboard() {
+        let center = NotificationCenter.default
+        keyboardObservers = [
+            center.addObserver(
+                forName: UIResponder.keyboardWillChangeFrameNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] notification in
+                self?.updateKeyboardOverlap(from: notification)
+            },
+            center.addObserver(
+                forName: UIResponder.keyboardWillHideNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] notification in
+                self?.keyboardOverlap = 0
+                self?.animateInsets(with: notification)
+            },
+        ]
+    }
+
+    private func updateKeyboardOverlap(from notification: Notification) {
+        guard let window,
+              let keyboardFrame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect
+        else {
+            keyboardOverlap = 0
+            animateInsets(with: notification)
+            return
+        }
+
+        let keyboardInWindow = window.convert(keyboardFrame, from: nil)
+        let textViewInWindow = convert(bounds, to: window)
+        let overlap = max(0, textViewInWindow.maxY - keyboardInWindow.minY)
+        keyboardOverlap = min(bounds.height, overlap)
+        animateInsets(with: notification)
+    }
+
+    private func animateInsets(with notification: Notification) {
+        let duration = notification.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? TimeInterval ?? 0
+        let curveRaw = notification.userInfo?[UIResponder.keyboardAnimationCurveUserInfoKey] as? UInt ?? 0
+        var options = UIView.AnimationOptions(rawValue: curveRaw << 16)
+        options.insert(.beginFromCurrentState)
+
+        guard duration > 0 else {
+            applyEffectiveInsets()
+            return
+        }
+
+        UIView.animate(withDuration: duration, delay: 0, options: options) {
+            self.applyEffectiveInsets()
+            self.layoutIfNeeded()
+        }
+    }
+
+    private func applyEffectiveInsets() {
+        let effectiveBottom = baseTextContainerInset.bottom + keyboardOverlap
+        let effectiveInset = UIEdgeInsets(
+            top: baseTextContainerInset.top,
+            left: baseTextContainerInset.left,
+            bottom: effectiveBottom,
+            right: baseTextContainerInset.right
+        )
+
+        if abs(textContainerInset.top - effectiveInset.top) > 0.5
+            || abs(textContainerInset.left - effectiveInset.left) > 0.5
+            || abs(textContainerInset.bottom - effectiveInset.bottom) > 0.5
+            || abs(textContainerInset.right - effectiveInset.right) > 0.5 {
+            textContainerInset = effectiveInset
+        }
+
+        scrollIndicatorInsets = UIEdgeInsets(top: 0, left: 0, bottom: keyboardOverlap, right: 0)
+    }
 
     override func layoutSubviews() {
         super.layoutSubviews()
@@ -270,6 +393,22 @@ final class StyledTextView: UITextView {
     func handleEndDragging() {
         if contentOffset.y <= -triggerThreshold {
             onPullTrigger()
+        }
+    }
+
+    func focusWhenReady(attempt: Int = 0) {
+        let configuredDelay = ProcessInfo.processInfo.environment["DRIFT_FOCUS_DELAY_MS"]
+            .flatMap(Double.init)
+            .map { max(0, $0) / 1000 } ?? 0
+        let delay = attempt == 0 ? configuredDelay : 0.05
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+            guard let self, self.isEditable else { return }
+            if self.window != nil {
+                self.applyPaperChrome()
+                self.becomeFirstResponder()
+            } else if attempt < 10 {
+                self.focusWhenReady(attempt: attempt + 1)
+            }
         }
     }
 }

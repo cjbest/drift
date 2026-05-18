@@ -7,10 +7,12 @@ struct NoteEditorView: View {
 
     let note: Note
     let autoFocus: Bool
+    let deleteIfEmptyOnClose: Bool
     /// Called when the user taps the back chevron. The parent clears its
     /// selection state so the NavigationSplitView pops back to the list on
     /// iPhone and shows `detailEmpty` on iPad.
     let onDismiss: (() -> Void)?
+    let onDiscardEmpty: ((Note) -> Void)?
     @State private var workingNote: Note
     @State private var text: String = ""
     @State private var initialText: String = ""
@@ -18,16 +20,24 @@ struct NoteEditorView: View {
     @State private var isReadMode: Bool = false
     @State private var scrollY: CGFloat = 0
 
-    init(note: Note, autoFocus: Bool = false, onDismiss: (() -> Void)? = nil) {
+    init(
+        note: Note,
+        autoFocus: Bool = false,
+        deleteIfEmptyOnClose: Bool = false,
+        onDismiss: (() -> Void)? = nil,
+        onDiscardEmpty: ((Note) -> Void)? = nil
+    ) {
+        let initial = (try? String(contentsOf: note.url, encoding: .utf8)) ?? ""
         self.note = note
-        self.autoFocus = autoFocus
+        self.autoFocus = autoFocus || initial.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        self.deleteIfEmptyOnClose = deleteIfEmptyOnClose
         self.onDismiss = onDismiss
+        self.onDiscardEmpty = onDiscardEmpty
         self._workingNote = State(initialValue: note)
         // Read file contents synchronously here so `text` is populated before
         // the push transition begins. Loading in `.onAppear` causes a visible
         // pop-in: the body and large italic title only render after the slide
         // settles, instead of riding in with the rest of the view.
-        let initial = (try? String(contentsOf: note.url, encoding: .utf8)) ?? ""
         self._text = State(initialValue: initial)
         self._initialText = State(initialValue: initial)
     }
@@ -42,6 +52,7 @@ struct NoteEditorView: View {
     var body: some View {
         GeometryReader { proxy in
             let topInset = windowSafeAreaTop(for: proxy)
+            let bottomInset = windowSafeAreaBottom(for: proxy)
 
             ZStack(alignment: .topLeading) {
                 EditorTextView(
@@ -49,6 +60,7 @@ struct NoteEditorView: View {
                     isEditable: !isReadMode,
                     autoFocus: autoFocus,
                     topContentInset: topInset + 70,
+                    bottomContentInset: 12,
                     onToggleReadMode: {
                         withAnimation(.easeInOut(duration: 0.2)) {
                             isReadMode.toggle()
@@ -56,20 +68,12 @@ struct NoteEditorView: View {
                     },
                     onScroll: { y in scrollY = y }
                 )
-                .ignoresSafeArea(.container, edges: .top)
+                .ignoresSafeArea(.container, edges: [.top, .bottom])
+                .ignoresSafeArea(.keyboard, edges: .bottom)
 
-                LinearGradient(
-                    stops: [
-                        .init(color: Theme.paper.opacity(0.92), location: 0),
-                        .init(color: Theme.paper.opacity(0.58), location: 0.58),
-                        .init(color: Theme.paper.opacity(0), location: 1),
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .frame(height: topInset + 88)
-                .ignoresSafeArea(.container, edges: .top)
-                .allowsHitTesting(false)
+                topGradient(topInset: topInset)
+                bottomGradient(bottomInset: bottomInset)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
 
                 floatingBackButton
                     .opacity(backButtonOpacity)
@@ -88,7 +92,8 @@ struct NoteEditorView: View {
                 }
             }
         }
-        .ignoresSafeArea(.container, edges: .top)
+        .ignoresSafeArea(.container, edges: [.top, .bottom])
+        .ignoresSafeArea(.keyboard, edges: .bottom)
         .background(Theme.paper.ignoresSafeArea())
         .background(SystemBackGestureEnabler())
         .toolbar(.visible, for: .navigationBar)
@@ -106,7 +111,9 @@ struct NoteEditorView: View {
         }
         .onDisappear {
             saveTask?.cancel()
-            if text != initialText {
+            if deleteIfEmptyOnClose && text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                onDiscardEmpty?(workingNote)
+            } else if text != initialText {
                 workingNote = store.saveContents(text, for: workingNote)
             }
             isReadMode = false
@@ -130,11 +137,55 @@ struct NoteEditorView: View {
         return UIDevice.current.userInterfaceIdiom == .phone ? 59 : 24
     }
 
+    private func windowSafeAreaBottom(for proxy: GeometryProxy) -> CGFloat {
+        if let windowInset = UIApplication.shared.connectedScenes
+            .compactMap({ ($0 as? UIWindowScene)?.keyWindow })
+            .first?
+            .safeAreaInsets
+            .bottom,
+           windowInset > 0 {
+            return windowInset
+        }
+
+        return proxy.safeAreaInsets.bottom
+    }
+
+    private func topGradient(topInset: CGFloat) -> some View {
+        LinearGradient(
+            stops: [
+                .init(color: Theme.paper.opacity(0.54), location: 0),
+                .init(color: Theme.paper.opacity(0.22), location: 0.58),
+                .init(color: Theme.paper.opacity(0), location: 1),
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .frame(height: topInset + 18)
+        .ignoresSafeArea(.container, edges: .top)
+        .allowsHitTesting(false)
+    }
+
+    private func bottomGradient(bottomInset: CGFloat) -> some View {
+        LinearGradient(
+            stops: [
+                .init(color: Theme.paper.opacity(0), location: 0),
+                .init(color: Theme.paper.opacity(0), location: 0.34),
+                .init(color: Theme.paper.opacity(0.46), location: 0.78),
+                .init(color: Theme.paper.opacity(0.90), location: 1),
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .frame(height: bottomInset + 24)
+        .ignoresSafeArea(.container, edges: .bottom)
+        .allowsHitTesting(false)
+    }
+
     private var floatingBackButton: some View {
         Button(action: dismissEditor) {
             Image(systemName: "chevron.left")
                 .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(Theme.accent)
+            .foregroundStyle(Theme.accent)
         }
         .accessibilityLabel("Back")
         .floatingGlassIconButton()
@@ -232,7 +283,7 @@ private struct FloatingGlassIconButtonStyle: ButtonStyle {
         configuration.label
             .frame(width: 44, height: 44)
             .contentShape(Circle())
-            .glassEffect(.regular.tint(Theme.paper.opacity(0.22)).interactive(), in: Circle())
+            .glassEffect(.regular.interactive(), in: Circle())
             .shadow(color: Theme.accent.opacity(0.10), radius: 20, x: 0, y: 10)
             .scaleEffect(configuration.isPressed ? 0.96 : 1)
     }

@@ -9,10 +9,13 @@ struct NoteListView: View {
     @State private var query = ""
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @FocusState private var searchFocused: Bool
+    @State private var deleteCandidate: Note?
+    @State private var openingNoteID: Note.ID?
     /// Note ID to auto-focus on appear — set when the user taps the compose
     /// button so the keyboard rises during the navigation push. Cleared as
     /// soon as the editor consumes it.
     @State private var pendingFocusID: Note.ID?
+    @State private var discardIfEmptyIDs: Set<Note.ID> = []
 
     private var hits: [Note] {
         store.search(query)
@@ -23,6 +26,16 @@ struct NoteListView: View {
             compactStack
         } else {
             splitView
+        }
+    }
+
+    private var deleteDialogPresented: Binding<Bool> {
+        Binding {
+            deleteCandidate != nil
+        } set: { isPresented in
+            if !isPresented {
+                deleteCandidate = nil
+            }
         }
     }
 
@@ -61,18 +74,49 @@ struct NoteListView: View {
         NoteEditorView(
             note: selectedNote,
             autoFocus: pendingFocusID == selectedNote.id,
-            onDismiss: usesSystemDismiss ? nil : closeEditor
+            deleteIfEmptyOnClose: discardIfEmptyIDs.contains(selectedNote.id),
+            onDismiss: usesSystemDismiss ? nil : closeEditor,
+            onDiscardEmpty: { discarded in
+                discardEmptyCreatedNote(discarded, originalID: selectedNote.id)
+            }
         )
         .id(selectedNote.id)
         .onAppear { pendingFocusID = nil }
     }
 
     private func open(_ note: Note) {
+        latchOpeningState(for: note)
+
+        if shouldAutofocus(note) {
+            pendingFocusID = note.id
+        } else if pendingFocusID == note.id {
+            pendingFocusID = nil
+        }
+
         if horizontalSizeClass == .compact {
             compactPath.append(note)
         } else {
             selectedNote = note
         }
+    }
+
+    private func latchOpeningState(for note: Note) {
+        openingNoteID = note.id
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+            if openingNoteID == note.id {
+                openingNoteID = nil
+            }
+        }
+    }
+
+    private func shouldAutofocus(_ note: Note) -> Bool {
+        if pendingFocusID == note.id {
+            return true
+        }
+
+        return store.readContents(of: note)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty
     }
 
     private func closeEditor() {
@@ -83,6 +127,38 @@ struct NoteListView: View {
         } else {
             selectedNote = nil
         }
+    }
+
+    private func markCreatedNote(_ note: Note) {
+        pendingFocusID = note.id
+        discardIfEmptyIDs.insert(note.id)
+    }
+
+    private func discardEmptyCreatedNote(_ note: Note, originalID: Note.ID) {
+        discardIfEmptyIDs.remove(originalID)
+        discardIfEmptyIDs.remove(note.id)
+        store.delete(note)
+    }
+
+    private func delete(_ note: Note) {
+        discardIfEmptyIDs.remove(note.id)
+        compactPath.removeAll { $0.id == note.id }
+        if selectedNote?.id == note.id {
+            selectedNote = nil
+        }
+        store.delete(note)
+    }
+
+    private func requestDelete(_ note: Note) {
+        if store.readContents(of: note).count > 5 {
+            deleteCandidate = note
+        } else {
+            delete(note)
+        }
+    }
+
+    private func copyContents(of note: Note) {
+        UIPasteboard.general.string = store.readContents(of: note)
     }
 
     private var compactHome: some View {
@@ -98,19 +174,19 @@ struct NoteListView: View {
                         list
                     }
                 }
-                .padding(.top, searching ? topInset + 68 : topInset + 154)
+                .padding(.top, topInset + 78)
                 .scrollEdgeEffectStyle(.soft, for: .top)
 
                 LinearGradient(
                     stops: [
-                        .init(color: Theme.paper.opacity(0.96), location: 0),
-                        .init(color: Theme.paper.opacity(searching ? 0.54 : 0.80), location: 0.60),
+                        .init(color: Theme.paper.opacity(0.52), location: 0),
+                        .init(color: Theme.paper.opacity(0.18), location: 0.70),
                         .init(color: Theme.paper.opacity(0), location: 1),
                     ],
                     startPoint: .top,
                     endPoint: .bottom
                 )
-                .frame(height: searching ? topInset + 94 : topInset + 188)
+                .frame(height: topInset + 20)
                 .ignoresSafeArea(.container, edges: .top)
                 .allowsHitTesting(false)
 
@@ -122,51 +198,35 @@ struct NoteListView: View {
     }
 
     private func compactChrome(topInset: CGFloat, searching: Bool) -> some View {
-        ZStack(alignment: .top) {
-            if !searching {
-                HStack {
-                    menuButton
+        GlassEffectContainer(spacing: 12) {
+            HStack(spacing: 12) {
+                menuButton
 
-                    Spacer()
+                searchField
+                    .frame(maxWidth: .infinity)
 
-                    Text("Drift")
-                        .font(.custom("Newsreader16pt-Italic", size: 22))
-                        .foregroundStyle(Theme.ink)
-
-                    Spacer()
-
-                    newNoteButton
-                }
-                .frame(height: 44)
-                .padding(.horizontal, 18)
-                .padding(.top, topInset + 12)
-                .transition(.opacity)
-            }
-
-            GlassEffectContainer(spacing: 12) {
-                HStack(spacing: 12) {
-                    searchField
-
-                    if searching {
-                        Button {
-                            query = ""
-                            searchFocused = false
-                        } label: {
-                            Image(systemName: "xmark")
-                                .font(.system(size: 18, weight: .semibold))
-                                .foregroundStyle(Theme.ink.opacity(0.82))
-                        }
-                        .accessibilityLabel("Cancel Search")
-                        .floatingGlassIconButton()
-                        .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                if searching {
+                    Button {
+                        query = ""
+                        searchFocused = false
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(Theme.ink.opacity(0.82))
                     }
+                    .accessibilityLabel("Cancel Search")
+                    .floatingGlassIconButton()
+                    .transition(.opacity.combined(with: .scale(scale: 0.92)))
+                } else {
+                    newNoteButton
+                        .transition(.opacity.combined(with: .scale(scale: 0.92)))
                 }
             }
-            .padding(.horizontal, 18)
-            .padding(.top, topInset + (searching ? 6 : 82))
         }
+        .padding(.horizontal, 18)
+        .padding(.top, topInset + 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .animation(.easeInOut(duration: 0.18), value: searching)
+        .animation(.smooth(duration: 0.22), value: searching)
     }
 
     private var menuButton: some View {
@@ -185,7 +245,7 @@ struct NoteListView: View {
     private var newNoteButton: some View {
         Button {
             if let note = store.createNote() {
-                pendingFocusID = note.id
+                markCreatedNote(note)
                 searchFocused = false
                 query = ""
                 open(note)
@@ -229,7 +289,7 @@ struct NoteListView: View {
         .padding(.horizontal, 16)
         .frame(height: 52)
         .contentShape(Capsule())
-        .glassEffect(.regular.tint(Theme.paper.opacity(0.20)).interactive(), in: Capsule())
+        .glassEffect(.regular.interactive(), in: Capsule())
     }
 
     private func windowSafeAreaTop(for proxy: GeometryProxy) -> CGFloat {
@@ -296,7 +356,7 @@ struct NoteListView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     if let note = store.createNote() {
-                        pendingFocusID = note.id
+                        markCreatedNote(note)
                         open(note)
                     }
                 } label: {
@@ -313,11 +373,19 @@ struct NoteListView: View {
     private var list: some View {
         List {
             ForEach(hits) { note in
-                SearchableNoteRow(note: note) { picked in
-                    query = ""
-                    searchFocused = false
-                    open(picked)
-                }
+                SearchableNoteRow(
+                    note: note,
+                    isOpening: openingNoteID == note.id,
+                    onPick: { picked in
+                        query = ""
+                        searchFocused = false
+                        open(picked)
+                    },
+                    onDeleteRequest: requestDelete,
+                    onCopy: { picked in
+                        copyContents(of: picked)
+                    }
+                )
                 .listRowBackground(Theme.paper)
                 .listRowSeparatorTint(Theme.hairline)
                 .listRowSeparator(.hidden, edges: .top)
@@ -328,6 +396,21 @@ struct NoteListView: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .background(Theme.paper)
+        .alert("Delete Note?", isPresented: deleteDialogPresented) {
+            Button("Delete", role: .destructive) {
+                if let note = deleteCandidate {
+                    delete(note)
+                }
+                deleteCandidate = nil
+            }
+            Button("Cancel", role: .cancel) {
+                deleteCandidate = nil
+            }
+        } message: {
+            if let note = deleteCandidate {
+                Text("Delete \"\(note.title)\" from your notes folder. This cannot be undone.")
+            }
+        }
     }
 
     private var detailEmpty: some View {
@@ -440,7 +523,10 @@ private struct NoteRow: View {
 /// higher than the back chevron.
 private struct SearchableNoteRow: View {
     let note: Note
+    let isOpening: Bool
     let onPick: (Note) -> Void
+    let onDeleteRequest: (Note) -> Void
+    let onCopy: (Note) -> Void
     @Environment(\.dismissSearch) private var dismissSearch
 
     var body: some View {
@@ -450,24 +536,30 @@ private struct SearchableNoteRow: View {
         } label: {
             NoteRow(note: note)
         }
-        .buttonStyle(RowPressStyle())
+        .buttonStyle(InstantRowButtonStyle(isLatched: isOpening))
+        .contextMenu {
+            Button("Copy Note", systemImage: "doc.on.doc") {
+                onCopy(note)
+            }
+
+            Button("Delete", systemImage: "trash", role: .destructive) {
+                onDeleteRequest(note)
+            }
+        }
     }
 }
 
-/// Button style for list rows: stretches the hit area to the full row,
-/// applies the visual padding the List would normally add, and tints
-/// sepia-on-press so users get tap feedback (the default `.plain` style
-/// strips it). The press feedback is rendered with no transition so the
-/// visual reaction lands in the same frame as touch-down — anything less
-/// feels sluggish.
-private struct RowPressStyle: ButtonStyle {
+private struct InstantRowButtonStyle: ButtonStyle {
+    let isLatched: Bool
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .padding(.horizontal, 18)
             .padding(.vertical, 18)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(configuration.isPressed ? Theme.accent.opacity(0.22) : Color.clear)
+            .background((configuration.isPressed || isLatched) ? Theme.accent.opacity(0.22) : Color.clear)
             .contentShape(Rectangle())
             .animation(nil, value: configuration.isPressed)
+            .animation(nil, value: isLatched)
     }
 }

@@ -24,9 +24,25 @@ final class DriftUITests: XCTestCase {
         try body.write(to: url, atomically: true, encoding: .utf8)
     }
 
+    private func seedEmptyNote(named fileName: String) throws {
+        let url = tempFolder.appendingPathComponent("\(fileName).md")
+        try "".write(to: url, atomically: true, encoding: .utf8)
+    }
+
     private func launchApp() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchEnvironment["DRIFT_TEST_FOLDER"] = tempFolder.path
+        app.launch()
+        return app
+    }
+
+    private func launchAppBackedByAppTemp(focusDelayMS: Int? = nil) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchEnvironment["DRIFT_TEST_FOLDER"] = "__APP_TEMP__"
+        app.launchEnvironment["DRIFT_RESET_TEST_FOLDER"] = "1"
+        if let focusDelayMS {
+            app.launchEnvironment["DRIFT_FOCUS_DELAY_MS"] = "\(focusDelayMS)"
+        }
         app.launch()
         return app
     }
@@ -115,5 +131,104 @@ final class DriftUITests: XCTestCase {
         let body = (try? String(contentsOf: renamed, encoding: .utf8)) ?? ""
         XCTAssertEqual(body, "Shopping list")
         XCTAssertFalse(FileManager.default.fileExists(atPath: tempFolder.appendingPathComponent("Untitled.md").path))
+    }
+
+    func testCreateEmptyNoteThenBackDeletesIt() throws {
+        let app = launchApp()
+        app.buttons["New Note"].tap()
+
+        let editor = app.textViews.firstMatch
+        XCTAssertTrue(editor.waitForExistence(timeout: 3))
+        app.buttons["Back"].tap()
+
+        Thread.sleep(forTimeInterval: 0.5)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: tempFolder.appendingPathComponent("Untitled.md").path))
+        XCTAssertTrue(app.staticTexts["No notes yet"].waitForExistence(timeout: 2))
+    }
+
+    func testOpeningEmptyNoteAutofocusesEditor() throws {
+        try seedEmptyNote(named: "Blank")
+
+        let app = launchApp()
+        let fallbackRow = app.staticTexts["Blank"]
+        let untitledRow = app.staticTexts["Untitled"]
+        XCTAssertTrue(fallbackRow.waitForExistence(timeout: 2) || untitledRow.waitForExistence(timeout: 3))
+        (fallbackRow.exists ? fallbackRow : untitledRow).tap()
+
+        let editor = app.textViews.firstMatch
+        XCTAssertTrue(editor.waitForExistence(timeout: 3))
+        Thread.sleep(forTimeInterval: 0.4)
+        editor.typeText("Empty opened")
+
+        Thread.sleep(forTimeInterval: 1.0)
+
+        let renamed = tempFolder.appendingPathComponent("Empty opened.md")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: renamed.path))
+    }
+
+    func testLongPressMenuDeletesNoteAfterConfirmation() throws {
+        try seed(title: "Delete Me", extraBody: "This should go away.")
+
+        let app = launchApp()
+        let row = app.staticTexts["Delete Me"]
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        row.press(forDuration: 1.0)
+
+        let deleteMenuItem = app.buttons["Delete"]
+        XCTAssertTrue(deleteMenuItem.waitForExistence(timeout: 2))
+        deleteMenuItem.tap()
+        XCTAssertFalse(app.textViews.firstMatch.exists)
+
+        let alert = app.alerts["Delete Note?"]
+        XCTAssertTrue(alert.waitForExistence(timeout: 2))
+        alert.buttons["Delete"].tap()
+
+        Thread.sleep(forTimeInterval: 0.5)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: tempFolder.appendingPathComponent("Delete Me.md").path))
+        XCTAssertFalse(row.exists)
+    }
+
+    func testLongPressMenuDeletesShortNoteWithoutConfirmation() throws {
+        try seed(title: "Short")
+
+        let app = launchApp()
+        let row = app.staticTexts["Short"]
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        row.press(forDuration: 1.0)
+
+        let deleteMenuItem = app.buttons["Delete"]
+        XCTAssertTrue(deleteMenuItem.waitForExistence(timeout: 2))
+        deleteMenuItem.tap()
+
+        XCTAssertFalse(app.alerts["Delete Note?"].waitForExistence(timeout: 0.7))
+        XCTAssertFalse(app.textViews.firstMatch.exists)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: tempFolder.appendingPathComponent("Short.md").path))
+        XCTAssertFalse(row.exists)
+    }
+
+    func testCaptureKeyboardPresentationFrames() throws {
+        guard ProcessInfo.processInfo.environment["DRIFT_CAPTURE_KEYBOARD"] == "1" else {
+            throw XCTSkip("Set DRIFT_CAPTURE_KEYBOARD=1 to capture keyboard presentation frames.")
+        }
+
+        let focusDelayMS = ProcessInfo.processInfo.environment["DRIFT_CAPTURE_FOCUS_DELAY_MS"]
+            .flatMap(Int.init) ?? 350
+        let frameCount = ProcessInfo.processInfo.environment["DRIFT_CAPTURE_FRAME_COUNT"]
+            .flatMap(Int.init) ?? 72
+
+        let app = launchAppBackedByAppTemp(focusDelayMS: focusDelayMS)
+        app.buttons["New Note"].tap()
+
+        for index in 0..<frameCount {
+            let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+            shot.name = String(format: "keyboard-%02d", index)
+            shot.lifetime = .keepAlways
+            add(shot)
+            Thread.sleep(forTimeInterval: 1.0 / 30.0)
+        }
+
+        XCTAssertTrue(app.textViews.firstMatch.waitForExistence(timeout: 3))
     }
 }
