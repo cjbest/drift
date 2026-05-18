@@ -11,16 +11,20 @@ struct EditorTextView: UIViewRepresentable {
     @Binding var text: String
     let isEditable: Bool
     var autoFocus: Bool = false
+    var topContentInset: CGFloat = 8
     var onToggleReadMode: () -> Void = {}
+    var onScroll: (CGFloat) -> Void = { _ in }
 
     func makeUIView(context: Context) -> StyledTextView {
         let tv = StyledTextView()
         tv.delegate = context.coordinator
-        tv.font = Self.bodyFont
+        tv.font = text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? Self.headingFont
+            : Self.bodyFont
         tv.textColor = Theme.inkUIColor
         tv.tintColor = Theme.accentUIColor
         tv.backgroundColor = .clear
-        tv.textContainerInset = UIEdgeInsets(top: 8, left: 16, bottom: 40, right: 16)
+        tv.textContainerInset = UIEdgeInsets(top: topContentInset, left: 16, bottom: 40, right: 16)
         tv.contentInsetAdjustmentBehavior = .never
         tv.alwaysBounceVertical = true
         tv.keyboardDismissMode = .interactive
@@ -28,8 +32,9 @@ struct EditorTextView: UIViewRepresentable {
         tv.isEditable = isEditable
         tv.isSelectable = isEditable
         configurePull(on: tv)
-        Self.applyFirstLineHeading(to: tv)
+        Self.applyFirstLineHeading(to: tv, force: true)
         tv.selectedRange = NSRange(location: 0, length: 0)
+        Self.updateTypingAttributes(for: tv)
         tv.setContentOffset(.zero, animated: false)
         if autoFocus {
             DispatchQueue.main.async { tv.becomeFirstResponder() }
@@ -38,8 +43,12 @@ struct EditorTextView: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: StyledTextView, context: Context) {
+        context.coordinator.update(self)
         if uiView.contentInsetAdjustmentBehavior != .never {
             uiView.contentInsetAdjustmentBehavior = .never
+        }
+        if abs(uiView.textContainerInset.top - topContentInset) > 0.5 {
+            uiView.textContainerInset.top = topContentInset
         }
         if uiView.text != text {
             let cursor = uiView.selectedRange
@@ -48,7 +57,7 @@ struct EditorTextView: UIViewRepresentable {
                 location: min(cursor.location, (uiView.text as NSString).length),
                 length: 0
             )
-            Self.applyFirstLineHeading(to: uiView)
+            Self.applyFirstLineHeading(to: uiView, force: true)
         }
         if uiView.isEditable != isEditable {
             uiView.isEditable = isEditable
@@ -63,8 +72,14 @@ struct EditorTextView: UIViewRepresentable {
 
     final class Coordinator: NSObject, UITextViewDelegate {
         private var parent: EditorTextView
+        private var restingOffsetY: CGFloat?
+        private var lastReportedScrollY: CGFloat?
 
         init(_ parent: EditorTextView) {
+            self.parent = parent
+        }
+
+        func update(_ parent: EditorTextView) {
             self.parent = parent
         }
 
@@ -73,8 +88,21 @@ struct EditorTextView: UIViewRepresentable {
             EditorTextView.applyFirstLineHeading(to: textView)
         }
 
+        func textViewDidChangeSelection(_ textView: UITextView) {
+            EditorTextView.updateTypingAttributes(for: textView)
+        }
+
         func scrollViewDidScroll(_ scrollView: UIScrollView) {
             (scrollView as? StyledTextView)?.handleScroll()
+            if restingOffsetY == nil, scrollView.contentOffset.y >= 0 {
+                restingOffsetY = scrollView.contentOffset.y
+            }
+            let relativeY = max(0, scrollView.contentOffset.y - (restingOffsetY ?? 0))
+            let clampedY = min(relativeY, 76)
+            if lastReportedScrollY.map({ abs($0 - clampedY) > 2 }) ?? true {
+                lastReportedScrollY = clampedY
+                parent.onScroll(clampedY)
+            }
         }
 
         func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
@@ -105,20 +133,65 @@ struct EditorTextView: UIViewRepresentable {
         return style
     }
 
-    static func applyFirstLineHeading(to textView: UITextView) {
+    static func applyFirstLineHeading(to textView: UITextView, force: Bool = false) {
         let storage = textView.textStorage
         let full = NSRange(location: 0, length: storage.length)
-        guard full.length > 0 else { return }
+        guard full.length > 0 else {
+            (textView as? StyledTextView)?.lastStyledHeadingKey = nil
+            updateTypingAttributes(for: textView)
+            return
+        }
+
+        let firstLine = firstNonBlankLineRange(in: textView.text ?? "")
+        let headingKey = firstLine.map { range in
+            let ns = (textView.text ?? "") as NSString
+            return "\(range.location):\(range.length):\(ns.substring(with: range))"
+        } ?? "none"
+
+        if !force,
+           (textView as? StyledTextView)?.lastStyledHeadingKey == headingKey {
+            updateTypingAttributes(for: textView)
+            return
+        }
 
         storage.beginEditing()
         storage.removeAttribute(.paragraphStyle, range: full)
         storage.addAttribute(.font, value: bodyFont, range: full)
         storage.addAttribute(.foregroundColor, value: Theme.inkUIColor, range: full)
-        if let firstLine = firstNonBlankLineRange(in: textView.text ?? "") {
+        if let firstLine {
             storage.addAttribute(.font, value: headingFont, range: firstLine)
             storage.addAttribute(.paragraphStyle, value: headingParagraphStyle, range: firstLine)
         }
         storage.endEditing()
+        (textView as? StyledTextView)?.lastStyledHeadingKey = headingKey
+        updateTypingAttributes(for: textView)
+    }
+
+    static func updateTypingAttributes(for textView: UITextView) {
+        let text = textView.text ?? ""
+        let selectedLocation = textView.selectedRange.location
+        let headingRange = firstNonBlankLineRange(in: text)
+        let useHeading: Bool
+
+        if text.isEmpty || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            useHeading = true
+        } else if let headingRange {
+            useHeading = selectedLocation <= headingRange.location + headingRange.length
+        } else {
+            useHeading = false
+        }
+
+        var attributes: [NSAttributedString.Key: Any] = [
+            .font: useHeading ? headingFont : bodyFont,
+            .foregroundColor: Theme.inkUIColor,
+        ]
+        if useHeading {
+            attributes[.paragraphStyle] = headingParagraphStyle
+        }
+        if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            textView.font = headingFont
+        }
+        textView.typingAttributes = attributes
     }
 
     private static func firstNonBlankLineRange(in text: String) -> NSRange? {
@@ -147,6 +220,7 @@ struct EditorTextView: UIViewRepresentable {
 /// past `triggerThreshold`, releases, and `onPullTrigger` fires.
 final class StyledTextView: UITextView {
     private let pullLabel = UILabel()
+    var lastStyledHeadingKey: String?
 
     /// Title shown in the overscroll area (e.g. "Read Mode" / "Exit Read Mode").
     var pullTitle: String = "" {

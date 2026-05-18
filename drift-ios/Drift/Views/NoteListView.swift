@@ -1,10 +1,14 @@
 import SwiftUI
+import UIKit
 
 struct NoteListView: View {
     @Environment(NoteStore.self) private var store
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var selectedNote: Note?
+    @State private var compactPath: [Note] = []
     @State private var query = ""
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
+    @FocusState private var searchFocused: Bool
     /// Note ID to auto-focus on appear — set when the user taps the compose
     /// button so the keyboard rises during the navigation push. Cleared as
     /// soon as the editor consumes it.
@@ -15,17 +19,33 @@ struct NoteListView: View {
     }
 
     var body: some View {
+        if horizontalSizeClass == .compact {
+            compactStack
+        } else {
+            splitView
+        }
+    }
+
+    private var compactStack: some View {
+        NavigationStack(path: $compactPath) {
+            compactHome
+                .navigationDestination(for: Note.self) { note in
+                    editor(for: note, usesSystemDismiss: true)
+                }
+            .toolbar(.hidden, for: .navigationBar)
+        }
+        .onAppear {
+            store.loadNotes()
+            autoOpenIfRequested()
+        }
+    }
+
+    private var splitView: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             sidebar
         } detail: {
             if let selectedNote {
-                NoteEditorView(
-                    note: selectedNote,
-                    autoFocus: pendingFocusID == selectedNote.id,
-                    onDismiss: { self.selectedNote = nil }
-                )
-                .id(selectedNote.id)
-                .onAppear { pendingFocusID = nil }
+                editor(for: selectedNote)
             } else {
                 detailEmpty
             }
@@ -37,13 +57,208 @@ struct NoteListView: View {
         }
     }
 
+    private func editor(for selectedNote: Note, usesSystemDismiss: Bool = false) -> some View {
+        NoteEditorView(
+            note: selectedNote,
+            autoFocus: pendingFocusID == selectedNote.id,
+            onDismiss: usesSystemDismiss ? nil : closeEditor
+        )
+        .id(selectedNote.id)
+        .onAppear { pendingFocusID = nil }
+    }
+
+    private func open(_ note: Note) {
+        if horizontalSizeClass == .compact {
+            compactPath.append(note)
+        } else {
+            selectedNote = note
+        }
+    }
+
+    private func closeEditor() {
+        if horizontalSizeClass == .compact {
+            if !compactPath.isEmpty {
+                compactPath.removeLast()
+            }
+        } else {
+            selectedNote = nil
+        }
+    }
+
+    private var compactHome: some View {
+        GeometryReader { proxy in
+            let topInset = windowSafeAreaTop(for: proxy)
+            let searching = searchFocused || !query.isEmpty
+
+            ZStack(alignment: .top) {
+                Group {
+                    if store.notes.isEmpty {
+                        emptyState
+                    } else {
+                        list
+                    }
+                }
+                .padding(.top, searching ? topInset + 68 : topInset + 154)
+                .scrollEdgeEffectStyle(.soft, for: .top)
+
+                LinearGradient(
+                    stops: [
+                        .init(color: Theme.paper.opacity(0.96), location: 0),
+                        .init(color: Theme.paper.opacity(searching ? 0.54 : 0.80), location: 0.60),
+                        .init(color: Theme.paper.opacity(0), location: 1),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: searching ? topInset + 94 : topInset + 188)
+                .ignoresSafeArea(.container, edges: .top)
+                .allowsHitTesting(false)
+
+                compactChrome(topInset: topInset, searching: searching)
+            }
+            .background(Theme.paper.ignoresSafeArea())
+            .ignoresSafeArea(.container, edges: .top)
+        }
+    }
+
+    private func compactChrome(topInset: CGFloat, searching: Bool) -> some View {
+        ZStack(alignment: .top) {
+            if !searching {
+                HStack {
+                    menuButton
+
+                    Spacer()
+
+                    Text("Drift")
+                        .font(.custom("Newsreader16pt-Italic", size: 22))
+                        .foregroundStyle(Theme.ink)
+
+                    Spacer()
+
+                    newNoteButton
+                }
+                .frame(height: 44)
+                .padding(.horizontal, 18)
+                .padding(.top, topInset + 12)
+                .transition(.opacity)
+            }
+
+            GlassEffectContainer(spacing: 12) {
+                HStack(spacing: 12) {
+                    searchField
+
+                    if searching {
+                        Button {
+                            query = ""
+                            searchFocused = false
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundStyle(Theme.ink.opacity(0.82))
+                        }
+                        .accessibilityLabel("Cancel Search")
+                        .floatingGlassIconButton()
+                        .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                    }
+                }
+            }
+            .padding(.horizontal, 18)
+            .padding(.top, topInset + (searching ? 6 : 82))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .animation(.easeInOut(duration: 0.18), value: searching)
+    }
+
+    private var menuButton: some View {
+        Menu {
+            Button("Refresh", systemImage: "arrow.clockwise") { store.loadNotes() }
+            Button("Change Folder…", systemImage: "folder") { store.clearFolder() }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(Theme.accent)
+        }
+        .accessibilityLabel("More")
+        .floatingGlassIconButton()
+    }
+
+    private var newNoteButton: some View {
+        Button {
+            if let note = store.createNote() {
+                pendingFocusID = note.id
+                searchFocused = false
+                query = ""
+                open(note)
+            }
+        } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 26, weight: .regular))
+                .foregroundStyle(Theme.accent)
+        }
+        .accessibilityLabel("New Note")
+        .keyboardShortcut("n", modifiers: .command)
+        .floatingGlassIconButton()
+    }
+
+    private var searchField: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 18, weight: .regular))
+                .foregroundStyle(Theme.accent)
+
+            TextField("Search notes", text: $query)
+                .font(Theme.searchPlaceholder())
+                .foregroundStyle(Theme.ink)
+                .focused($searchFocused)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .submitLabel(.search)
+
+            if !query.isEmpty {
+                Button {
+                    query = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(Theme.ink.opacity(0.38))
+                }
+                .accessibilityLabel("Clear Search")
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 16)
+        .frame(height: 52)
+        .contentShape(Capsule())
+        .glassEffect(.regular.tint(Theme.paper.opacity(0.20)).interactive(), in: Capsule())
+    }
+
+    private func windowSafeAreaTop(for proxy: GeometryProxy) -> CGFloat {
+        if let windowInset = UIApplication.shared.connectedScenes
+            .compactMap({ ($0 as? UIWindowScene)?.keyWindow })
+            .first?
+            .safeAreaInsets
+            .top,
+           windowInset > 0 {
+            return windowInset
+        }
+
+        if proxy.safeAreaInsets.top > 0 {
+            return proxy.safeAreaInsets.top
+        }
+
+        return 59
+    }
+
     private func autoOpenIfRequested() {
         #if DEBUG
         guard selectedNote == nil,
+              compactPath.isEmpty,
               let target = ProcessInfo.processInfo.environment["DRIFT_AUTO_OPEN"]
         else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            selectedNote = store.notes.first { $0.title == target }
+            if let note = store.notes.first(where: { $0.title == target }) {
+                open(note)
+            }
         }
         #endif
     }
@@ -82,7 +297,7 @@ struct NoteListView: View {
                 Button {
                     if let note = store.createNote() {
                         pendingFocusID = note.id
-                        selectedNote = note
+                        open(note)
                     }
                 } label: {
                     Image(systemName: "plus")
@@ -96,11 +311,12 @@ struct NoteListView: View {
     }
 
     private var list: some View {
-        List(selection: $selectedNote) {
+        List {
             ForEach(hits) { note in
                 SearchableNoteRow(note: note) { picked in
                     query = ""
-                    selectedNote = picked
+                    searchFocused = false
+                    open(picked)
                 }
                 .listRowBackground(Theme.paper)
                 .listRowSeparatorTint(Theme.hairline)

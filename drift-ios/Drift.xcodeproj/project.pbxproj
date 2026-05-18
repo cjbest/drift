@@ -18,7 +18,6 @@
 		4F4B62250E53E5D2B993B779 /* JetBrainsMono-Italic.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 418AFD312D471ECC149A5D17 /* JetBrainsMono-Italic.ttf */; };
 		7371B021000134AEC703DFA5 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 700E71AD936866504EB358D8 /* Assets.xcassets */; };
 		7C50C70689D09384C1EBAF65 /* DriftUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7752D6432DE02B67907C5B8B /* DriftUITests.swift */; };
-		7DD5B3B0802C1E3ADB5D92DE /* EditorChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5092C2C7014A82A6AEDE455 /* EditorChrome.swift */; };
 		8B050B5BC292813D718DD13E /* NoteListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DA896751F9219F54C331D63 /* NoteListView.swift */; };
 		988563B226383EAA4DECDF85 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67F7F2782E0E89288BF90445 /* ContentView.swift */; };
 		B6B1640AEB6154CAEE950E20 /* Note.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FE374511B001A93F6053A96 /* Note.swift */; };
@@ -64,7 +63,6 @@
 		84E15134154EEDC11DF745B9 /* EditorTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorTextView.swift; sourceTree = "<group>"; };
 		8DF71CBD2827ED789FBFBC18 /* NoteEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteEditorView.swift; sourceTree = "<group>"; };
 		B35664720340419D225635E0 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
-		C5092C2C7014A82A6AEDE455 /* EditorChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorChrome.swift; sourceTree = "<group>"; };
 		DC6712FB46945A6FE1AAB0E0 /* DriftApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriftApp.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -101,7 +99,6 @@
 			isa = PBXGroup;
 			children = (
 				67F7F2782E0E89288BF90445 /* ContentView.swift */,
-				C5092C2C7014A82A6AEDE455 /* EditorChrome.swift */,
 				84E15134154EEDC11DF745B9 /* EditorTextView.swift */,
 				5E8B49F7556182914855734B /* FolderPickerView.swift */,
 				8DF71CBD2827ED789FBFBC18 /* NoteEditorView.swift */,
@@ -284,7 +281,6 @@
 			files = (
 				988563B226383EAA4DECDF85 /* ContentView.swift in Sources */,
 				4C31E5F32057829ABAA0840A /* DriftApp.swift in Sources */,
-				7DD5B3B0802C1E3ADB5D92DE /* EditorChrome.swift in Sources */,
 				0B236A849636CFEB331A01C3 /* EditorTextView.swift in Sources */,
 				09EB7141697E34BBCEE8B986 /* FolderPickerView.swift in Sources */,
 				26B28A7F9775D3DF1181C835 /* FontLoader.swift in Sources */,
@@ -413,7 +409,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 0.1;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
@@ -518,7 +514,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 0.1;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;

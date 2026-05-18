@@ -54,6 +54,25 @@ final class DriftUITests: XCTestCase {
         XCTAssertEqual(editor.value as? String, "Welcome\nA note editor.")
     }
 
+    func testSystemBackGestureReturnsToList() throws {
+        try seed(title: "Swipe Back", extraBody: "The native edge gesture should pop.")
+
+        let app = launchApp()
+        let row = app.staticTexts["Swipe Back"]
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        row.tap()
+
+        let editor = app.textViews.firstMatch
+        XCTAssertTrue(editor.waitForExistence(timeout: 3))
+
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.50))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.50))
+        start.press(forDuration: 0.05, thenDragTo: end)
+
+        XCTAssertTrue(row.waitForExistence(timeout: 2))
+        XCTAssertFalse(editor.exists)
+    }
+
     func testCaptureScreenshots() throws {
         try seed(title: "Welcome to Drift", extraBody: "\nA simple note editor for iOS.\n\n- Notes sync via iCloud Drive\n- Each note is a plain `.md` file\n- Auto-saves as you type")
         try seed(title: "Grocery list", extraBody: "- milk\n- bread\n- coffee beans\n- eggs")
