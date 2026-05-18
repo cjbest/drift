@@ -90,10 +90,12 @@ struct EditorTextView: UIViewRepresentable {
         func textViewDidChange(_ textView: UITextView) {
             parent.text = textView.text ?? ""
             EditorTextView.applyFirstLineHeading(to: textView)
+            (textView as? StyledTextView)?.scheduleCaretVisibilityUpdate()
         }
 
         func textViewDidChangeSelection(_ textView: UITextView) {
             EditorTextView.updateTypingAttributes(for: textView)
+            (textView as? StyledTextView)?.scheduleCaretVisibilityUpdate()
         }
 
         func scrollViewDidScroll(_ scrollView: UIScrollView) {
@@ -228,6 +230,8 @@ final class StyledTextView: UITextView {
     private var keyboardObservers: [NSObjectProtocol] = []
     private var baseTextContainerInset = UIEdgeInsets(top: 8, left: 16, bottom: 40, right: 16)
     private var keyboardOverlap: CGFloat = 0
+    private var keyboardTopInWindow: CGFloat?
+    private var pendingCaretVisibilityUpdate = false
     var lastStyledHeadingKey: String?
 
     /// Title shown in the overscroll area (e.g. "Read Mode" / "Exit Read Mode").
@@ -313,6 +317,7 @@ final class StyledTextView: UITextView {
                 queue: .main
             ) { [weak self] notification in
                 self?.keyboardOverlap = 0
+                self?.keyboardTopInWindow = nil
                 self?.animateInsets(with: notification)
             },
         ]
@@ -323,6 +328,7 @@ final class StyledTextView: UITextView {
               let keyboardFrame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect
         else {
             keyboardOverlap = 0
+            keyboardTopInWindow = nil
             animateInsets(with: notification)
             return
         }
@@ -331,6 +337,7 @@ final class StyledTextView: UITextView {
         let textViewInWindow = convert(bounds, to: window)
         let overlap = max(0, textViewInWindow.maxY - keyboardInWindow.minY)
         keyboardOverlap = min(bounds.height, overlap)
+        keyboardTopInWindow = keyboardOverlap > 0 ? keyboardInWindow.minY : nil
         animateInsets(with: notification)
     }
 
@@ -342,17 +349,23 @@ final class StyledTextView: UITextView {
 
         guard duration > 0 else {
             applyEffectiveInsets()
+            keepCaretVisible(animated: false)
             return
         }
 
         UIView.animate(withDuration: duration, delay: 0, options: options) {
             self.applyEffectiveInsets()
             self.layoutIfNeeded()
+            self.keepCaretVisible(animated: false)
+        } completion: { _ in
+            self.keepCaretVisible(animated: false)
         }
     }
 
     private func applyEffectiveInsets() {
-        let effectiveBottom = baseTextContainerInset.bottom + keyboardOverlap
+        let lineHeight = max(font?.lineHeight ?? 0, typingAttributes[.font].flatMap { ($0 as? UIFont)?.lineHeight } ?? 0, 24)
+        let pageOverscroll = max(0, bounds.height - baseTextContainerInset.top - lineHeight)
+        let effectiveBottom = max(baseTextContainerInset.bottom + keyboardOverlap, pageOverscroll)
         let effectiveInset = UIEdgeInsets(
             top: baseTextContainerInset.top,
             left: baseTextContainerInset.left,
@@ -370,8 +383,55 @@ final class StyledTextView: UITextView {
         scrollIndicatorInsets = UIEdgeInsets(top: 0, left: 0, bottom: keyboardOverlap, right: 0)
     }
 
+    func scheduleCaretVisibilityUpdate(animated: Bool = false) {
+        guard !pendingCaretVisibilityUpdate else { return }
+        pendingCaretVisibilityUpdate = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.pendingCaretVisibilityUpdate = false
+            self.keepCaretVisible(animated: animated)
+        }
+    }
+
+    private func keepCaretVisible(animated: Bool) {
+        guard isEditable,
+              isFirstResponder,
+              keyboardOverlap > 0,
+              let window,
+              let selectedTextRange
+        else { return }
+
+        layoutManager.ensureLayout(for: textContainer)
+        layoutIfNeeded()
+
+        let caret = caretRect(for: selectedTextRange.end)
+        guard !caret.isNull, !caret.isInfinite, caret.height > 0 else { return }
+
+        let textViewInWindow = convert(bounds, to: window)
+        let caretInWindow = convert(caret, to: window)
+        let bottomLimit = min(keyboardTopInWindow ?? window.bounds.maxY, textViewInWindow.maxY) - 18
+        let topLimit = textViewInWindow.minY + 18
+
+        var nextOffset = contentOffset
+        if caretInWindow.maxY > bottomLimit {
+            nextOffset.y += caretInWindow.maxY - bottomLimit
+        } else if caretInWindow.minY < topLimit {
+            nextOffset.y -= topLimit - caretInWindow.minY
+        } else {
+            return
+        }
+
+        let minOffsetY = -contentInset.top
+        let maxOffsetY = max(minOffsetY, contentSize.height - bounds.height + contentInset.bottom)
+        nextOffset.y = min(max(nextOffset.y, minOffsetY), maxOffsetY)
+
+        guard abs(nextOffset.y - contentOffset.y) > 0.5 else { return }
+        setContentOffset(nextOffset, animated: animated)
+    }
+
     override func layoutSubviews() {
         super.layoutSubviews()
+        applyEffectiveInsets()
         let fitting = pullLabel.sizeThatFits(CGSize(width: bounds.width, height: 32))
         pullLabel.frame = CGRect(
             x: (bounds.width - fitting.width) / 2,
