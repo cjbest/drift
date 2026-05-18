@@ -12,17 +12,9 @@ settings:
     IPHONEOS_DEPLOYMENT_TARGET: "17.0"
     TARGETED_DEVICE_FAMILY: "1,2"
     ENABLE_PREVIEWS: YES
-    GENERATE_INFOPLIST_FILE: YES
     CURRENT_PROJECT_VERSION: 1
     MARKETING_VERSION: "0.1"
     PRODUCT_BUNDLE_IDENTIFIER: com.drift.notes
-    INFOPLIST_KEY_UILaunchScreen_Generation: YES
-    INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
-    INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
-    INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
-    INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace: YES
-    INFOPLIST_KEY_UIFileSharingEnabled: YES
-    INFOPLIST_KEY_CFBundleDisplayName: Drift
     ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
     DEVELOPMENT_TEAM: 7DGN24C3GR
@@ -39,6 +31,8 @@ targets:
     settings:
       base:
         PRODUCT_NAME: Drift
+        INFOPLIST_FILE: Drift/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
 
   DriftTests:
     type: bundle.unit-test

@@ -12,7 +12,10 @@ permissions:
 jobs:
   review:
     # Only run on PR comments (not issue comments) that mention @claude
-    if: github.event.issue.pull_request && contains(github.event.comment.body, '@claude')
+    if: |
+      github.event.issue.pull_request &&
+      contains(github.event.comment.body, '@claude') &&
+      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
     runs-on: macos-latest
     timeout-minutes: 30
 

@@ -26,6 +26,8 @@ dist-ssr
 # Playwright
 playwright-report
 test-results
+e2e/screenshots/*.gif
+e2e/screenshots/*.png
 
 # Local Claude settings
 .claude/settings.local.json

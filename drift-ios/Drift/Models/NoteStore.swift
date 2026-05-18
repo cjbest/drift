@@ -19,7 +19,16 @@ final class NoteStore {
 
     init() {
         if let testPath = ProcessInfo.processInfo.environment["DRIFT_TEST_FOLDER"] {
-            let url = URL(fileURLWithPath: testPath, isDirectory: true)
+            let url: URL
+            if testPath == "__APP_TEMP__" {
+                url = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("drift-ui-tests", isDirectory: true)
+                if ProcessInfo.processInfo.environment["DRIFT_RESET_TEST_FOLDER"] == "1" {
+                    try? FileManager.default.removeItem(at: url)
+                }
+            } else {
+                url = URL(fileURLWithPath: testPath, isDirectory: true)
+            }
             try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
             folderURL = url
             loadNotes()
