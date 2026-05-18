@@ -184,19 +184,19 @@ struct NoteListView: View {
                         list
                     }
                 }
-                .padding(.top, topInset + 78)
+                .safeAreaPadding(.top, topInset + 78)
                 .scrollEdgeEffectStyle(.soft, for: .top)
 
                 LinearGradient(
                     stops: [
-                        .init(color: Theme.paper.opacity(0.52), location: 0),
-                        .init(color: Theme.paper.opacity(0.18), location: 0.70),
+                        .init(color: Theme.paper.opacity(0.92), location: 0),
+                        .init(color: Theme.paper.opacity(0.55), location: 0.65),
                         .init(color: Theme.paper.opacity(0), location: 1),
                     ],
                     startPoint: .top,
                     endPoint: .bottom
                 )
-                .frame(height: topInset + 20)
+                .frame(height: topInset + 24)
                 .ignoresSafeArea(.container, edges: .top)
                 .allowsHitTesting(false)
 

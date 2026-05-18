@@ -208,6 +208,29 @@ final class DriftUITests: XCTestCase {
         XCTAssertFalse(row.exists)
     }
 
+    func testCaptureTopBarGlassWhileScrolled() throws {
+        for i in 1...40 {
+            try seed(title: String(format: "Note %02d", i), extraBody: "Body for note \(i).")
+        }
+
+        let app = launchApp()
+        XCTAssertTrue(app.staticTexts["Note 40"].waitForExistence(timeout: 5))
+
+        let table = app.collectionViews.firstMatch.exists ? app.collectionViews.firstMatch : app.tables.firstMatch
+        XCTAssertTrue(table.exists)
+
+        // Scroll the list up several times so the chrome floats over content.
+        for _ in 0..<3 {
+            table.swipeUp(velocity: .slow)
+        }
+        Thread.sleep(forTimeInterval: 0.5)
+
+        let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        shot.name = "topbar-glass-scrolled"
+        shot.lifetime = .keepAlways
+        add(shot)
+    }
+
     func testCaptureKeyboardPresentationFrames() throws {
         guard ProcessInfo.processInfo.environment["DRIFT_CAPTURE_KEYBOARD"] == "1" else {
             throw XCTSkip("Set DRIFT_CAPTURE_KEYBOARD=1 to capture keyboard presentation frames.")
