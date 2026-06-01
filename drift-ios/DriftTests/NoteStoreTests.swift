@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import UIKit
 @testable import Drift
 
 @MainActor
@@ -22,6 +23,34 @@ struct NoteStoreTests {
         store.loadNotes()
         await store.awaitEnrichmentForTesting()
         return store
+    }
+
+    // MARK: - Editor insets
+
+    @Test
+    func editorInsetUsesKeyboardAvoidanceInsteadOfPageOverscrollWhileKeyboardIsVisible() {
+        let base = UIEdgeInsets(top: 129, left: 16, bottom: 12, right: 16)
+        let inset = StyledTextView.effectiveTextContainerInset(
+            baseInset: base,
+            boundsHeight: 874,
+            lineHeight: 52,
+            keyboardOverlap: 336
+        )
+
+        #expect(inset.bottom == 348)
+    }
+
+    @Test
+    func editorInsetKeepsPageOverscrollWhenKeyboardIsHidden() {
+        let base = UIEdgeInsets(top: 129, left: 16, bottom: 12, right: 16)
+        let inset = StyledTextView.effectiveTextContainerInset(
+            baseInset: base,
+            boundsHeight: 874,
+            lineHeight: 52,
+            keyboardOverlap: 0
+        )
+
+        #expect(inset.bottom == 693)
     }
 
     // MARK: - Title derivation

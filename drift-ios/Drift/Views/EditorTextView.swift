@@ -364,13 +364,11 @@ final class StyledTextView: UITextView {
 
     private func applyEffectiveInsets() {
         let lineHeight = max(font?.lineHeight ?? 0, typingAttributes[.font].flatMap { ($0 as? UIFont)?.lineHeight } ?? 0, 24)
-        let pageOverscroll = max(0, bounds.height - baseTextContainerInset.top - lineHeight)
-        let effectiveBottom = max(baseTextContainerInset.bottom + keyboardOverlap, pageOverscroll)
-        let effectiveInset = UIEdgeInsets(
-            top: baseTextContainerInset.top,
-            left: baseTextContainerInset.left,
-            bottom: effectiveBottom,
-            right: baseTextContainerInset.right
+        let effectiveInset = Self.effectiveTextContainerInset(
+            baseInset: baseTextContainerInset,
+            boundsHeight: bounds.height,
+            lineHeight: lineHeight,
+            keyboardOverlap: keyboardOverlap
         )
 
         if abs(textContainerInset.top - effectiveInset.top) > 0.5
@@ -381,6 +379,26 @@ final class StyledTextView: UITextView {
         }
 
         scrollIndicatorInsets = UIEdgeInsets(top: 0, left: 0, bottom: keyboardOverlap, right: 0)
+    }
+
+    static func effectiveTextContainerInset(
+        baseInset: UIEdgeInsets,
+        boundsHeight: CGFloat,
+        lineHeight: CGFloat,
+        keyboardOverlap: CGFloat
+    ) -> UIEdgeInsets {
+        let keyboardBottom = baseInset.bottom + keyboardOverlap
+        let pageOverscroll = max(0, boundsHeight - baseInset.top - lineHeight)
+        let effectiveBottom = keyboardOverlap > 0
+            ? keyboardBottom
+            : max(keyboardBottom, pageOverscroll)
+
+        return UIEdgeInsets(
+            top: baseInset.top,
+            left: baseInset.left,
+            bottom: effectiveBottom,
+            right: baseInset.right
+        )
     }
 
     func scheduleCaretVisibilityUpdate(animated: Bool = false) {
