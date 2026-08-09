@@ -33,6 +33,15 @@ const blockquoteText = Decoration.mark({ class: 'blockquote-text' })
 const boldText = Decoration.mark({ class: 'bold-text' })
 const italicText = Decoration.mark({ class: 'italic-text' })
 
+// Rainbow text decorations - one decoration per hue value
+const rainbowDecorations = Array.from({ length: 360 }, (_, i) =>
+  Decoration.mark({
+    attributes: {
+      style: `color: hsl(${i}, 100%, 60%);`
+    }
+  })
+)
+
 // Line indent decorations are now created dynamically with pixel values
 // in indentHighlighter to work around WebKit text-indent rendering bugs
 
@@ -703,6 +712,52 @@ const selectionHighlighter = ViewPlugin.fromClass(class {
   decorations: v => v.decorations
 })
 
+// Rainbow text highlighter - applies a smooth rainbow gradient to all text
+const rainbowHighlighter = ViewPlugin.fromClass(class {
+  decorations: DecorationSet
+
+  constructor(view: EditorView) {
+    this.decorations = this.buildDecorations(view)
+  }
+
+  update(update: ViewUpdate) {
+    if (update.docChanged || update.viewportChanged) {
+      this.decorations = this.buildDecorations(update.view)
+    }
+  }
+
+  buildDecorations(view: EditorView): DecorationSet {
+    const builder = new RangeSetBuilder<Decoration>()
+    const doc = view.state.doc
+
+    // Track character position across the entire document
+    let charIndex = 0
+
+    for (let i = 1; i <= doc.lines; i++) {
+      const line = doc.line(i)
+      const text = line.text
+
+      // Apply rainbow color to each character in the line
+      for (let j = 0; j < text.length; j++) {
+        const char = text[j]
+        // Skip whitespace to avoid excessive decorations
+        if (char !== ' ' && char !== '\t') {
+          // Calculate hue based on character position (smooth gradient)
+          // Use a smaller multiplier for more subtle color changes
+          const hue = (charIndex * 8) % 360
+          const pos = line.from + j
+          builder.add(pos, pos + 1, rainbowDecorations[hue])
+        }
+        charIndex++
+      }
+    }
+
+    return builder.finish()
+  }
+}, {
+  decorations: v => v.decorations
+})
+
 interface EditorProps {
   content: string
   onChange: (content: string) => void
@@ -1050,6 +1105,7 @@ export function Editor(props: EditorProps) {
         EditorView.lineWrapping,
         scrollPastEnd(),
         EditorView.scrollMargins.of(() => ({ bottom: 50 })),
+        rainbowHighlighter,
         selectionHighlighter,
         firstLineHighlighter,
         checkboxHighlighter,
