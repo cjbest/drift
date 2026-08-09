@@ -7,6 +7,7 @@ import { readTextFile, writeTextFile, mkdir, exists, readDir, rename, stat } fro
 import { Editor } from './components/Editor'
 import { QuickOpen, getFilename, getPreview } from './components/QuickOpen'
 import type { NoteInfo } from './components/QuickOpen'
+import { DoomFace } from './components/DoomFace'
 import './App.css'
 
 const DRIFT_FOLDER = 'Drift'
@@ -521,6 +522,7 @@ function App() {
       <Show when={statusMessage()}>
         <div class="status-message">{statusMessage()}</div>
       </Show>
+      <DoomFace content={content()} />
     </div>
   )
 }

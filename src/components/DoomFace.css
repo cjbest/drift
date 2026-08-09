@@ -1,0 +1,97 @@
+.doom-face-container {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: var(--bg);
+  border: 2px solid var(--fg);
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  z-index: 100;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  backdrop-filter: blur(10px);
+  opacity: 0.9;
+  transition: opacity 0.2s;
+}
+
+.doom-face-container:hover {
+  opacity: 1;
+}
+
+.doom-face {
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  line-height: 1.2;
+  margin: 0;
+  white-space: pre;
+  font-weight: bold;
+  transition: color 0.3s;
+}
+
+.doom-face.healthy {
+  color: #4CAF50;
+}
+
+.doom-face.warning {
+  color: #FF9800;
+}
+
+.doom-face.danger {
+  color: #F44336;
+}
+
+.doom-face.dead {
+  color: #9E9E9E;
+}
+
+.doom-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+}
+
+.doom-status-text {
+  font-size: 14px;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  transition: color 0.3s;
+}
+
+.doom-status-text.healthy {
+  color: #4CAF50;
+}
+
+.doom-status-text.warning {
+  color: #FF9800;
+}
+
+.doom-status-text.danger {
+  color: #F44336;
+}
+
+.doom-status-text.dead {
+  color: #9E9E9E;
+}
+
+.doom-word-count {
+  font-size: 12px;
+  color: var(--fg);
+  opacity: 0.7;
+}
+
+/* Dark mode adjustments */
+:root[data-theme="dark"] .doom-face-container {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .doom-face-container {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  }
+}
