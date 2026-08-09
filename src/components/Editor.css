@@ -145,6 +145,10 @@ body.cmd-held .bare-url {
   font-weight: 600;
   font-size: 1.618em;
   line-height: 1.4;
+  text-decoration: underline;
+  text-decoration-color: rgba(128, 128, 128, 0.25);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
 }
 
 .editor-container {
