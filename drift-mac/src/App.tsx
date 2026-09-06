@@ -32,6 +32,8 @@ function App() {
     [notice, setNotice] = createSignal("");
   const [retryKind, setRetryKind] = createSignal<"save" | "notebook">("save");
   const [catalogueUnavailable, setCatalogueUnavailable] = createSignal(false);
+  const [initializingNotebook, setInitializingNotebook] = createSignal(false);
+  let initialization: Promise<void> | undefined;
   let pendingOpen: { path: string; id: string } | undefined;
   let retryOpenPath: string | undefined;
   const [scrolled, setScrolled] = createSignal(false),
@@ -61,8 +63,8 @@ function App() {
   const booted = new Promise<void>((resolve) => {
     finishBoot = resolve;
   });
+  const [leaving, setLeaving] = createSignal(false);
   let presented = false,
-    leaving = false,
     quitTask: Promise<void> | undefined,
     presentation: Promise<void> | undefined;
   function presentWindow() {
@@ -71,7 +73,7 @@ function App() {
     presentation = (async () => {
       // Font loading works while hidden; animation frames can be suspended.
       await document.fonts.load("italic 32px Newsreader").catch(() => {});
-      if (leaving) return;
+      if (leaving()) return;
       presented = await invoke<boolean>("window_ready", {
         dark: getComputedStyle(document.body).colorScheme === "dark",
       });
@@ -83,15 +85,19 @@ function App() {
     return presentation;
   }
   async function resumeAfterQuit() {
-    leaving = false;
+    setLeaving(false);
     quitTask = undefined;
     await booted;
     await presentWindow();
-    void refresh();
+    if (initializingNotebook()) {
+      await initialization;
+      if (initializingNotebook() && !leaving()) await initializeNotebook();
+    }
+    if (!initializingNotebook()) void refresh();
   }
   function requestQuit() {
     if (quitTask) return quitTask;
-    leaving = true;
+    setLeaving(true);
     indexRun++;
     clearTimeout(timer);
     quitTask = (async () => {
@@ -123,6 +129,11 @@ function App() {
     setError(String(e));
   }
   async function retryNotebook() {
+    if (initializingNotebook()) {
+      await initializeNotebook();
+      if (!initializingNotebook()) void refresh();
+      return;
+    }
     const path = pendingOpen?.path ?? retryOpenPath;
     const version = scanVersion;
     // Access can return while the remembered note is still unavailable. Refill
@@ -131,6 +142,31 @@ function App() {
     if (path) await openFile(path);
     await catalogue;
     if (version !== scanVersion) await refresh();
+  }
+  function initializeNotebook() {
+    if (initialization) return initialization;
+    const initialSession = active();
+    initialization = (async () => {
+      try {
+        const path = await invoke<string | null>("initialize_notebook");
+        if (leaving() || disposed) return;
+        // The initial editor and navigation stay unavailable during the access
+        // decision. Also check the session before replacing it, so a future
+        // interaction path cannot discard writing that arrived meanwhile.
+        if (path && active() === initialSession && !dirty(initialSession) && !initialSession.path && !initialSession.text) {
+          await openFile(path);
+          if (active().path !== path) return;
+          setRestore({ anchor: active().text.length, head: active().text.length, scroll: 0 });
+        }
+        if (leaving() || disposed) return;
+        await invoke("initial_note_opened");
+        setInitializingNotebook(false);
+        if (retryKind() === "notebook") setError("");
+      } catch (e) {
+        reportNotebook("Could not open your notebook: " + e);
+      }
+    })().finally(() => { initialization = undefined; });
+    return initialization;
   }
   function flash(message: string) {
     setNotice(message);
@@ -307,6 +343,7 @@ function App() {
     }
   }
   async function openNewWindow(path?: string) {
+    if (leaving()) return;
     if (path) {
       try {
         const existing = await invoke<string | null>("window_for_note", {
@@ -349,6 +386,7 @@ function App() {
     } catch (e) {
       report("Could not position the new window: " + e);
     }
+    if (leaving()) return;
     const url = new URL(window.location.href);
     url.search = "";
     if (path) url.searchParams.set("file", path);
@@ -367,7 +405,7 @@ function App() {
     void w.once("tauri://error", (e) => report(e.payload));
   }
   async function refresh() {
-    if (leaving || !presented) return;
+    if (leaving() || !presented) return;
     if (refreshing) return refreshing;
     const version = scanVersion;
     refreshing = (async () => {
@@ -437,7 +475,7 @@ function App() {
     return refreshing;
   }
   async function externalRefresh() {
-    if (!ready() || navigating || leaving || !presented) return;
+    if (!ready() || navigating || leaving() || !presented) return;
     if (pendingOpen) {
       void retryNotebook();
       return;
@@ -472,21 +510,21 @@ function App() {
     }
   }
   async function close() {
-    leaving = true;
+    setLeaving(true);
     indexRun++;
     await booted;
     if (await save()) {
       storage("last-note", pendingOpen ?? { path: active().path, id: active().id });
       await appWindow.destroy();
     } else {
-      leaving = false;
+      setLeaving(false);
       void refresh();
     }
   }
   onMount(async () => {
     const bind = async (name: string, action: () => void, all = false) => {
       const off = await listen(name, () => {
-        if (all || document.hasFocus()) action();
+        if (all || (!leaving() && !initializingNotebook() && document.hasFocus())) action();
       });
       cleanup.push(off);
     };
@@ -505,11 +543,16 @@ function App() {
         },
         true,
       );
+      cleanup.push(
+        await listen<string>("notebook-switch-failed", (event) =>
+          reportNotebook(event.payload),
+        ),
+      );
       await bind(
         "notebook-access-granted",
         () => {
           void booted.then(() => {
-            if (!leaving && !disposed) void retryNotebook();
+            if (!leaving() && !disposed) void retryNotebook();
           });
         },
         true,
@@ -521,9 +564,10 @@ function App() {
         }),
       );
 
-      const info = await invoke<{ directory: string; drafts: Draft[]; restoreDrafts: boolean }>(
+      const info = await invoke<{ directory: string; drafts: Draft[]; restoreDrafts: boolean; initializeNotebook: boolean }>(
         "notebook_info",
       );
+      setInitializingNotebook(!!info.initializeNotebook);
       prefix = "notebook:" + info.directory + ":";
       setAccess(readJSON(prefix + "access", {}));
       const recovery = new Map<string, Draft>();
@@ -558,7 +602,7 @@ function App() {
       if (requested || (!s && last?.path)) {
         const path = requested ?? last!.path!;
         const waiting = setTimeout(() => {
-          if (!leaving) {
+          if (!leaving()) {
             setNotice("Opening your notebook…");
             void presentWindow();
           }
@@ -625,6 +669,7 @@ function App() {
         },
         onFocus = () => void externalRefresh();
       const onKey = (e: KeyboardEvent) => {
+        if (leaving() || initializingNotebook()) return;
         if (
           e.type === "keydown" &&
           (e.metaKey || e.ctrlKey) &&
@@ -672,10 +717,12 @@ function App() {
     } finally {
       finishBoot();
     }
-    if (leaving) return;
+    if (leaving()) return;
     try {
       await presentWindow();
-      if (!presented || leaving) return;
+      if (!presented || leaving()) return;
+      if (initializingNotebook()) await initializeNotebook();
+      if (leaving() || initializingNotebook()) return;
       void refresh();
       for (const other of sessions.values())
         if (other !== active() && dirty(other))
@@ -692,7 +739,7 @@ function App() {
     cleanup.forEach((fn) => fn());
   });
   return (
-    <div class="app">
+    <div class="app" inert={leaving()}>
       <div class="titlebar" data-tauri-drag-region>
         <span class="titlebar-title" classList={{ visible: scrolled() }}>
           {active()
@@ -701,7 +748,7 @@ function App() {
             ?.replace(/^#+\s*/, "") ?? ""}
         </span>
       </div>
-      <Show when={ready()}>
+      <Show when={ready() && !initializingNotebook()}>
         <Editor
           id={active().id}
           content={active().text}

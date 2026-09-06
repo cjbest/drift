@@ -1,4 +1,5 @@
 mod notebook;
+mod notebook_location;
 use notebook::*;
 use std::{
     collections::{HashMap, HashSet},
@@ -57,6 +58,8 @@ fn window_ready(window: tauri::WebviewWindow, dark: bool) -> Result<bool, String
 struct Windows {
     files: Mutex<HashMap<String, String>>,
     quitting: Mutex<Option<HashSet<String>>>,
+    notebook_selection: Mutex<Option<notebook_location::Selection>>,
+    choosing_notebook: AtomicBool,
     exit: AtomicBool,
 }
 #[tauri::command]
@@ -95,8 +98,8 @@ fn begin_quit(app: &tauri::AppHandle) {
     }
     let labels: HashSet<_> = app.webview_windows().keys().cloned().collect();
     if labels.is_empty() {
-        state.exit.store(true, Ordering::SeqCst);
-        app.exit(0);
+        drop(waiting);
+        finish_quit(app);
         return;
     }
     *waiting = Some(labels);
@@ -107,18 +110,39 @@ fn acknowledge_quit(label: &str, app: &tauri::AppHandle) {
     let state = app.state::<Windows>();
     let complete = {
         let mut waiting = state.quitting.lock().unwrap();
-        waiting.as_mut().is_some_and(|labels| {
-            labels.remove(label);
-            labels.is_empty()
-        })
+        waiting
+            .as_mut()
+            .is_some_and(|labels| labels.remove(label) && labels.is_empty())
     };
     if complete {
-        state.exit.store(true, Ordering::SeqCst);
-        // All drafts are safe. Remove the windows before WebKit tears down so
-        // its empty background cannot flash during shutdown.
-        for window in app.webview_windows().values() {
-            let _ = window.hide();
+        finish_quit(app);
+    }
+}
+fn finish_quit(app: &tauri::AppHandle) {
+    let state = app.state::<Windows>();
+    let selection = state.notebook_selection.lock().unwrap().take();
+    let switching = selection.is_some();
+    if let Some(selection) = selection {
+        if let Err(error) = selection.commit() {
+            *state.quitting.lock().unwrap() = None;
+            state.choosing_notebook.store(false, Ordering::SeqCst);
+            let _ = app.emit("quit-cancelled", ());
+            let _ = app.emit(
+                "notebook-switch-failed",
+                format!("Could not change notebooks. Your current notebook is still open: {error}"),
+            );
+            return;
         }
+    }
+    state.exit.store(true, Ordering::SeqCst);
+    // All drafts are safe. Remove the windows before WebKit tears down so
+    // its empty background cannot flash during shutdown.
+    for window in app.webview_windows().values() {
+        let _ = window.hide();
+    }
+    if switching {
+        app.request_restart();
+    } else {
         app.exit(0);
     }
 }
@@ -130,7 +154,97 @@ fn quit_ready(label: String, app: tauri::AppHandle) {
 #[tauri::command]
 fn cancel_quit(app: tauri::AppHandle, state: State<Windows>) {
     *state.quitting.lock().unwrap() = None;
+    *state.notebook_selection.lock().unwrap() = None;
+    state.choosing_notebook.store(false, Ordering::SeqCst);
     let _ = app.emit("quit-cancelled", ());
+}
+fn choose_notebook(app: &tauri::AppHandle) {
+    #[cfg(target_os = "macos")]
+    {
+        // Development must never redirect the copied notebook to real notes.
+        if std::env::var("DRIFT_NOTEBOOK_MODE").as_deref() == Ok("preview")
+            || app.state::<Windows>().quitting.lock().unwrap().is_some()
+            || app
+                .state::<Windows>()
+                .choosing_notebook
+                .swap(true, Ordering::SeqCst)
+        {
+            return;
+        }
+        let root = app.state::<Notebook>().root.clone();
+        let handle = app.clone();
+        let _ = app.run_on_main_thread(move || {
+            extern "C" {
+                fn drift_choose_notebook(path: *const std::ffi::c_char) -> *mut std::ffi::c_char;
+                fn drift_free_notebook_path(path: *mut std::ffi::c_char);
+            }
+            let Ok(current) = std::ffi::CString::new(root.to_string_lossy().as_bytes()) else {
+                handle
+                    .state::<Windows>()
+                    .choosing_notebook
+                    .store(false, Ordering::SeqCst);
+                return;
+            };
+            let selected = unsafe { drift_choose_notebook(current.as_ptr()) };
+            if selected.is_null() {
+                handle
+                    .state::<Windows>()
+                    .choosing_notebook
+                    .store(false, Ordering::SeqCst);
+                return;
+            }
+            let path = unsafe {
+                std::ffi::CStr::from_ptr(selected)
+                    .to_string_lossy()
+                    .into_owned()
+            };
+            unsafe { drift_free_notebook_path(selected) };
+            if std::path::Path::new(&path) == root {
+                handle
+                    .state::<Windows>()
+                    .choosing_notebook
+                    .store(false, Ordering::SeqCst);
+                let _ = handle.emit("notebook-access-granted", ());
+                return;
+            }
+            // Folder providers and disk access can be slow; keep them off the UI thread.
+            tauri::async_runtime::spawn_blocking(move || {
+                let selection = handle
+                    .path()
+                    .app_data_dir()
+                    .map_err(|e| e.to_string())
+                    .and_then(|data| {
+                        notebook_location::Selection::prepare(&data, std::path::Path::new(&path))
+                    });
+                match selection {
+                    Ok(selection) => {
+                        if handle.state::<Windows>().quitting.lock().unwrap().is_some() {
+                            handle
+                                .state::<Windows>()
+                                .choosing_notebook
+                                .store(false, Ordering::SeqCst);
+                            return;
+                        }
+                        *handle.state::<Windows>().notebook_selection.lock().unwrap() =
+                            Some(selection);
+                        begin_quit(&handle);
+                    }
+                    Err(error) => {
+                        handle
+                            .state::<Windows>()
+                            .choosing_notebook
+                            .store(false, Ordering::SeqCst);
+                        let _ = handle.emit(
+                            "notebook-switch-failed",
+                            format!("Could not open this notebook: {error}"),
+                        );
+                    }
+                }
+            });
+        });
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = app;
 }
 fn allow_notebook_access(app: &tauri::AppHandle) {
     #[cfg(target_os = "macos")]
@@ -164,6 +278,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             window_ready,
             notebook_info,
+            initialize_notebook,
+            initial_note_opened,
             list_notes,
             read_note,
             save_note,
@@ -177,20 +293,19 @@ pub fn run() {
         ])
         .setup(|app| {
             let data = app.path().app_data_dir()?;
-            // Only an explicitly configured notebook can leave the app-owned test folder.
-            let mut store = Notebook::new(data.clone()).map_err(std::io::Error::other)?;
-            let config = data.join("notebook-location.json");
-            if config.exists() && std::env::var("DRIFT_NOTEBOOK_MODE").as_deref() != Ok("preview") {
-                let path: String = serde_json::from_slice(&std::fs::read(config)?)?;
-                let root = std::path::PathBuf::from(path);
-                if !root.is_absolute() {
-                    return Err("Notebook location must be an absolute folder path".into());
-                }
-                // Access to Documents can require consent. Defer filesystem checks
-                // to notebook commands so a refusal leaves a usable retry UI.
-                store = Notebook::new(data.join("Live")).map_err(std::io::Error::other)?;
-                store.root = root;
-            }
+            let preview = std::env::var("DRIFT_NOTEBOOK_MODE").as_deref() == Ok("preview");
+            // Native fresh-install QA may substitute disposable Documents only
+            // in the separately identified QA app; production ignores overrides.
+            let documents = if app.config().identifier == "com.drift.release-qa" {
+                std::env::var_os("DRIFT_QA_DOCUMENTS_DIR")
+                    .map(std::path::PathBuf::from)
+                    .map(Ok)
+                    .unwrap_or_else(|| app.path().document_dir())?
+            } else {
+                app.path().document_dir()?
+            };
+            let store = notebook_location::load(&data, &documents, preview)
+                .map_err(std::io::Error::other)?;
             if std::env::var_os("DRIFT_PROFILE").is_some() {
                 eprintln!(
                     "drift-notebook configured root={} data={} preview={}",
@@ -230,6 +345,13 @@ pub fn run() {
                     &item("open-note", "Open Note…", Some("CmdOrCtrl+P"))?,
                     &item("save", "Save", Some("CmdOrCtrl+S"))?,
                     &PredefinedMenuItem::separator(app)?,
+                    &MenuItem::with_id(
+                        app,
+                        "choose-notebook",
+                        "Choose Notebook Folder…",
+                        !preview,
+                        None::<&str>,
+                    )?,
                     &item("reveal-notebook", "Show Notebook in Finder", None)?,
                     &item("allow-notebook-access", "Allow Notebook Access…", None)?,
                     &item("reveal-history", "Saved History…", None)?,
@@ -315,6 +437,7 @@ pub fn run() {
         })
         .on_menu_event(|app, event| match event.id().as_ref() {
             "quit" => begin_quit(app),
+            "choose-notebook" => choose_notebook(app),
             "allow-notebook-access" => allow_notebook_access(app),
             "reveal-notebook" | "reveal-history" => {
                 let store = app.state::<Notebook>();

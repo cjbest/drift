@@ -305,7 +305,7 @@ final class NotebookViewController: UIViewController, UITableViewDelegate, UITex
             // Until then, avoid presenting a false onboarding or empty state.
             table.backgroundView = nil
         } else if !hasFolder {
-            emptyView.configure(symbol: "book.closed", title: "Drift", detail: "Your notes, in plain Markdown.\nFor your Mac notes, choose iCloud Drive → Documents → Drift.", action: "Choose Folder")
+            emptyView.configure(symbol: "book.closed", title: "Drift", detail: "Choose a folder for your Markdown notes.\nTo use the same notes on your Mac, choose the same folder in iCloud Drive.", action: "Choose Folder")
             emptyView.onAction = { [weak self] in self?.chooseFolder() }
             table.backgroundView = emptyView
         } else if hits.isEmpty {
@@ -467,6 +467,14 @@ final class NotebookViewController: UIViewController, UITableViewDelegate, UITex
             }
         }
         actions.append(UIAction(title: store.folderURL == nil ? "Choose Folder" : "Change Folder…", image: UIImage(systemName: "folder.badge.plus")) { [weak self] _ in self?.chooseFolder() })
+        actions.append(UIMenu(options: .displayInline, children: [
+            UIAction(title: "Privacy Policy", image: UIImage(systemName: "hand.raised")) { _ in
+                UIApplication.shared.open(URL(string: "https://github.com/cjbest/drift/blob/main/docs/PRIVACY.md")!)
+            },
+            UIAction(title: "Help & Support", image: UIImage(systemName: "questionmark.circle")) { _ in
+                UIApplication.shared.open(URL(string: "https://github.com/cjbest/drift/blob/main/docs/SUPPORT.md")!)
+            },
+        ]))
         return UIMenu(children: actions)
     }
 

@@ -19,9 +19,12 @@ are for development and disposable testing.
    also suitable; launch it once to finish setup.
 3. Check `security find-identity -v -p codesigning`. The desktop build requires
    a stable **Apple Development** or **Developer ID Application** identity.
-   Reuse the installed app's identity when available. When exactly one suitable
-   identity exists, the script selects it. Otherwise set `DRIFT_SIGNING_IDENTITY`
-   to the chosen identity's SHA-1 hash. Never bypass the script with ad-hoc signing.
+   Select a certificate belonging to the user's own Apple team. Set
+   `DRIFT_SIGNING_IDENTITY` to its SHA-1 hash and `DRIFT_APPLE_TEAM_ID` to its
+   ten-character team ID. Verify the certificate's organization and team, not
+   just the person's name in its label. The scripts never select an identity
+   automatically and reject the project's former Substack signing team.
+   Never bypass the script with ad-hoc signing.
    An Apple Development certificate can be created with a free Apple account;
    paid membership is needed for Developer ID distribution, not this local build.
    If none exists, the user must add their Apple account in Xcode and create an
@@ -64,21 +67,33 @@ are for development and disposable testing.
 
 ### Notebook location
 
-A fresh installation needs no notebook configuration. It creates and uses:
+A fresh installation needs no folder setup. It creates and uses:
 
-`~/Library/Application Support/com.drift.app/Notebook`
+`~/Documents/Drift`
+
+It opens a short first note explaining autosave and the main shortcuts. If
+that folder already contains Markdown notes, Drift uses the existing notes
+instead of adding the introduction. Allow macOS access to Documents if asked.
+
+Upgrades keep the current notebook. Older installations using the app-owned
+`~/Library/Application Support/com.drift.app/Notebook` stay there, and any
+explicitly configured folder is preserved.
 
 File → Show Notebook in Finder reveals the current folder. Preserve an existing
 `~/Library/Application Support/com.drift.app/notebook-location.json` on upgrades.
 
-Only when the user asks to use an existing folder, quit Drift and write that
-file as a **JSON string containing the absolute folder path**, not an object.
-The folder must already exist. Use a JSON encoder rather than hand-escaping
-spaces or quotes. Restart Drift, then use File → Allow Notebook Access… and
-select the configured folder if macOS needs consent. This menu grants access;
-it does not change the notebook location or move notes. For iCloud sync, choose
-the same actual Markdown folder on both devices; do not assume a path from a
-different Mac or move an existing notebook without the user's instruction.
+Use **File → Choose Notebook Folder…** to select or create a different folder.
+Drift saves its open notes and reopens in the selected folder. Existing notes
+stay where they are; the command does not move or merge notebooks. Recovery
+and history remain separate for each folder. A failed save cancels the switch
+so the current writing stays available.
+
+Do not edit the notebook configuration by hand or replace it during an upgrade.
+Legacy configurations containing an absolute path as a JSON string remain
+supported. **File → Allow Notebook Access…** grants macOS access to the current
+folder if needed; it does not change the notebook location. For iCloud sync,
+choose the same actual Markdown folder on both devices; do not assume another
+Mac's path or move an existing notebook without the user's instruction.
 
 ### Development
 
@@ -101,10 +116,10 @@ xcodegen generate --spec drift-ios/project.yml
 open drift-ios/Drift.xcodeproj
 ```
 
-Use the normal **Drift** scheme. The checked-in project contains the author's
-development team. Override `DEVELOPMENT_TEAM` with the user's team in local
-build settings or command-line build arguments. Do not commit personal signing
-settings. For a new user's device install, select an available bundle identifier
+Use the normal **Drift** scheme. The project intentionally has no default
+development team. Select the user's own team in Xcode, or pass
+`DEVELOPMENT_TEAM` in command-line build arguments. Do not use an employer's
+team or commit personal signing settings. For a new user's device install, select an available bundle identifier
 under their team if `com.drift.notes` cannot be provisioned. Record that choice
 and keep it for subsequent updates. Existing installations must retain their
 team and bundle identity to preserve the app and selected-folder state; never

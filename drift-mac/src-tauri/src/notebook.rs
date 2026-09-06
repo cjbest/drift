@@ -19,6 +19,8 @@ pub struct Notebook {
     pub data: PathBuf,
     pub writes: Arc<Mutex<()>>,
     recovery_claimed: Arc<AtomicBool>,
+    pending_default: Arc<Mutex<Option<PathBuf>>>,
+    initial_setup: Option<PathBuf>,
 }
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -49,14 +51,21 @@ pub struct NotebookInfo {
     pub directory: String,
     pub drafts: Vec<Draft>,
     pub restore_drafts: bool,
+    pub initialize_notebook: bool,
 }
+
+const WELCOME: &str = "Drift\n\nStart writing. Your notes save automatically.\n\n⌘N — New note\n⌘P — Find a note\n⌘/ — All shortcuts\n";
 
 fn err(e: impl std::fmt::Display) -> String {
     e.to_string()
 }
 fn access_err(e: std::io::Error) -> String {
     if std::env::var_os("DRIFT_PROFILE").is_some() {
-        eprintln!("drift-notebook access-error kind={:?} errno={:?}", e.kind(), e.raw_os_error());
+        eprintln!(
+            "drift-notebook access-error kind={:?} errno={:?}",
+            e.kind(),
+            e.raw_os_error()
+        );
     }
     if e.kind() == std::io::ErrorKind::PermissionDenied {
         "Drift does not have permission to open the notebook. Allow access in System Settings → Privacy & Security → Files and Folders, then try again."
@@ -90,7 +99,7 @@ fn title(text: &str) -> String {
         clean.into()
     }
 }
-fn atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
+pub(crate) fn atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
     let temp = path.with_file_name(format!(".{}.tmp", Uuid::new_v4()));
     let result = (|| {
         let mut file = OpenOptions::new()
@@ -118,7 +127,72 @@ impl Notebook {
             data,
             writes: Arc::new(Mutex::new(())),
             recovery_claimed: Arc::new(AtomicBool::new(false)),
+            pending_default: Arc::new(Mutex::new(None)),
+            initial_setup: None,
         })
+    }
+    pub(crate) fn create_default_on_access(&mut self, config_data: PathBuf) {
+        self.initial_setup = Some(config_data.clone());
+        self.pending_default = Arc::new(Mutex::new(Some(config_data)));
+    }
+    pub(crate) fn ensure_root(&self) -> Result<(), String> {
+        let mut pending = self.pending_default.lock().map_err(err)?;
+        if let Some(data) = pending.as_ref() {
+            // Only a fresh installation's explicit default-creation intent can
+            // create a root. An unavailable existing/user-selected folder must
+            // remain an error, never a new empty notebook.
+            if crate::notebook_location::needs_default_creation(data, &self.root)? {
+                fs::create_dir_all(&self.root).map_err(access_err)?;
+                let initial = self.first_note_or_welcome()?;
+                crate::notebook_location::complete_default_setup(data, &self.root, initial)?;
+            }
+            *pending = None;
+        }
+        Ok(())
+    }
+    fn first_note_or_welcome(&self) -> Result<Option<String>, String> {
+        let mut notes = Vec::new();
+        let mut has_markdown = false;
+        for item in fs::read_dir(&self.root).map_err(access_err)? {
+            let item = item.map_err(access_err)?;
+            let name = item.file_name().to_string_lossy().into_owned();
+            let lower = name.to_lowercase();
+            if !(lower.ends_with(".md") || lower.ends_with(".md.icloud")) {
+                continue;
+            }
+            has_markdown = true;
+            if lower.ends_with(".md")
+                && !name.starts_with('.')
+                && item.file_type().map_err(access_err)?.is_file()
+            {
+                notes.push((item.metadata().map_err(access_err)?.modified().ok(), name));
+            }
+        }
+        if has_markdown {
+            notes.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+            return Ok(notes.into_iter().next().map(|(_, name)| name));
+        }
+        // Link a fully written file into place only if Drift.md is still absent.
+        // Never overwrite a note created by another window/process or sync.
+        let temp = self.root.join(format!(".{}.tmp", Uuid::new_v4()));
+        let result = (|| {
+            let mut file = OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&temp)
+                .map_err(access_err)?;
+            file.write_all(WELCOME.as_bytes()).map_err(access_err)?;
+            file.sync_all().map_err(access_err)?;
+            match fs::hard_link(&temp, self.root.join("Drift.md")) {
+                Ok(()) => Ok(Some("Drift.md".into())),
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                    Ok(Some("Drift.md".into()))
+                }
+                Err(e) => Err(access_err(e)),
+            }
+        })();
+        let _ = fs::remove_file(temp);
+        result
     }
     fn path(&self, name: &str) -> Result<PathBuf, String> {
         if name.is_empty()
@@ -193,6 +267,7 @@ impl Notebook {
     pub fn save(&self, draft: Draft) -> Result<Saved, String> {
         let _lock = self.writes.lock().map_err(err)?;
         self.journal(&draft)?;
+        self.ensure_root()?;
         if let Some(name) = draft.path.as_ref() {
             let path = self.path(name)?;
             return coordinated(&path, || self.save_inner(draft));
@@ -281,6 +356,7 @@ fn info(store: &Notebook, main: bool) -> Result<NotebookInfo, String> {
         directory: store.root.to_string_lossy().into_owned(),
         drafts: Vec::new(),
         restore_drafts: false,
+        initialize_notebook: main && store.initial_setup.is_some(),
     };
     // Only the first main window owns crash recovery. A recreated main window
     // may coexist with a minimized editor whose unfinished draft is still live.
@@ -311,6 +387,48 @@ fn info(store: &Notebook, main: bool) -> Result<NotebookInfo, String> {
     Ok(info)
 }
 #[tauri::command]
+pub async fn initialize_notebook(
+    window: tauri::WebviewWindow,
+    store: State<'_, Notebook>,
+) -> Result<Option<String>, String> {
+    if window.label() != "main" {
+        return Ok(None);
+    }
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        store.ensure_root()?;
+        match &store.initial_setup {
+            Some(data) => match crate::notebook_location::initial_note(data, &store.root)? {
+                Some(path) => {
+                    // A welcome can be renamed/deleted before its first open is
+                    // acknowledged. Retire that stale marker after a successful
+                    // catalogue read; permission/provider errors remain retryable.
+                    let entries = list(&store)?;
+                    Ok(entries
+                        .iter()
+                        .find(|entry| entry.path == path)
+                        .or_else(|| entries.first())
+                        .map(|entry| entry.path.clone()))
+                }
+                None => Ok(None),
+            },
+            None => Ok(None),
+        }
+    })
+    .await
+    .map_err(err)?
+}
+#[tauri::command]
+pub async fn initial_note_opened(store: State<'_, Notebook>) -> Result<(), String> {
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || match &store.initial_setup {
+        Some(data) => crate::notebook_location::acknowledge_initial_note(data, &store.root),
+        None => Ok(()),
+    })
+    .await
+    .map_err(err)?
+}
+#[tauri::command]
 pub async fn list_notes(store: State<'_, Notebook>) -> Result<Vec<Entry>, String> {
     let store = store.inner().clone();
     tauri::async_runtime::spawn_blocking(move || list(&store))
@@ -318,6 +436,7 @@ pub async fn list_notes(store: State<'_, Notebook>) -> Result<Vec<Entry>, String
         .map_err(err)?
 }
 fn list(store: &Notebook) -> Result<Vec<Entry>, String> {
+    store.ensure_root()?;
     let mut entries = Vec::new();
     let (mut seen, mut files, mut links, mut markdown, mut hidden) = (0, 0, 0, 0, 0);
     // Access failures are not empty notebooks. Keep the previous catalogue in the
@@ -331,10 +450,7 @@ fn list(store: &Notebook) -> Result<Vec<Entry>, String> {
         links += usize::from(kind.is_symlink());
         markdown += usize::from(name.to_lowercase().ends_with(".md"));
         hidden += usize::from(name.starts_with('.'));
-        if !kind.is_file()
-            || name.starts_with('.')
-            || !name.to_lowercase().ends_with(".md")
-        {
+        if !kind.is_file() || name.starts_with('.') || !name.to_lowercase().ends_with(".md") {
             continue;
         }
         let meta = file.metadata().map_err(access_err)?;
@@ -368,6 +484,7 @@ pub async fn read_note(path: String, store: State<'_, Notebook>) -> Result<Strin
         .map_err(err)?
 }
 fn read(store: &Notebook, path: &str) -> Result<String, String> {
+    store.ensure_root()?;
     fs::read_to_string(store.path(path)?).map_err(access_err)
 }
 #[tauri::command]

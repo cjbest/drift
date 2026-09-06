@@ -55,9 +55,10 @@ replaced after the user approved promotion; its original bundle is backed up.
 `npm run build:desktop` builds the main **Drift.app**, bundle identifier
 `com.drift.app`. The user authorized replacing the original installation on
 September 6. Main and preview builds use `scripts/build-desktop.sh`, which
-requires a stable Apple signing identity; do not use ad-hoc signing for installed
-updates. Its changing code-hash identity caused repeated Documents consent.
-Use `DRIFT_SIGNING_IDENTITY` when several signing identities are available.
+requires an explicitly selected personal Apple signing identity and Team ID;
+see [INSTALL.md](INSTALL.md). Do not use ad-hoc signing for installed updates.
+Its changing code-hash identity caused repeated Documents consent. Company
+certificates are not appropriate for Drift development or distribution.
 
 `npm run build:desktop-preview` builds **Drift Preview.app**, bundle identifier
 `com.drift.desktop-preview`. Install this only as **Drift Preview.app**.
@@ -76,6 +77,24 @@ Do not copy test drafts into the live notebook. The original notebook snapshot
 and file checksums are local under the preview's `audit` directory; do not commit
 private notes or their names. The current app and notebook must be checked before
 and after release preparation.
+
+## First launch and notebook selection
+
+A new Mac installation opens directly into `~/Documents/Drift`, with no folder
+picker. Its first note is a short, ordinary Markdown introduction to autosave,
+Cmd+N, Cmd+P, and Cmd+/. It can be edited or deleted like any other note. Do not
+add it to an existing notebook or recreate it after deletion. Existing app-owned
+notebooks and explicitly selected folders keep their location and recovery data.
+
+Show the window before accessing Documents so any macOS permission prompt has
+context. Keep the initial editor unavailable until its note is loaded; typing
+must never be replaced by a late introduction. Failed access must leave a usable
+retry path. Subsequent launches restore the last-used note as usual.
+
+File → Choose Notebook Folder… uses the heading “Choose which folder to keep
+your notes in”. It saves every open window before reopening in the selected
+folder. A save failure cancels the switch. Selecting a folder never moves or
+merges notes; each folder retains separate history and recovery.
 
 ## Verification
 

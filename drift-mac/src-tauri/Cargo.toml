@@ -1,10 +1,10 @@
 [package]
 name = "drift"
 version = "0.2.0"
-description = "A minimal markdown editor"
-authors = ["you"]
-license = ""
-repository = ""
+description = "A minimal Markdown editor"
+authors = ["Chris Best"]
+repository = "https://github.com/cjbest/drift"
+publish = false
 edition = "2021"
 rust-version = "1.77.2"
 

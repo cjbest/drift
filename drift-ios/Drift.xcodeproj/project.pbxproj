@@ -11,10 +11,13 @@
 		1401A3159FA7CB15243C25B0 /* NoteStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 491C90765DC795E8C0C15837 /* NoteStore.swift */; };
 		26B28A7F9775D3DF1181C835 /* FontLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69934B6DAA3C268DBCD8EAA6 /* FontLoader.swift */; };
 		2B3413F96CCC026C3ED8CEEE /* Newsreader.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 44F45D81848A98F8F261C806 /* Newsreader.ttf */; };
+		2D0C72E8D352DAB69544C4C4 /* Newsreader-OFL.txt in Resources */ = {isa = PBXBuildFile; fileRef = F7BAE52E533D3C4B676C8C2C /* Newsreader-OFL.txt */; };
 		412D94EDB3C6AB6EF79D7A3E /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = B35664720340419D225635E0 /* Theme.swift */; };
 		4C31E5F32057829ABAA0840A /* DriftApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC6712FB46945A6FE1AAB0E0 /* DriftApp.swift */; };
 		4D9B87565DABC8E10E38E749 /* JetBrainsMono.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 3780ED0456030B3950A20B3E /* JetBrainsMono.ttf */; };
 		4F4B62250E53E5D2B993B779 /* JetBrainsMono-Italic.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 418AFD312D471ECC149A5D17 /* JetBrainsMono-Italic.ttf */; };
+		6A410C51A504D7E9B92C4D54 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = FDB2E4A5E82240310114CA67 /* PrivacyInfo.xcprivacy */; };
+		70B8978C87D567FF1E15C458 /* JetBrainsMono-OFL.txt in Resources */ = {isa = PBXBuildFile; fileRef = D7EB0721F7C65C700611ED8D /* JetBrainsMono-OFL.txt */; };
 		7371B021000134AEC703DFA5 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 700E71AD936866504EB358D8 /* Assets.xcassets */; };
 		7C50C70689D09384C1EBAF65 /* DriftUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7752D6432DE02B67907C5B8B /* DriftUITests.swift */; };
 		988563B226383EAA4DECDF85 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67F7F2782E0E89288BF90445 /* ContentView.swift */; };
@@ -65,7 +68,10 @@
 		8DF71CBD2827ED789FBFBC18 /* NoteEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteEditorView.swift; sourceTree = "<group>"; };
 		B35664720340419D225635E0 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		C6FE0E4FFF4957670556EB3E /* PaperChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaperChrome.swift; sourceTree = "<group>"; };
+		D7EB0721F7C65C700611ED8D /* JetBrainsMono-OFL.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "JetBrainsMono-OFL.txt"; sourceTree = "<group>"; };
 		DC6712FB46945A6FE1AAB0E0 /* DriftApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriftApp.swift; sourceTree = "<group>"; };
+		F7BAE52E533D3C4B676C8C2C /* Newsreader-OFL.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Newsreader-OFL.txt"; sourceTree = "<group>"; };
+		FDB2E4A5E82240310114CA67 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -112,8 +118,10 @@
 			isa = PBXGroup;
 			children = (
 				418AFD312D471ECC149A5D17 /* JetBrainsMono-Italic.ttf */,
+				D7EB0721F7C65C700611ED8D /* JetBrainsMono-OFL.txt */,
 				3780ED0456030B3950A20B3E /* JetBrainsMono.ttf */,
 				7DD170EBE92026F64D490E2A /* Newsreader-Italic.ttf */,
+				F7BAE52E533D3C4B676C8C2C /* Newsreader-OFL.txt */,
 				44F45D81848A98F8F261C806 /* Newsreader.ttf */,
 			);
 			path = Fonts;
@@ -152,6 +160,7 @@
 			children = (
 				700E71AD936866504EB358D8 /* Assets.xcassets */,
 				DC6712FB46945A6FE1AAB0E0 /* DriftApp.swift */,
+				FDB2E4A5E82240310114CA67 /* PrivacyInfo.xcprivacy */,
 				519F59F7854ACEB7B7AB19F8 /* Fonts */,
 				D758CFE75CAB274413E181F9 /* Models */,
 				5E097DD61C53B885CF19EFAC /* Theme */,
@@ -227,16 +236,13 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					50A0CCC2E8C96C468D93CEF8 = {
-						DevelopmentTeam = 7DGN24C3GR;
 						ProvisioningStyle = Automatic;
 					};
 					652A713014B742896E0F9ED6 = {
-						DevelopmentTeam = 7DGN24C3GR;
 						ProvisioningStyle = Automatic;
 						TestTargetID = CAEDCE34417A91D973F68377;
 					};
 					CAEDCE34417A91D973F68377 = {
-						DevelopmentTeam = 7DGN24C3GR;
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -269,9 +275,12 @@
 			files = (
 				7371B021000134AEC703DFA5 /* Assets.xcassets in Resources */,
 				4F4B62250E53E5D2B993B779 /* JetBrainsMono-Italic.ttf in Resources */,
+				70B8978C87D567FF1E15C458 /* JetBrainsMono-OFL.txt in Resources */,
 				4D9B87565DABC8E10E38E749 /* JetBrainsMono.ttf in Resources */,
 				D0A1A1F16F495F9603FBC5DB /* Newsreader-Italic.ttf in Resources */,
+				2D0C72E8D352DAB69544C4C4 /* Newsreader-OFL.txt in Resources */,
 				2B3413F96CCC026C3ED8CEEE /* Newsreader.ttf in Resources */,
+				6A410C51A504D7E9B92C4D54 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -402,7 +411,6 @@
 				COPY_PHASE_STRIP = NO;
 				CURRENT_PROJECT_VERSION = 6;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = 7DGN24C3GR;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -502,7 +510,6 @@
 				COPY_PHASE_STRIP = NO;
 				CURRENT_PROJECT_VERSION = 6;
 				DEBUG_INFORMATION_FORMAT = dwarf;
-				DEVELOPMENT_TEAM = 7DGN24C3GR;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;

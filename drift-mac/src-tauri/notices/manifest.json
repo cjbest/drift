@@ -1,0 +1,20 @@
+{
+  "generator": "cargo-about 0.9.2",
+  "target": "aarch64-apple-darwin",
+  "inputs": {
+    "npmLock": "ef9cabc67bc3ce8f9f59308b6fd96876124fa7cfebf80771fec086410f78c83b",
+    "cargoLock": "bd62d5cc3e349a777971b9f06dc3e18f668345aebed69deb3f1759ceff227861",
+    "cargoManifest": "385fe849f79a139847c685067cf44698c5edd3d8de4cfbde0a7085d495cbb5d4",
+    "licenseConfig": "0d3407187474b68291b202c0cffaef77510bda8320c8470d2a2c6ef69f19c5f3",
+    "upstreamNotices": "16696373e1aa7292ac9901e36de1ee123882eadccb14edf49c241a060c4a0c29",
+    "sourceNotices": "9932376bcea0cdc308007d167a8076524d2b348e18548182fd08eb13c10cc0c2",
+    "generator": "5cade9018829c8b336cb8f2630355eedac3ed90d5b14a4ef5b3e65629c8cc003",
+    "rustc": "rustc 1.92.0 (ded5c06cf 2025-12-08)"
+  },
+  "npmPackages": 28,
+  "rustCrates": 242,
+  "files": {
+    "RUST-STANDARD-LIBRARY.html": "c90d52b09be83ce6e930d00f4b26559611eadcee806b2307184e04f2c78ad522",
+    "THIRD-PARTY-NOTICES.txt": "3f736fb3a5c02542527cc854ef05ce17829f86fcf4250c2893303c293dd09610"
+  }
+}

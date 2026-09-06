@@ -1,7 +1,7 @@
 # Drift for iPhone and iPad
 
-A native notebook for your plain Markdown files. Choose a folder once, including
-`iCloud Drive > Documents > Drift` to use the same files as the Mac app.
+A native notebook for your plain Markdown files. Choose a folder once. To share
+notes with the Mac app, choose the same folder in iCloud Drive on both devices.
 
 This is the main Drift iOS app, built around UIKit navigation and text editing.
 The normal `Drift` target updates the existing `com.drift.notes` installation
@@ -42,6 +42,13 @@ open drift-ios/Drift.xcodeproj
 
 Select the `Drift` scheme and your simulator or connected device. Device builds
 need your Apple development signing configuration. The deployment target is iOS 17.
+
+No signing team is checked into the project. For distribution, select the
+verified personal Apple team and its matching App ID and provisioning profile.
+The release declares `ITSAppUsesNonExemptEncryption = false`: Drift uses
+CryptoKit's SHA-256 only to derive local cache and recovery filenames, with no
+custom encryption or networking library. Reassess that declaration if the
+app's cryptographic functionality changes.
 
 For a separate simulator preview with disposable example notes:
 

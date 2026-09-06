@@ -16,7 +16,9 @@ export function previewMocks(seed: Record<string, string> = {}) {
         if(cmd==='window_ready'){window.__presented=true;return true;}
         if(cmd==='quit_ready'){window.__quitAck=true;return;}
         if(cmd==='cancel_quit'){window.__emit('quit-cancelled');return;}
-        if(cmd==='notebook_info'){if(window.__bootDelay)await new Promise(r=>setTimeout(r,window.__bootDelay));return {directory:'/isolated/Notebook',drafts:window.__recoveryDrafts,restoreDrafts:window.__restoreDrafts ?? (window.__TAURI_INTERNALS__.metadata.currentWindow.label==='main')};}
+        if(cmd==='notebook_info'){if(window.__bootDelay)await new Promise(r=>setTimeout(r,window.__bootDelay));return {directory:'/isolated/Notebook',initializeNotebook:window.__initializeNotebook ?? false,drafts:window.__recoveryDrafts,restoreDrafts:window.__restoreDrafts ?? (window.__TAURI_INTERNALS__.metadata.currentWindow.label==='main')};}
+        if(cmd==='initialize_notebook'){if(window.__initializeDelay)await new Promise(r=>setTimeout(r,window.__initializeDelay));if(window.__failInitialize)throw 'Drift does not have permission to open the notebook.';window.__initializeCompletions=(window.__initializeCompletions??0)+1;return window.__initialNote ?? null;}
+        if(cmd==='initial_note_opened'){window.__initialNoteAcknowledged=true;return;}
         if(cmd==='list_notes'){if(window.__failList)throw 'Drift does not have permission to open the notebook. Allow access in Files and Folders, then try again.';return Array.from(window.__mockFS,([path,text])=>({path,title:path.replace(/\\.md$/,''),modified:1000000,size:text.length}));}
         if(cmd==='read_note'){if(window.__readDelay)await new Promise(r=>setTimeout(r,window.__readDelay));if(window.__failRead)throw 'Drift does not have permission to open the notebook. Allow access in Files and Folders, then try again.';if(!window.__mockFS.has(args.path))throw 'Missing file';return window.__mockFS.get(args.path)}
         if(cmd==='save_note'){
