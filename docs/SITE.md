@@ -51,6 +51,32 @@ from the Mac app. `assets/chris.jpg` is the profile photo from
 [Chris's Substack profile](https://substack.com/@cb), stored locally so visitors
 do not contact Substack just to load the page.
 
+## Search and sharing
+
+The page includes a descriptive title and summary, a canonical HTTPS URL,
+Open Graph and X link previews, and basic structured data identifying Drift
+and Chris. `robots.txt` allows crawling and points to the one-page sitemap.
+There are no invented ratings, app-store offers, or tracking integrations.
+
+The 1200 × 630 social preview uses the existing app screenshots and local font.
+Regenerate it after changing those assets (requires the Mac app's installed
+Playwright dependencies and Chromium):
+
+```sh
+node scripts/site/render-social-preview.mjs
+```
+
+The favicon is the Mac app's 512-pixel icon. The 180-pixel Apple touch icon is
+derived from the opaque iOS app icon. To refresh it on a Mac:
+
+```sh
+sips -z 180 180 drift-ios/Drift/Assets.xcassets/AppIcon.appiconset/AppIcon.png --out docs/site/assets/apple-touch-icon.png
+```
+
+The build copies all metadata files and assets into the deployed site. Keep
+canonical, social, structured-data, and sitemap URLs in sync if the domain
+changes. Search engines and social crawlers need working HTTPS to fetch them.
+
 ## Enable downloads
 
 Until the install links have been verified, each download is a disabled button
@@ -62,6 +88,8 @@ After completing the checks in [RELEASING.md](RELEASING.md), replace the relevan
 the verified Mac DMG or iPhone TestFlight/App Store URL. Remove `disabled`,
 `type`, and `aria-describedby`, and update its availability text. For Mac, show
 the version, Apple silicon requirement, and minimum macOS version.
+Update all three description tags in the page head when iPhone downloads go
+live so search and sharing previews no longer say “coming soon.”
 
 Keep the filled button for the Mac in the desktop layout and for the iPhone in
 the mobile layout. The other download stays outlined even when both are live.
