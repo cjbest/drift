@@ -23,6 +23,15 @@ automatically. There is also an iPhone app.
 
 ## Try it!
 
+[Download Drift for Mac](https://github.com/cjbest/drift/releases/download/v0.2.0/Drift-0.2.0-macOS-AppleSilicon.dmg)
+
+Version 0.2.0 · Apple silicon · macOS 14 or later.
+
+Open the download and drag Drift to Applications.
+
+<details>
+<summary>Build from source</summary>
+
 Clone the repo:
 
 ```sh
@@ -41,6 +50,8 @@ tools using the [installation guide](docs/INSTALL.md).
 For iPhone and iPad, point your agent at the
 [iOS instructions](docs/INSTALL.md#iphone-and-ipad). Both apps can use the same
 Markdown folder in iCloud Drive.
+
+</details>
 
 ---
 
