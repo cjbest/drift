@@ -29,6 +29,10 @@ above the list, and almost nothing but the text inside a note.
 
 ## Build
 
+For an agent-led installation on a device, follow the
+[installation guide](../docs/INSTALL.md#iphone-and-ipad), including the user's
+own signing team. Run the commands below from the repository root.
+
 Requires Xcode and XcodeGen (`brew install xcodegen`).
 
 ```sh

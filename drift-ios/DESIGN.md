@@ -62,6 +62,8 @@ does not establish that the interaction is right.
   a separate wordmark/header during its own simplification (`5c2c499`).
 - Rows pass underneath the floating glass controls. This was explicitly added
   to make the glass feel translucent, with a soft status-bar fade (`23f90a5`).
+- The list extends to the bottom screen edge when the keyboard is hidden;
+  search keeps its viewport above the keyboard without leaving a fixed bottom strip.
 - Search replaces compose with cancel using a small opacity/scale transition.
   Cancel clears both query and keyboard. Search excerpts show the relevant
   passage and emphasize the match.
@@ -120,8 +122,7 @@ Original-reference evidence: source and focused commit history were reviewed. A 
 original build was launched and its home, opening transition, and short editor
 were inspected in Simulator. The live gesture walkthrough was incomplete
 because the Mac locked; precise gesture rules above are source-confirmed, not
-claimed as fully verified by that walkthrough. Checked-in screenshots predate
-the original's latest design and must not serve as its visual reference.
+claimed as fully verified by that walkthrough.
 
 Rebuild validation, September 5, 2026: 29 unit tests and all 14 UI scenarios
 passed across the full run and focused reruns after fixes. Coverage includes

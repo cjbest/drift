@@ -1,6 +1,6 @@
 #!/bin/bash
 set -euo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../drift-mac"
 npm run build:desktop-preview
 # Running the binary with this explicit override always uses the copied notebook,
 # even after the installed preview has been connected to the real notebook.

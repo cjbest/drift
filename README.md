@@ -3,11 +3,15 @@
 The markdown editor I always wanted for my personal notes.
 
 <p align="center">
-  <img src="assets/demo2.gif" alt="Drift demo" width="600">
+  <a href="docs/assets/demo.mp4"><img src="docs/assets/demo.gif" alt="Drift on Mac: checklists, fast search, keyboard shortcuts, and dark mode" width="720"></a>
 </p>
 
 Notes are plain Markdown files, named from their contents and saved
-automatically. Cmd+P searches the notebook.
+automatically. There is also an iPhone app.
+
+<p align="center">
+  <img src="docs/assets/iphone.png" alt="Drift on iPhone: a notebook full of notes in light mode, and an open launch checklist in dark mode" width="640">
+</p>
 
 ## Shortcuts
 
@@ -15,39 +19,33 @@ automatically. Cmd+P searches the notebook.
 |----------|--------|
 | **Cmd+P** | Quick open |
 | **Cmd+N** | New note |
-| **Cmd+F** | Find in document |
-| **Cmd+D** | Toggle dark/light |
-| **Cmd+/** | Keyboard shortcuts |
+| **Cmd+/** | See all the other shortcuts |
 
-Type `[]` or `-[]` followed by Space at the start of a line to begin a checklist.
-Cmd+Return checks or unchecks every checklist item in the selection.
+## Try it!
 
-## Mac development
+Clone the repo:
 
-Build and run **Drift Preview**, a separate app that uses a development copy of
-the notebook:
-
-```bash
-npm install
-./scripts/preview-desktop.sh
+```sh
+git clone https://github.com/cjbest/drift.git
+cd drift
 ```
 
-To build without launching, run `npm run build:desktop-preview`. See the
-[desktop guide](DESKTOP-DESIGN.md) for notebook configuration, interaction
-details, and tests. Development and automated tests must use notebook copies.
+Then tell your coding agent:
 
-`npm run build:desktop` builds the main **Drift.app**. Both desktop build
-commands use an available Apple signing identity so macOS can recognize
-updates and retain folder permissions. If several identities are installed,
-choose one with `DRIFT_SIGNING_IDENTITY`. Configure the installed main app's
-notebook as described in the desktop guide before using it with existing notes.
+> Read docs/INSTALL.md, then build and install Drift on my Mac.
 
-## iPhone and iPad
+For now, source builds require Xcode and an Apple account set up for development
+signing. A free account is enough. Your agent can handle the remaining build
+tools using the [installation guide](docs/INSTALL.md).
 
-The iOS app lives in `drift-ios` and can use the same Markdown folder as the Mac
-app. See the [iOS build and testing guide](drift-ios/README.md), or run
-`./scripts/preview-ios.sh` for a separate simulator preview with sample notes.
+For iPhone and iPad, point your agent at the
+[iOS instructions](docs/INSTALL.md#iphone-and-ipad). Both apps can use the same
+Markdown folder in iCloud Drive.
 
 ---
 
-Built with Tauri 2, SolidJS, and CodeMirror 6.
+Built with [Tauri](https://v2.tauri.app/), [SolidJS](https://www.solidjs.com/), and
+[CodeMirror](https://codemirror.net/) on Mac; [Swift](https://www.swift.org/) and
+[UIKit](https://developer.apple.com/documentation/uikit) on iPhone and iPad.
+Typefaces: [Newsreader](https://github.com/productiontype/Newsreader) and
+[JetBrains Mono](https://www.jetbrains.com/lp/mono/).

@@ -1,6 +1,6 @@
 #!/bin/bash
 set -euo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../drift-mac"
 
 variant="${1:-main}"
 build_args=(build --bundles app)

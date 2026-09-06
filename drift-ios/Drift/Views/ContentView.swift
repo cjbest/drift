@@ -95,6 +95,7 @@ final class NotebookViewController: UIViewController, UITableViewDelegate, UITex
         table.register(NotebookCell.self, forCellReuseIdentifier: "note")
         table.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(table)
+        view.keyboardLayoutGuide.usesBottomSafeArea = false
         NSLayoutConstraint.activate([
             table.leadingAnchor.constraint(equalTo: view.leadingAnchor), table.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             table.topAnchor.constraint(equalTo: view.topAnchor), table.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor),
@@ -153,7 +154,7 @@ final class NotebookViewController: UIViewController, UITableViewDelegate, UITex
         let top = view.safeAreaInsets.top + (chrome.isHidden ? 0 : chromeHeight + 24)
         let previousTop = table.contentInset.top
         let wasAtTop = table.contentOffset.y <= -previousTop + 1
-        table.contentInset = UIEdgeInsets(top: top, left: 0, bottom: 12, right: 0)
+        table.contentInset = UIEdgeInsets(top: top, left: 0, bottom: table.safeAreaInsets.bottom + 12, right: 0)
         // The thumb follows the screen edge, not the space reserved for chrome.
         table.verticalScrollIndicatorInsets = table.safeAreaInsets
         if wasAtTop, previousTop != top { table.contentOffset.y = -top }
@@ -557,11 +558,14 @@ final class NotebookViewController: UIViewController, UITableViewDelegate, UITex
         }
         notice.addSubview(stack)
         view.addSubview(notice)
+        let aboveKeyboard = notice.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor, constant: -18)
+        aboveKeyboard.priority = .defaultHigh
         NSLayoutConstraint.activate([
             notice.centerXAnchor.constraint(equalTo: view.safeAreaLayoutGuide.centerXAnchor),
             notice.leadingAnchor.constraint(greaterThanOrEqualTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 24),
             notice.trailingAnchor.constraint(lessThanOrEqualTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -24),
-            notice.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor, constant: -18),
+            aboveKeyboard,
+            notice.bottomAnchor.constraint(lessThanOrEqualTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -18),
             notice.heightAnchor.constraint(greaterThanOrEqualToConstant: 48),
             stack.leadingAnchor.constraint(equalTo: notice.leadingAnchor, constant: 18),
             stack.trailingAnchor.constraint(equalTo: notice.trailingAnchor, constant: -18),

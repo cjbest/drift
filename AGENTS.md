@@ -1,5 +1,11 @@
 # Drift
 
+For a request to build and install the app, follow [docs/INSTALL.md](docs/INSTALL.md).
+Install the normal **Drift** app; Preview builds are for development and testing.
+
+The Mac app, its dependencies, and its tests live in `drift-mac`. Run npm and
+Cargo commands there. The native iPhone and iPad app lives in `drift-ios`.
+
 The normal `Drift` target in `drift-ios` is the main iOS app. `Drift Preview`
 is only a separate installation for disposable QA.
 
@@ -20,7 +26,7 @@ See [the iOS interaction reference](drift-ios/DESIGN.md) for the specific
 behaviors and the reasoning behind them.
 
 For desktop behavior, side-by-side builds, and safe notebook testing, see
-[the desktop reference](DESKTOP-DESIGN.md). Desktop development must use the
+[the desktop reference](docs/DESKTOP-DESIGN.md). Desktop development must use the
 copied notebook; `scripts/preview-desktop.sh` enforces that choice.
 
 Every keyboard shortcut must also appear in the native app menu.
