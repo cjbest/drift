@@ -1,7 +1,7 @@
 {
   "name": "drift",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,10 +11,11 @@
     "test": "playwright test",
     "test:ui": "playwright test --ui",
     "test:headed": "playwright test --headed",
-    "fix": "tsx scripts/fix.ts"
+    "build:desktop-preview": "./scripts/build-desktop.sh preview",
+    "test:desktop": "tsx --test tests/*.test.ts && playwright test e2e/desktop-rebuild.spec.ts e2e/desktop-polish.spec.ts e2e/lifecycle.spec.ts e2e/links.spec.ts e2e/checklist-shorthand.spec.ts",
+    "build:desktop": "./scripts/build-desktop.sh main"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.72.1",
     "@codemirror/commands": "^6.10.1",
     "@codemirror/lang-markdown": "^6.5.0",
     "@codemirror/language": "^6.12.1",
@@ -22,12 +23,10 @@
     "@codemirror/state": "^6.5.4",
     "@codemirror/theme-one-dark": "^6.1.3",
     "@codemirror/view": "^6.39.11",
-    "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "@tauri-apps/api": "^2.9.1",
     "@tauri-apps/cli": "^2.9.6",
     "@tauri-apps/plugin-fs": "^2.4.5",
     "@tauri-apps/plugin-shell": "^2.3.4",
-    "dotenv": "^17.2.3",
     "solid-js": "^1.9.10"
   },
   "devDependencies": {

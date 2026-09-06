@@ -1,245 +1,190 @@
-import { createSignal, createEffect, createMemo, onMount, For } from 'solid-js'
-import type { JSX } from 'solid-js'
-import './QuickOpen.css'
+import {
+  createSignal,
+  createEffect,
+  createMemo,
+  onMount,
+  on,
+  For,
+  Show,
+} from "solid-js";
+import { searchNotes } from "../notebook/search";
+import type { Note, Hit } from "../notebook/search";
+import "./QuickOpen.css";
 
-export interface NoteInfo {
-  path: string
-  title: string
-  preview: string
-  createdAt: Date | null
+interface Props {
+  notes: Note[];
+  access: Record<string, number>;
+  current: string | null;
+  loading: boolean;
+  unavailable?: boolean;
+  onSelect: (hit: Hit, newWindow: boolean) => void;
+  onClose: () => void;
+  onActive: (hit: Hit | undefined) => void;
 }
-
-function formatRelativeDate(date: Date | null): string {
-  if (!date) return ''
-
-  const now = new Date()
-  const diff = now.getTime() - date.getTime()
-  const seconds = Math.floor(diff / 1000)
-  const minutes = Math.floor(seconds / 60)
-  const days = Math.floor(minutes / 60 / 24)
-
-  // Within last minute
-  if (seconds < 60) return `${seconds}s ago`
-
-  // Within last hour
-  if (minutes < 60) return `${minutes} min ago`
-
-  // Today (but over an hour ago)
-  const isToday = date.toDateString() === now.toDateString()
-  if (isToday) {
-    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: undefined, hour12: true }).toLowerCase()
-  }
-
-  // Yesterday
-  const yesterday = new Date(now)
-  yesterday.setDate(yesterday.getDate() - 1)
-  if (date.toDateString() === yesterday.toDateString()) return 'yesterday'
-
-  // Within last week
-  if (days < 7) {
-    return date.toLocaleDateString('en-US', { weekday: 'short' })
-  }
-
-  // This year
-  if (date.getFullYear() === now.getFullYear()) {
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-  }
-
-  // Older
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+function dateLabel(time: number) {
+  const date = new Date(time),
+    now = new Date();
+  if (date.toDateString() === now.toDateString())
+    return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const yesterday = new Date();
+  yesterday.setDate(now.getDate() - 1);
+  if (date.toDateString() === yesterday.toDateString()) return "yesterday";
+  return date.toLocaleDateString([], {
+    month: "short",
+    day: "numeric",
+    ...(date.getFullYear() !== now.getFullYear() ? { year: "numeric" } : {}),
+  });
 }
-
-interface QuickOpenProps {
-  fileAccessTimes: Record<string, number>
-  currentFile: string | null
-  notes: NoteInfo[]
-  onSelect: (filePath: string) => void
-  onSelectNewWindow: (filePath: string) => void
-  onClose: () => void
-}
-
-export function getFilename(path: string): string {
-  return path.split('/').pop()?.replace('.md', '') || path
-}
-
-export function getPreview(content: string): string {
-  // Get content after the first line, collapsed to single line
-  const lines = content.split('\n').slice(1).filter(l => l.trim())
-  return lines.join(' ').slice(0, 200)
-}
-
-function findMatch(query: string, text: string): number {
-  // Returns index of match, or -1 if no match
-  return text.toLowerCase().indexOf(query.toLowerCase())
-}
-
-function formatDateAsTitle(date: Date): string {
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-}
-
-function ellipsizeMiddle(text: string, maxLen: number): string {
-  if (text.length <= maxLen) return text
-  const half = Math.floor((maxLen - 3) / 2)
-  return text.slice(0, half) + '...' + text.slice(-half)
-}
-
-export function QuickOpen(props: QuickOpenProps) {
-  const [query, setQuery] = createSignal('')
-  const [selectedIndex, setSelectedIndex] = createSignal(0)
-
-  let inputRef: HTMLInputElement | undefined
-  let listRef: HTMLDivElement | undefined
-
-  onMount(() => {
-    // Focus input immediately
-    setTimeout(() => inputRef?.focus(), 0)
-  })
-
-  const getRelevantTime = (note: NoteInfo): number => {
-    const accessTime = props.fileAccessTimes[note.path] || 0
-    const createTime = note.createdAt?.getTime() || 0
-    return Math.max(accessTime, createTime)
-  }
-
-  // Filter and sort notes reactively
-  const filteredNotes = createMemo(() => {
-    const q = query().trim()
-    // Exclude current file
-    let notes = props.notes.filter(n => n.path !== props.currentFile)
-
-    if (q) {
-      // Filter by substring match in title or preview
-      notes = notes.filter(n =>
-        findMatch(q, n.title) !== -1 || findMatch(q, n.preview) !== -1
-      )
-    }
-
-    // Sort by most recent (either created or accessed)
-    return [...notes].sort((a, b) => getRelevantTime(b) - getRelevantTime(a))
-  })
-
-  // Get display title - fallback to date if no title, ellipsize when searching
-  const getDisplayTitle = (note: NoteInfo): string => {
-    let title = note.title?.trim()
-    if (!title && note.createdAt) {
-      title = formatDateAsTitle(note.createdAt)
-    }
-    if (!title) title = 'Untitled'
-
-    // When searching, truncate long titles so preview is visible
-    if (query().trim() && title.length > 25) {
-      return ellipsizeMiddle(title, 25)
-    }
-    return title
-  }
-
-  // Get display preview - show match snippet with bold highlighting
-  const getDisplayPreview = (note: NoteInfo): JSX.Element => {
-    const q = query().trim()
-    if (!q) return <>{note.preview}</>
-
-    const text = note.preview
-    const idx = findMatch(q, text)
-
-    if (idx === -1) return <>{text}</>
-
-    // Get snippet around match
-    const start = Math.max(0, idx - 30)
-    const end = Math.min(text.length, idx + q.length + 120)
-
-    const prefix = start > 0 ? '...' : ''
-    const suffix = end < text.length ? '...' : ''
-
-    const beforeMatch = text.slice(start, idx)
-    const match = text.slice(idx, idx + q.length)
-    const afterMatch = text.slice(idx + q.length, end)
-
-    return <>{prefix}{beforeMatch}<strong>{match}</strong>{afterMatch}{suffix}</>
-  }
-
-  // Reset selection when query changes
+export function QuickOpen(props: Props) {
+  const [query, setQuery] = createSignal("");
+  const [selected, setSelected] = createSignal<string | null>(null);
+  const [scrollTop, setScrollTop] = createSignal(0);
+  let input!: HTMLInputElement, list!: HTMLDivElement;
+  const hits = createMemo(() =>
+    searchNotes(props.notes, query(), props.access, props.current),
+  );
+  const active = createMemo(
+    () => hits().find((h) => h.note.path === selected()) ?? hits()[0],
+  );
+  const activePath = createMemo(() => active()?.note.path);
+  const start = createMemo(() => Math.max(0, Math.floor(scrollTop() / 61) - 4));
+  const visible = createMemo(() => hits().slice(start(), start() + 18));
+  onMount(() => input.focus());
   createEffect(() => {
-    query() // track dependency
-    setSelectedIndex(0)
-  })
-
-  // Scroll selected item into view
-  createEffect(() => {
-    const idx = selectedIndex()
-    const item = listRef?.children[idx] as HTMLElement | undefined
-    item?.scrollIntoView({ block: 'nearest' })
-  })
-
-  const handleKeyDown = (e: KeyboardEvent) => {
-    // Stop all keyboard events from reaching CodeMirror
-    e.stopPropagation()
-
-    const notes = filteredNotes()
-
-    switch (e.key) {
-      case 'ArrowDown':
-      case 'Tab':
-        e.preventDefault()
-        setSelectedIndex(i => Math.min(i + 1, notes.length - 1))
-        break
-      case 'ArrowUp':
-        e.preventDefault()
-        setSelectedIndex(i => Math.max(i - 1, 0))
-        break
-      case 'Enter':
-        e.preventDefault()
-        if (notes[selectedIndex()]) {
-          if (e.metaKey) {
-            props.onSelectNewWindow(notes[selectedIndex()].path)
-          } else {
-            props.onSelect(notes[selectedIndex()].path)
-          }
-        }
-        break
-      case 'Escape':
-        e.preventDefault()
-        props.onClose()
-        break
-    }
+    query();
+    setSelected(null);
+    if (list) list.scrollTop = 0;
+    setScrollTop(0);
+  });
+  createEffect(() => props.onActive(active()));
+  createEffect(
+    on(activePath, (path) => {
+      if (!list || !path) return;
+      const index = hits().findIndex((h) => h.note.path === path);
+      const top = index * 61;
+      if (top < list.scrollTop) list.scrollTop = top;
+      else if (top + 61 > list.scrollTop + list.clientHeight)
+        list.scrollTop = top + 61 - list.clientHeight + 12;
+      setScrollTop(list.scrollTop);
+    }),
+  );
+  function move(delta: number) {
+    const all = hits(),
+      index = all.findIndex((h) => h === active());
+    const next = all[Math.max(0, Math.min(all.length - 1, index + delta))];
+    setSelected(next?.note.path ?? null);
   }
-
   return (
-    <div class="quick-open-overlay" onClick={() => props.onClose()}>
-      <div class="quick-open" onClick={e => e.stopPropagation()}>
+    <div
+      class="quick-open-overlay"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) props.onClose();
+      }}
+    >
+      <div
+        class="quick-open"
+        role="dialog"
+        aria-label="Open a note"
+        aria-modal="true"
+      >
         <input
-          ref={inputRef}
-          type="text"
+          ref={input}
           class="quick-open-input"
-          placeholder="Search..."
+          placeholder="Search notes…"
+          aria-label="Search notes"
+          role="combobox"
+          aria-expanded="true"
+          aria-controls="note-results"
+          aria-activedescendant={
+            active() ? `note-${hits().indexOf(active()!)}` : undefined
+          }
           value={query()}
-          onInput={e => setQuery(e.currentTarget.value)}
-          onKeyDown={handleKeyDown}
-          autofocus
+          onInput={(e) => setQuery(e.currentTarget.value)}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (
+              e.key === "ArrowDown" ||
+              e.key === "ArrowUp" ||
+              e.key === "Tab"
+            ) {
+              e.preventDefault();
+              move(e.key === "ArrowUp" || e.shiftKey ? -1 : 1);
+            }
+            if (e.key === "Enter") {
+              e.preventDefault();
+              const hit = active();
+              if (hit) props.onSelect(hit, e.metaKey);
+            }
+            if (e.key === "Escape" || (e.metaKey && e.key === "p")) {
+              e.preventDefault();
+              props.onClose();
+            }
+          }}
         />
-        <div class="quick-open-list" ref={listRef}>
-          <For each={filteredNotes()}>
-            {(note, index) => (
-              <div
-                class="quick-open-item"
-                classList={{ selected: index() === selectedIndex() }}
-                onClick={() => props.onSelect(note.path)}
-                onMouseMove={() => setSelectedIndex(index())}
-              >
-                <span class="quick-open-title">{getDisplayTitle(note)}</span>
-                {note.preview && (
-                  <span class="quick-open-preview">{getDisplayPreview(note)}</span>
-                )}
-                {note.createdAt && (
-                  <span class="quick-open-date">{formatRelativeDate(note.createdAt)}</span>
-                )}
-              </div>
-            )}
-          </For>
-          {filteredNotes().length === 0 && (
-            <div class="quick-open-empty">No notes found</div>
-          )}
+        <div
+          class="quick-open-list"
+          ref={list}
+          id="note-results"
+          role="listbox"
+          aria-label="Notes"
+          onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
+        >
+          <div
+            role="presentation"
+            style={{
+              "padding-top": `${start() * 61}px`,
+              "padding-bottom": `${Math.max(0, hits().length - start() - visible().length) * 61}px`,
+            }}
+          >
+            <For each={visible()}>
+              {(hit, index) => (
+                <div
+                  class="quick-open-item"
+                  id={`note-${start() + index()}`}
+                  aria-setsize={hits().length}
+                  aria-posinset={start() + index() + 1}
+                  data-path={hit.note.path}
+                  role="option"
+                  aria-selected={active()?.note.path === hit.note.path}
+                  classList={{
+                    selected: active()?.note.path === hit.note.path,
+                  }}
+                  onMouseMove={() => setSelected(hit.note.path)}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    props.onSelect(hit, e.metaKey);
+                  }}
+                >
+                  <div class="quick-open-copy">
+                    <span class="quick-open-title">{hit.note.title}</span>
+                    <span class="quick-open-preview">
+                      <Show when={hit.match} fallback={hit.excerpt}>
+                        {hit.before}
+                        <mark>{hit.match}</mark>
+                        {hit.after}
+                      </Show>
+                    </span>
+                  </div>
+                  <span class="quick-open-date">
+                    {dateLabel(hit.note.modified)}
+                  </span>
+                </div>
+              )}
+            </For>
+          </div>
+          <Show when={!hits().length}>
+            <div class="quick-open-empty">
+              {props.unavailable
+                ? "Notebook unavailable. Use Retry opening to try again."
+                : props.loading
+                ? "Searching your notebook…"
+                : query()
+                  ? "No matching notes"
+                  : "Your next thought starts here."}
+            </div>
+          </Show>
         </div>
       </div>
     </div>
-  )
+  );
 }

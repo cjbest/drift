@@ -4,6 +4,35 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Drift</title>
+    <script>
+      try {
+        const appearance = JSON.parse(
+          localStorage.getItem("appearance") || '"system"',
+        );
+        if (["light", "dark", "system"].includes(appearance))
+          document.documentElement.dataset.theme = appearance;
+      } catch {}
+    </script>
+    <style>
+      html {
+        background: #faf7f0;
+      }
+      html[data-theme="dark"] {
+        background: #211f1b;
+      }
+      @media (prefers-color-scheme: dark) {
+        html:not([data-theme="light"]) {
+          background: #211f1b;
+        }
+      }
+    </style>
+    <link
+      rel="preload"
+      href="/fonts/Newsreader-Italic.ttf"
+      as="font"
+      type="font/ttf"
+      crossorigin
+    />
   </head>
   <body>
     <div id="root"></div>

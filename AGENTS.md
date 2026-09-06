@@ -18,3 +18,9 @@ is only a separate installation for disposable QA.
 
 See [the iOS interaction reference](drift-ios/DESIGN.md) for the specific
 behaviors and the reasoning behind them.
+
+For desktop behavior, side-by-side builds, and safe notebook testing, see
+[the desktop reference](DESKTOP-DESIGN.md). Desktop development must use the
+copied notebook; `scripts/preview-desktop.sh` enforces that choice.
+
+Every keyboard shortcut must also appear in the native app menu.

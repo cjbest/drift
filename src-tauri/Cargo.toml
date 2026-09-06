@@ -1,6 +1,6 @@
 [package]
 name = "drift"
-version = "0.1.0"
+version = "0.2.0"
 description = "A minimal markdown editor"
 authors = ["you"]
 license = ""
@@ -19,6 +19,7 @@ name = "Drift"
 path = "src/main.rs"
 
 [build-dependencies]
+cc = "1"
 tauri-build = { version = "2.5.3", features = [] }
 
 [dependencies]
@@ -29,3 +30,5 @@ tauri = { version = "2.9.5", features = [] }
 tauri-plugin-log = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-shell = "2"
+
+uuid = { version = "1", features = ["v4"] }

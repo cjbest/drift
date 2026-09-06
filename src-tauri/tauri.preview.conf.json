@@ -1,0 +1,26 @@
+{
+  "productName": "Drift Preview",
+  "version": "0.2.0",
+  "identifier": "com.drift.desktop-preview",
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Drift Preview",
+        "width": 900,
+        "height": 700,
+        "minWidth": 400,
+        "minHeight": 300,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "backgroundColor": "#faf7f0",
+        "visible": false
+      }
+    ]
+  },
+  "bundle": {
+    "targets": [
+      "app"
+    ]
+  }
+}

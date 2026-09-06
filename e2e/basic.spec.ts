@@ -84,8 +84,9 @@ test('theme toggle works', async ({ page }) => {
   // Take screenshot of default theme
   await page.screenshot({ path: 'e2e/screenshots/theme-default.png' })
 
-  // Press Cmd+Shift+L to toggle theme
-  await page.keyboard.press('Meta+Shift+l')
+  // Cmd+D toggles the effective appearance.
+  await page.keyboard.press('Meta+d')
+  await expect(page.locator('html')).toHaveAttribute('data-theme', /light|dark/)
 
   // Wait for theme change
   await page.waitForTimeout(100)

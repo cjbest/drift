@@ -1,437 +1,173 @@
-/* Heading markers - muted # symbols */
-.heading-marker {
-  color: rgba(0, 0, 0, 0.3);
-}
-
-:root[data-theme="dark"] .heading-marker {
-  color: rgba(255, 255, 255, 0.3);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .heading-marker {
-    color: rgba(255, 255, 255, 0.3);
-  }
-}
-
-/* Heading text - just bold */
-.heading {
-  font-weight: 600;
-}
-
-/* Blockquote styling */
-.blockquote-marker {
-  color: rgba(0, 0, 0, 0.3);
-}
-
-:root[data-theme="dark"] .blockquote-marker {
-  color: rgba(255, 255, 255, 0.3);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .blockquote-marker {
-    color: rgba(255, 255, 255, 0.3);
-  }
-}
-
-.blockquote-text {
+@font-face {
+  font-family: Newsreader;
+  src: url("/fonts/Newsreader-Italic.ttf") format("truetype");
   font-style: italic;
+  font-display: swap;
 }
-
-/* Emphasis styling */
-.bold-text {
-  font-weight: 600;
-}
-
-.italic-text {
-  font-style: italic;
-}
-
-/* Link styling */
-.link-bracket {
-  color: rgba(0, 0, 0, 0.3);
-}
-
-:root[data-theme="dark"] .link-bracket {
-  color: rgba(255, 255, 255, 0.3);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .link-bracket {
-    color: rgba(255, 255, 255, 0.3);
-  }
-}
-
-.link-text {
-  text-decoration: underline;
-}
-
-.link-url {
-  color: rgba(0, 0, 0, 0.25);
-}
-
-:root[data-theme="dark"] .link-url {
-  color: rgba(255, 255, 255, 0.25);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .link-url {
-    color: rgba(255, 255, 255, 0.25);
-  }
-}
-
-.link-url-truncated {
-  color: rgba(0, 0, 0, 0.25);
-}
-
-:root[data-theme="dark"] .link-url-truncated {
-  color: rgba(255, 255, 255, 0.25);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .link-url-truncated {
-    color: rgba(255, 255, 255, 0.25);
-  }
-}
-
-.link-url-truncated:hover {
-  color: rgba(0, 0, 0, 0.5);
-}
-
-:root[data-theme="dark"] .link-url-truncated:hover {
-  color: rgba(255, 255, 255, 0.5);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .link-url-truncated:hover {
-    color: rgba(255, 255, 255, 0.5);
-  }
-}
-
-.bare-url {
-  text-decoration: underline;
-}
-
-/* Pointer cursor on links only when Cmd is held (overrides move cursor) */
-body.cmd-held .link-text,
-body.cmd-held .link-url-truncated,
-body.cmd-held .bare-url {
-  cursor: pointer !important;
-}
-
-/* Checkbox markers - clickable [ ] and [x] */
-.checkbox-marker {
-  cursor: pointer;
-  border-radius: 2px;
-  transition: background-color 0.1s ease;
-}
-
-.checkbox-marker:hover {
-  background-color: rgba(0, 0, 0, 0.1);
-}
-
-:root[data-theme="dark"] .checkbox-marker:hover {
-  background-color: rgba(255, 255, 255, 0.15);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .checkbox-marker:hover {
-    background-color: rgba(255, 255, 255, 0.15);
-  }
-}
-
-/* First line as title */
-.first-line-title {
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
-  font-weight: 600;
-  font-size: 1.618em;
-  line-height: 1.4;
-}
-
 .editor-container {
   flex: 1;
+  min-width: 0;
   height: 100%;
   overflow: hidden;
 }
-
-.editor-container .cm-editor {
-  height: 100%;
+.first-line-title {
+  font-family: Newsreader, Georgia, serif;
+  font-size: 32px;
+  line-height: 1.35;
+  font-style: italic;
+  font-weight: 400;
 }
-
-/* Selection styling handled by custom plugin */
-.cm-selectionLayer {
-  display: none !important;
+.heading,
+.bold-text {
+  font-weight: 650;
 }
-
-.cm-content ::selection {
-  background: transparent !important;
+.italic-text {
+  font-style: italic;
 }
-
-.selection-highlight {
-  background-color: #EEFF41;
-  color: #000000;
+.md-marker,
+.link-tail {
+  color: var(--muted);
+}
+.note-link {
+  text-decoration: underline;
+  text-decoration-color: var(--hairline);
+  text-underline-offset: 3px;
+}
+body.cmd-held [data-url] {
+  cursor: pointer !important;
+}
+.checkbox-marker {
+  cursor: pointer;
   border-radius: 3px;
-  padding: 1px 0;
 }
-
-/* Cursor styling - hide native caret, use CodeMirror's custom cursor */
-.cm-content {
-  caret-color: transparent !important;
+.checkbox-marker:hover {
+  background: var(--hover);
 }
-
-/* Light mode: 2px black cursor */
-.cm-cursor, .cm-cursor-primary {
-  border-left: 2px solid #000000 !important;
-  height: 1.61em !important;
-  transform: translate(-1px, -0.25em);
-  animation: none !important;
+.cm-editor .cm-cursor {
+  border-left: 2px solid var(--fg);
 }
-
-/* Title line (larger font): taller cursor */
-.cursor-in-title .cm-cursor,
-.cursor-in-title .cm-cursor-primary {
-  height: 2.6em !important;
-  transform: translate(-1px, -0.55em);
+.cm-editor .cm-selectionLayer {
+  visibility: hidden;
 }
-
-/* Dark mode: 1.5px white cursor */
-:root[data-theme="dark"] .cm-cursor,
-:root[data-theme="dark"] .cm-cursor-primary {
-  border-left-width: 1.5px !important;
-  border-left-color: #ffffff !important;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .cm-cursor,
-  :root:not([data-theme="light"]) .cm-cursor-primary {
-    border-left-width: 1.5px !important;
-    border-left-color: #ffffff !important;
-  }
-}
-
-
-/* AI loading state - shimmer on yellow highlight */
-.ai-loading .selection-highlight {
-  background: linear-gradient(
-    90deg,
-    #EEFF41 0%,
-    #EEFF41 35%,
-    #ffffff 50%,
-    #EEFF41 65%,
-    #EEFF41 100%
-  );
-  background-size: 300% 100%;
-  animation: ai-shimmer 1s linear infinite;
-}
-
-@keyframes ai-shimmer {
-  0% { background-position: 100% 0; }
-  100% { background-position: -100% 0; }
-}
-
-/* Search panel styling - floating top right */
-.cm-panels-top {
-  position: absolute !important;
-  top: 0 !important;
-  right: 0 !important;
-  left: auto !important;
-  width: auto !important;
-  background: transparent !important;
-  border: none !important;
-  z-index: 50;
-  padding: 38px 24px 0 0 !important;
-}
-
-.cm-panel.cm-search {
-  background: var(--bg);
-  border: 1px solid rgba(0, 0, 0, 0.12);
-  border-radius: 8px;
-  padding: 6px 8px;
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
-  font-size: 13px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.1);
-}
-
-:root[data-theme="dark"] .cm-panel.cm-search {
-  border-color: rgba(255, 255, 255, 0.12);
-  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.4);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .cm-panel.cm-search {
-    border-color: rgba(255, 255, 255, 0.12);
-    box-shadow: 0 2px 16px rgba(0, 0, 0, 0.4);
-  }
-}
-
-/* Hide replace row, extra options, and close button */
-.cm-panel.cm-search br,
-.cm-panel.cm-search br + input,
-.cm-panel.cm-search br + input + button,
-.cm-panel.cm-search br + input + button + button,
-.cm-panel.cm-search [name="select"],
-.cm-panel.cm-search [name="close"],
-.cm-panel.cm-search label {
-  display: none !important;
-}
-
-/* Input wrapper for positioning count inside */
-.cm-panel.cm-search .search-input-wrapper {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.cm-panel.cm-search input[main-field] {
-  font-family: "SF Mono", Menlo, Monaco, monospace;
-  font-size: 13px;
-  border-radius: 6px;
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  background: rgba(0, 0, 0, 0.03);
-  color: var(--fg);
-  padding: 7px 50px 7px 10px;
-  width: 220px;
-  box-sizing: border-box;
-}
-
-.cm-panel.cm-search input[main-field]:focus {
-  outline: none;
-  border-color: rgba(0, 0, 0, 0.2);
-}
-
-:root[data-theme="dark"] .cm-panel.cm-search input[main-field] {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.1);
-}
-
-:root[data-theme="dark"] .cm-panel.cm-search input[main-field]:focus {
-  border-color: rgba(255, 255, 255, 0.2);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .cm-panel.cm-search input[main-field] {
-    background: rgba(255, 255, 255, 0.06);
-    border-color: rgba(255, 255, 255, 0.1);
-  }
-  :root:not([data-theme="light"]) .cm-panel.cm-search input[main-field]:focus {
-    border-color: rgba(255, 255, 255, 0.2);
-  }
-}
-
-/* Match count inside input */
-.cm-panel.cm-search .search-match-count {
-  position: absolute;
-  right: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: 12px;
-  color: var(--fg);
-  opacity: 0.4;
-  pointer-events: none;
-  white-space: nowrap;
-}
-
-/* Arrow buttons for prev/next - left/right style */
-.cm-panel.cm-search button[name="next"],
-.cm-panel.cm-search button[name="prev"] {
-  font-size: 0;
-  width: 26px;
-  height: 26px;
-  border-radius: 4px;
-  border: none;
-  background: transparent;
-  color: var(--fg);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0.5;
-  padding: 0;
-}
-
-/* Reorder so prev (‹) comes before next (›) */
-.cm-panel.cm-search button[name="prev"] {
-  order: 1;
-}
-.cm-panel.cm-search button[name="next"] {
-  order: 2;
-}
-.cm-panel.cm-search .search-done-btn {
-  order: 3;
-}
-
-.cm-panel.cm-search button[name="next"]:hover,
-.cm-panel.cm-search button[name="prev"]:hover {
-  background: rgba(0, 0, 0, 0.06);
-  opacity: 1;
-}
-
-:root[data-theme="dark"] .cm-panel.cm-search button[name="next"]:hover,
-:root[data-theme="dark"] .cm-panel.cm-search button[name="prev"]:hover {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .cm-panel.cm-search button[name="next"]:hover,
-  :root:not([data-theme="light"]) .cm-panel.cm-search button[name="prev"]:hover {
-    background: rgba(255, 255, 255, 0.1);
-  }
-}
-
-.cm-panel.cm-search button[name="prev"]::after {
-  content: "‹";
-  font-size: 18px;
-  font-weight: 300;
-}
-
-.cm-panel.cm-search button[name="next"]::after {
-  content: "›";
-  font-size: 18px;
-  font-weight: 300;
-}
-
-/* Done button */
-.cm-panel.cm-search .search-done-btn {
-  font-family: inherit;
-  font-size: 13px;
-  font-weight: 500;
-  border-radius: 4px;
-  border: none;
-  background: transparent;
-  color: var(--fg);
-  opacity: 0.6;
-  cursor: pointer;
-  padding: 4px 8px;
-  margin-left: 2px;
-}
-
-.cm-panel.cm-search .search-done-btn:hover {
-  opacity: 1;
-  background: rgba(0, 0, 0, 0.06);
-}
-
-:root[data-theme="dark"] .cm-panel.cm-search .search-done-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .cm-panel.cm-search .search-done-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
-  }
-}
-
-/* Search match highlighting */
-.cm-searchMatch {
-  background-color: rgba(238, 255, 65, 0.4);
+.cm-editor .cm-selectionBackground,
+.cm-editor.cm-focused .cm-selectionBackground {
+  background: var(--selection) !important;
   border-radius: 2px;
 }
-
+.cm-editor .cm-content ::selection {
+  background: transparent;
+}
+.cm-searchMatch {
+  background: var(--hover);
+  border-radius: 2px;
+}
 .cm-searchMatch-selected {
-  background-color: #EEFF41;
+  background: var(--selection);
+}
+.cm-panels.cm-panels-top {
+  position: absolute !important;
+  right: 20px !important;
+  top: 40px !important;
+  left: auto !important;
+  background: transparent;
+  border: 0;
+  z-index: 110;
+  max-width: calc(100% - 40px);
+}
+.cm-panel.cm-search {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 8px;
+  background: var(--bg);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  box-shadow: 0 3px 20px rgb(30 20 10 / 12%);
+  font:
+    13px -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+}
+.cm-search input {
+  width: 165px;
+  min-width: 50px;
+  padding: 6px;
+  border: 0;
+  background: transparent;
+  color: var(--fg);
+  outline: none;
+  font: inherit;
+}
+.cm-search .search-count {
+  color: var(--muted);
+  font-size: 11px;
+  min-width: 24px;
+  text-align: right;
+}
+.cm-search button {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 4px 7px;
+  border-radius: 4px;
+  font: inherit;
+  cursor: pointer;
+}
+.cm-search button:hover {
+  background: var(--hover);
+  color: var(--fg);
+}
+.cm-search button[aria-label$="match"] {
+  font-size: 20px;
+  line-height: 20px;
+}
+@media (max-width: 500px) {
+  .cm-search input {
+    width: 120px;
+  }
+  .cm-panels.cm-panels-top {
+    right: 12px;
+    max-width: calc(100% - 24px);
+  }
 }
 
-/* Hanging indent for wrapped lines in bullets and checklists */
-/* Note: indent styles are now applied via inline styles in Editor.tsx
-   to work around a WebKit rendering bug with text-indent on wrapped lines */
+.cm-tooltip-hover:has(.link-preview) {
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--fg);
+  box-shadow: 0 4px 20px rgb(30 20 10 / 12%);
+  max-width: min(480px, calc(100vw - 24px));
+}
+.link-preview {
+  padding: 10px 12px;
+  cursor: text;
+}
+.link-preview-address {
+  font:
+    12px/1.5 "SF Mono",
+    Menlo,
+    monospace;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  max-height: min(220px, 40vh);
+  overflow: auto;
+  user-select: text;
+  -webkit-user-select: text;
+  overscroll-behavior: contain;
+}
+.link-preview-hint {
+  margin-top: 6px;
+  font:
+    11px/1.4 -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+  color: var(--muted);
+}
+body.cmd-held .link-preview,
+body.cmd-held .link-preview * {
+  cursor: text !important;
+}
+.note-link:hover {
+  text-decoration-color: var(--muted);
+}

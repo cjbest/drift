@@ -702,8 +702,9 @@ dependencies = [
 
 [[package]]
 name = "drift"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
+ "cc",
  "log",
  "serde",
  "serde_json",
@@ -712,6 +713,7 @@ dependencies = [
  "tauri-plugin-fs",
  "tauri-plugin-log",
  "tauri-plugin-shell",
+ "uuid",
 ]
 
 [[package]]

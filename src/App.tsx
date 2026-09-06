@@ -1,528 +1,769 @@
-import { createSignal, onMount, onCleanup, Show } from 'solid-js'
-import { listen } from '@tauri-apps/api/event'
-import { getCurrentWindow } from '@tauri-apps/api/window'
-import { WebviewWindow, getAllWebviewWindows } from '@tauri-apps/api/webviewWindow'
-import { documentDir } from '@tauri-apps/api/path'
-import { readTextFile, writeTextFile, mkdir, exists, readDir, rename, stat } from '@tauri-apps/plugin-fs'
-import { Editor } from './components/Editor'
-import { QuickOpen, getFilename, getPreview } from './components/QuickOpen'
-import type { NoteInfo } from './components/QuickOpen'
-import './App.css'
+import { createSignal, onMount, onCleanup, Show } from "solid-js";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { currentMonitor, getCurrentWindow } from "@tauri-apps/api/window";
+import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { Editor } from "./components/Editor";
+import type { EditorHandle, Position } from "./components/Editor";
+import { Shortcuts } from "./components/Shortcuts";
+import { cascadeWindow } from "./notebook/window-placement";
+import { QuickOpen } from "./components/QuickOpen";
+import { SaveQueue, fresh, dirty, snapshot } from "./notebook/session";
+import type { Session, Draft, Saved } from "./notebook/session";
+import type { Note, Hit } from "./notebook/search";
+import "./App.css";
 
-const DRIFT_FOLDER = 'Drift'
-
-// Dev: Cmd+Shift+R to hard reload (Tauri doesn't handle this natively)
-if (import.meta.hot) {
-  window.addEventListener('keydown', (e) => {
-    if (e.metaKey && e.shiftKey && e.key === 'r') {
-      e.preventDefault()
-      location.reload()
-    }
-  })
-}
-
-// Track if this is first load vs HMR reload (for dev feedback)
-const isHmrReload = import.meta.hot?.data?.initialized ?? false
-if (import.meta.hot) {
-  import.meta.hot.data.initialized = true
-}
-const OPEN_FILES_KEY = 'drift-open-files'
-
-type ThemeMode = 'system' | 'light' | 'dark'
-const THEME_LABELS: Record<ThemeMode, string> = { system: 'System', light: 'Light', dark: 'Dark' }
-
-// Track which files are open in which windows
-function getOpenFiles(): Record<string, string> {
-  const stored = localStorage.getItem(OPEN_FILES_KEY)
-  return stored ? JSON.parse(stored) : {}
-}
-
-function registerOpenFile(filePath: string, windowLabel: string) {
-  const files = getOpenFiles()
-  files[filePath] = windowLabel
-  localStorage.setItem(OPEN_FILES_KEY, JSON.stringify(files))
-}
-
-function unregisterWindow(windowLabel: string) {
-  const files = getOpenFiles()
-  const updated: Record<string, string> = {}
-  for (const [path, label] of Object.entries(files)) {
-    if (label !== windowLabel) {
-      updated[path] = label
-    }
+type Theme = "system" | "light" | "dark";
+const readJSON = <T,>(key: string, fallback: T): T => {
+  try {
+    return JSON.parse(localStorage.getItem(key) ?? "null") ?? fallback;
+  } catch {
+    return fallback;
   }
-  localStorage.setItem(OPEN_FILES_KEY, JSON.stringify(updated))
-}
-
-function getWindowForFile(filePath: string): string | null {
-  const files = getOpenFiles()
-  return files[filePath] || null
-}
-
-function sanitizeFilename(content: string): string {
-  // Get first line, prefer heading
-  const lines = content.split('\n').filter(l => l.trim())
-  if (lines.length === 0) return 'Untitled'
-
-  let title = lines[0]
-  // Remove markdown heading prefix
-  title = title.replace(/^#+\s*/, '')
-  // Remove characters not safe for filenames
-  title = title.replace(/[<>:"/\\|?*]/g, '')
-  // Limit length
-  title = title.slice(0, 50).trim()
-
-  return title || 'Untitled'
-}
-
+};
 function App() {
-  const [content, setContent] = createSignal('')
-  const [currentFilePath, setCurrentFilePath] = createSignal<string | null>(null)
-  const [fileAccessTimes, setFileAccessTimes] = createSignal<Record<string, number>>({})
-  const [quickOpenVisible, setQuickOpenVisible] = createSignal(false)
-  const [, setDriftDir] = createSignal('')
-  const [theme, setTheme] = createSignal<ThemeMode>((localStorage.getItem('drift-theme') as ThemeMode) || 'system')
-  const [statusMessage, setStatusMessage] = createSignal<string | null>(null)
-  const [cachedNotes, setCachedNotes] = createSignal<NoteInfo[]>([])
-  const [showTitleInBar, setShowTitleInBar] = createSignal(false)
-
-  let saveTimeout: number | undefined
-  let statusTimeout: number | undefined
-
-  const applyTheme = (mode: ThemeMode) => {
-    document.documentElement.removeAttribute('data-theme')
-    if (mode === 'light') {
-      document.documentElement.setAttribute('data-theme', 'light')
-    } else if (mode === 'dark') {
-      document.documentElement.setAttribute('data-theme', 'dark')
-    }
+  const [active, setActive] = createSignal<Session>(fresh(), { equals: false });
+  const [ready, setReady] = createSignal(false),
+    [quick, setQuick] = createSignal(false),
+    [shortcuts, setShortcuts] = createSignal(false),
+    [notes, setNotes] = createSignal<Note[]>([]);
+  const [hydrating, setHydrating] = createSignal(false),
+    [error, setError] = createSignal(""),
+    [notice, setNotice] = createSignal("");
+  const [retryKind, setRetryKind] = createSignal<"save" | "notebook">("save");
+  const [catalogueUnavailable, setCatalogueUnavailable] = createSignal(false);
+  let pendingOpen: { path: string; id: string } | undefined;
+  let retryOpenPath: string | undefined;
+  const [scrolled, setScrolled] = createSignal(false),
+    [access, setAccess] = createSignal<Record<string, number>>({});
+  const [match, setMatch] = createSignal<
+      { from: number; length: number } | undefined
+    >(),
+    [restore, setRestore] = createSignal<Position>();
+  const [theme, setTheme] = createSignal<Theme>(
+    readJSON("appearance", "system"),
+  );
+  const sessions = new Map<string, Session>(),
+    positions = new Map<string, Position>();
+  const appWindow = getCurrentWindow();
+  let activeHit: Hit | undefined;
+  let editor: EditorHandle | undefined,
+    prefix = "",
+    timer: ReturnType<typeof setTimeout> | undefined,
+    noticeTimer: ReturnType<typeof setTimeout> | undefined;
+  let refreshing: Promise<void> | undefined,
+    navigating = false,
+    disposed = false,
+    scanVersion = 0,
+    indexRun = 0;
+  const cleanup: (() => void)[] = [];
+  let finishBoot!: () => void;
+  const booted = new Promise<void>((resolve) => {
+    finishBoot = resolve;
+  });
+  let presented = false,
+    leaving = false,
+    quitTask: Promise<void> | undefined,
+    presentation: Promise<void> | undefined;
+  function presentWindow() {
+    if (presented) return Promise.resolve();
+    if (presentation) return presentation;
+    presentation = (async () => {
+      // Font loading works while hidden; animation frames can be suspended.
+      await document.fonts.load("italic 32px Newsreader").catch(() => {});
+      if (leaving) return;
+      presented = await invoke<boolean>("window_ready", {
+        dark: getComputedStyle(document.body).colorScheme === "dark",
+      });
+    })()
+      .catch(report)
+      .finally(() => {
+        presentation = undefined;
+      });
+    return presentation;
   }
-
-  const showStatus = (message: string) => {
-    setStatusMessage(message)
-    if (statusTimeout) clearTimeout(statusTimeout)
-    statusTimeout = setTimeout(() => setStatusMessage(null), 1500) as unknown as number
+  async function resumeAfterQuit() {
+    leaving = false;
+    quitTask = undefined;
+    await booted;
+    await presentWindow();
+    void refresh();
   }
-
-  const toggleTheme = () => {
-    // Detect current effective appearance
-    const current = theme()
-    let isDark: boolean
-    if (current === 'system') {
-      isDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-    } else {
-      isDark = current === 'dark'
-    }
-    // Toggle to opposite
-    const next: ThemeMode = isDark ? 'light' : 'dark'
-    setTheme(next)
-    localStorage.setItem('drift-theme', next)
-    applyTheme(next)
-    showStatus(`${THEME_LABELS[next]} mode`)
+  function requestQuit() {
+    if (quitTask) return quitTask;
+    leaving = true;
+    indexRun++;
+    clearTimeout(timer);
+    quitTask = (async () => {
+      await booted;
+      try {
+        await Promise.all(
+          Array.from(new Set([...sessions.values(), active()]), (s) =>
+            queue.flush(s),
+          ),
+        );
+        if (prefix)
+          storage("last-note", pendingOpen ?? { path: active().path, id: active().id });
+        await invoke("quit_ready", { label: appWindow.label });
+      } catch (e) {
+        report("Could not finish saving. Drift will stay open: " + e);
+        await invoke("cancel_quit");
+      }
+    })();
+    return quitTask;
   }
-
-  const setThemeMode = (mode: ThemeMode) => {
-    setTheme(mode)
-    localStorage.setItem('drift-theme', mode)
-    applyTheme(mode)
-    showStatus(`${THEME_LABELS[mode]} mode`)
+  function report(e: unknown) {
+    console.error(e);
+    setRetryKind("save");
+    setError(String(e));
   }
-
-  const ensureDriftDir = async () => {
-    let docDir = await documentDir()
-    // Ensure no double slashes
-    if (!docDir.endsWith('/')) docDir += '/'
-    const dir = `${docDir}${DRIFT_FOLDER}`
-    setDriftDir(dir)
-
-    const dirExists = await exists(dir)
-    if (!dirExists) {
-      await mkdir(dir)
-    }
-    return dir
+  function reportNotebook(e: unknown) {
+    console.error(e);
+    setRetryKind("notebook");
+    setError(String(e));
   }
-
-  const loadFileAccessTimes = () => {
-    const stored = localStorage.getItem('drift-file-access-times')
-    if (stored) {
-      setFileAccessTimes(JSON.parse(stored))
-    }
+  async function retryNotebook() {
+    const path = pendingOpen?.path ?? retryOpenPath;
+    const version = scanVersion;
+    // Access can return while the remembered note is still unavailable. Refill
+    // the notebook immediately instead of waiting for that independent read.
+    const catalogue = refresh();
+    if (path) await openFile(path);
+    await catalogue;
+    if (version !== scanVersion) await refresh();
   }
-
-  const recordFileAccess = (filePath: string, oldPath?: string) => {
-    const times = { ...fileAccessTimes() }
-    // If renaming, transfer the old timestamp
-    if (oldPath && oldPath !== filePath && times[oldPath]) {
-      times[filePath] = times[oldPath]
-      delete times[oldPath]
-    }
-    // Update access time to now
-    times[filePath] = Date.now()
-    setFileAccessTimes(times)
-    localStorage.setItem('drift-file-access-times', JSON.stringify(times))
+  function flash(message: string) {
+    setNotice(message);
+    clearTimeout(noticeTimer);
+    noticeTimer = setTimeout(() => setNotice(""), 5000);
   }
-
-  const saveFile = async (contentToSave: string, existingPath?: string | null) => {
-    if (!contentToSave.trim()) return
-
+  function storage(key: string, value: unknown) {
+    localStorage.setItem(prefix + key, JSON.stringify(value));
+  }
+  function checkpoint(s: Session) {
+    if (!prefix) return;
+    if (dirty(s)) storage("draft:" + s.id, snapshot(s));
+    else localStorage.removeItem(prefix + "draft:" + s.id);
+    if (s === active() && !pendingOpen)
+      storage("window:" + appWindow.label, { id: s.id, path: s.path });
+  }
+  function applyTheme(mode: Theme) {
+    setTheme(mode);
+    document.documentElement.dataset.theme = mode;
+    localStorage.setItem("appearance", JSON.stringify(mode));
+  }
+  function toggleTheme() {
+    const dark =
+      theme() === "dark" ||
+      (theme() === "system" &&
+        matchMedia("(prefers-color-scheme: dark)").matches);
+    applyTheme(dark ? "light" : "dark");
+  }
+  applyTheme(theme());
+  const queue = new SaveQueue(
+    (draft) => invoke<Saved>("save_note", { draft }),
+    checkpoint,
+    (s, conflict) => {
+      if (s === active()) setActive(s);
+      if (s === active())
+        void invoke("claim_note", {
+          path: s.path,
+          label: appWindow.label,
+        }).catch(report);
+      scanVersion++;
+      setNotes((all) => {
+        const next = all.filter((n) => n.path !== s.path);
+        if (s.path)
+          next.unshift({
+            path: s.path,
+            title: s.path.slice(0, -3),
+            text: s.baseline ?? "",
+            modified: Date.now(),
+            size: s.text.length,
+          });
+        return next;
+      });
+      if (conflict)
+        flash(
+          "Another version changed. Your writing was saved in a separate conflict note.",
+        );
+      void refresh();
+    },
+  );
+  function changed(text: string) {
+    pendingOpen = undefined;
+    const s = active();
+    s.text = text;
+    s.revision++;
+    setActive(s);
     try {
-      const dir = await ensureDriftDir()
-      let filePath = existingPath ?? currentFilePath()
-      let oldPath: string | undefined
-
-      if (!filePath) {
-        // Create new file with name from content
-        const filename = sanitizeFilename(contentToSave)
-        filePath = `${dir}/${filename}.md`
-
-        // Handle duplicates
-        let counter = 1
-        while (await exists(filePath)) {
-          filePath = `${dir}/${filename} ${counter}.md`
-          counter++
-        }
-      } else {
-        // Check if title changed and we need to rename
-        const currentFilename = filePath.split('/').pop()?.replace('.md', '') || ''
-        const newFilename = sanitizeFilename(contentToSave)
-
-        if (currentFilename !== newFilename) {
-          let newPath = `${dir}/${newFilename}.md`
-
-          // Handle duplicates (but not with self)
-          let counter = 1
-          while (await exists(newPath) && newPath !== filePath) {
-            newPath = `${dir}/${newFilename} ${counter}.md`
-            counter++
-          }
-
-          if (newPath !== filePath) {
-            await rename(filePath, newPath)
-            oldPath = filePath
-            filePath = newPath
-          }
-        }
-      }
-
-      setCurrentFilePath(filePath)
-      await writeTextFile(filePath, contentToSave)
-      recordFileAccess(filePath, oldPath)
-
-      // Update file registration (handles new files and renames)
-      const appWindow = getCurrentWindow()
-      if (oldPath) {
-        // Renamed: remove old registration
-        const files = getOpenFiles()
-        if (files[oldPath] === appWindow.label) {
-          delete files[oldPath]
-          localStorage.setItem(OPEN_FILES_KEY, JSON.stringify(files))
-        }
-      }
-      registerOpenFile(filePath, appWindow.label)
-      refreshNotesCache() // Update cache in background
+      checkpoint(s);
     } catch (e) {
-      console.error('saveFile error:', e)
+      report("Could not keep a recovery draft: " + e);
     }
+    clearTimeout(timer);
+    timer = setTimeout(() => void save(), 450);
   }
-
-  const openFile = async (filePath: string) => {
+  async function save() {
+    clearTimeout(timer);
     try {
-      const appWindow = getCurrentWindow()
-      const myLabel = appWindow.label
-
-      // Check if file is already open in another window
-      const existingWindowLabel = getWindowForFile(filePath)
-      if (existingWindowLabel && existingWindowLabel !== myLabel) {
-        // Find the actual window
-        const allWindows = await getAllWebviewWindows()
-        const otherWindow = allWindows.find(w => w.label === existingWindowLabel)
-        if (otherWindow) {
-          setQuickOpenVisible(false)
-          await otherWindow.setFocus()
-          appWindow.close()
-          return
-        }
-        // Window no longer exists, clean up stale entry
-        unregisterWindow(existingWindowLabel)
-      }
-
-      // Unregister old file if we had one
-      const oldPath = currentFilePath()
-      if (oldPath) {
-        const files = getOpenFiles()
-        if (files[oldPath] === myLabel) {
-          delete files[oldPath]
-          localStorage.setItem(OPEN_FILES_KEY, JSON.stringify(files))
-        }
-      }
-
-      const fileContent = await readTextFile(filePath)
-      setContent(fileContent)
-      setCurrentFilePath(filePath)
-      recordFileAccess(filePath)
-      registerOpenFile(filePath, myLabel)
-      setQuickOpenVisible(false)
+      await queue.flush(active());
+      if (retryKind() === "save") setError("");
+      return true;
     } catch (e) {
-      console.error('openFile error:', e)
+      report("Your writing is still here. Saving failed: " + e);
+      return false;
     }
   }
-
-  const listAllNotes = async (): Promise<string[]> => {
-    const dir = await ensureDriftDir()
-    try {
-      const entries = await readDir(dir)
-      return entries
-        .filter(e => e.name?.endsWith('.md'))
-        .map(e => `${dir}/${e.name}`)
-    } catch {
-      return []
-    }
+  function storePosition(p: Position) {
+    positions.set(active().id, p);
+    if (prefix && active().path)
+      try {
+        storage("position:" + active().path, p);
+      } catch {}
   }
-
-  const refreshNotesCache = async () => {
-    const paths = await listAllNotes()
-    const notes: NoteInfo[] = await Promise.all(
-      paths.map(async (path) => {
-        try {
-          const [content, fileStat] = await Promise.all([
-            readTextFile(path),
-            stat(path),
-          ])
-          return {
-            path,
-            title: getFilename(path),
-            preview: getPreview(content),
-            createdAt: fileStat.birthtime ? new Date(fileStat.birthtime) : null,
-          }
-        } catch {
-          return { path, title: getFilename(path), preview: '', createdAt: null }
-        }
-      })
+  function focus() {
+    setQuick(false);
+    editor?.focus();
+  }
+  async function activate(s: Session, hit?: Hit) {
+    sessions.set(s.id, s);
+    setMatch(undefined);
+    setRestore(
+      positions.get(s.id) ??
+        (s.path
+          ? readJSON(prefix + "position:" + s.path, undefined)
+          : undefined),
+    );
+    setActive(s);
+    checkpoint(s);
+    setQuick(false);
+    if (s.path) {
+      const next = { ...access(), [s.path]: Date.now() };
+      setAccess(next);
+      storage("access", next);
+    }
+    await invoke("claim_note", { path: s.path, label: appWindow.label });
+    if (
+      hit &&
+      hit.from >= 0 &&
+      !hit.note.title
+        .toLocaleLowerCase()
+        .includes(hit.match.toLocaleLowerCase())
     )
-    setCachedNotes(notes)
+      setMatch({ from: hit.from, length: hit.length });
   }
-
-  const handleContentChange = (newContent: string) => {
-    setContent(newContent)
-
-    // Debounced auto-save
-    if (saveTimeout) clearTimeout(saveTimeout)
-    saveTimeout = setTimeout(() => {
-      saveFile(newContent)
-    }, 1000) as unknown as number
-  }
-
-  const newNote = async () => {
-    // Cancel any pending auto-save
-    if (saveTimeout) clearTimeout(saveTimeout)
-
-    // Always save current note if it has content
-    const currentContent = content()
-    const currentPath = currentFilePath()
-    if (currentContent.trim()) {
-      await saveFile(currentContent, currentPath)
+  async function openFile(path: string, hit?: Hit) {
+    if (navigating) return;
+    navigating = true;
+    try {
+      if (!(await save())) return;
+      const other = await invoke<string | null>("window_for_note", { path });
+      if (other && other !== appWindow.label) {
+        await invoke("focus_note_window", { label: other });
+        focus();
+        return;
+      }
+      const text = await invoke<string>("read_note", { path });
+      let s = Array.from(sessions.values()).find((s) => s.path === path);
+      if (!s) s = { ...fresh(), path, text, baseline: text };
+      else if (!dirty(s)) {
+        s.text = text;
+        s.baseline = text;
+      }
+      pendingOpen = undefined;
+      retryOpenPath = undefined;
+      await activate(s, hit);
+      if (retryKind() === "notebook") setError("");
+    } catch (e) {
+      retryOpenPath = path;
+      reportNotebook("Could not open this note: " + e);
+    } finally {
+      navigating = false;
     }
-
-    // Unregister old file
-    if (currentPath) {
-      const appWindow = getCurrentWindow()
-      const files = getOpenFiles()
-      if (files[currentPath] === appWindow.label) {
-        delete files[currentPath]
-        localStorage.setItem(OPEN_FILES_KEY, JSON.stringify(files))
+  }
+  async function newNote() {
+    if (navigating) return;
+    navigating = true;
+    try {
+      if (await save()) {
+        pendingOpen = undefined;
+        retryOpenPath = undefined;
+        await activate(fresh());
+      }
+    } catch (e) {
+      report(e);
+    } finally {
+      navigating = false;
+    }
+  }
+  function toggleShortcuts() {
+    if (shortcuts()) {
+      setShortcuts(false);
+      editor?.focus();
+    } else {
+      setQuick(false);
+      setShortcuts(true);
+    }
+  }
+  async function openNewWindow(path?: string) {
+    if (path) {
+      try {
+        const existing = await invoke<string | null>("window_for_note", {
+          path,
+        });
+        if (existing) {
+          await invoke("focus_note_window", { label: existing });
+          return;
+        }
+      } catch (e) {
+        report(e);
+        return;
       }
     }
-
-    setContent('')
-    setCurrentFilePath(null)
-    setQuickOpenVisible(false)
-  }
-
-  const saveNow = async () => {
-    if (saveTimeout) clearTimeout(saveTimeout)
-    const currentContent = content()
-    const currentPath = currentFilePath()
-    if (currentContent.trim()) {
-      await saveFile(currentContent, currentPath)
+    let placement = {};
+    try {
+      const [position, size, monitor, factor] = await Promise.all([
+        appWindow.outerPosition(),
+        appWindow.outerSize(),
+        currentMonitor(),
+        appWindow.scaleFactor(),
+      ]);
+      if (monitor) {
+        const area = monitor.workArea;
+        placement = cascadeWindow(
+          {
+            x: position.x / factor,
+            y: position.y / factor,
+            width: size.width / factor,
+            height: size.height / factor,
+          },
+          {
+            x: area.position.x / factor,
+            y: area.position.y / factor,
+            width: area.size.width / factor,
+            height: area.size.height / factor,
+          },
+        );
+      }
+    } catch (e) {
+      report("Could not position the new window: " + e);
     }
-  }
-
-  const openNewWindow = async (filePath?: string) => {
-    const label = `drift-${Date.now()}`
-    // Use current origin to work in both dev and production
-    const base = window.location.origin
-    const url = filePath ? `${base}/?file=${encodeURIComponent(filePath)}` : base
-    new WebviewWindow(label, {
-      url,
-      title: 'Drift',
+    const url = new URL(window.location.href);
+    url.search = "";
+    if (path) url.searchParams.set("file", path);
+    const w = new WebviewWindow("drift-" + crypto.randomUUID(), {
+      url: url.href,
+      title: await appWindow.title(),
+      visible: false,
       width: 900,
       height: 700,
+      ...placement,
       minWidth: 400,
       minHeight: 300,
-      titleBarStyle: 'overlay',
+      titleBarStyle: "overlay",
       hiddenTitle: true,
-    })
+    });
+    void w.once("tauri://error", (e) => report(e.payload));
   }
-
-  onMount(async () => {
-    await ensureDriftDir()
-    loadFileAccessTimes()
-    applyTheme(theme())
-    refreshNotesCache()
-    if (isHmrReload) showStatus('Refreshed')
-
-    const appWindow = getCurrentWindow()
-
-    // Check for file parameter in URL (for opening in new window)
-    const urlParams = new URLSearchParams(window.location.search)
-    const fileParam = urlParams.get('file')
-    if (fileParam) {
-      openFile(fileParam)
+  async function refresh() {
+    if (leaving || !presented) return;
+    if (refreshing) return refreshing;
+    const version = scanVersion;
+    refreshing = (async () => {
+      const metadata = await invoke<Note[]>("list_notes");
+      if (catalogueUnavailable() && !pendingOpen && !retryOpenPath && retryKind() === "notebook") setError("");
+      setCatalogueUnavailable(false);
+      if (disposed || version !== scanVersion) return;
+      const previous = new Map(notes().map((n) => [n.path, n]));
+      const next = metadata.map((n) => {
+        const old = previous.get(n.path);
+        return old && old.modified === n.modified && old.size === n.size
+          ? { ...n, text: old.text }
+          : n;
+      });
+      setNotes(next);
+      const todo = next.filter((n) => n.text === undefined),
+        run = ++indexRun;
+      setHydrating(!!todo.length);
+      const pending = new Map<string, { text: string; modified: number }>();
+      let publication: ReturnType<typeof setTimeout> | undefined;
+      const publish = () => {
+        clearTimeout(publication);
+        publication = undefined;
+        if (disposed || run !== indexRun || version !== scanVersion) {
+          pending.clear();
+          return;
+        }
+        const batch = new Map(pending);
+        pending.clear();
+        setNotes((all) =>
+          all.map((n) => {
+            const body = batch.get(n.path);
+            return body && body.modified === n.modified
+              ? { ...n, text: body.text }
+              : n;
+          }),
+        );
+      };
+      // The catalogue paints before any body read. Background indexing never blocks opening.
+      const worker = async () => {
+        while (todo.length && !disposed && run === indexRun) {
+          const note = todo.shift()!;
+          try {
+            const text = await invoke<string>("read_note", { path: note.path });
+            if (run === indexRun && version === scanVersion) {
+              pending.set(note.path, { text, modified: note.modified });
+              if (pending.size >= 16) publish();
+              else if (!publication) publication = setTimeout(publish, 32);
+            }
+          } catch {
+            /* A temporarily unavailable body keeps its filename visible and is retried next scan. */
+          }
+        }
+      };
+      void Promise.all(Array.from({ length: 4 }, worker)).finally(() => {
+        publish();
+        if (run === indexRun) setHydrating(false);
+      });
+    })()
+      .catch((e) => {
+        setCatalogueUnavailable(true);
+        reportNotebook("Could not read the notebook: " + e);
+      })
+      .finally(() => {
+        refreshing = undefined;
+      });
+    return refreshing;
+  }
+  async function externalRefresh() {
+    if (!ready() || navigating || leaving || !presented) return;
+    if (pendingOpen) {
+      void retryNotebook();
+      return;
+    }
+    void refresh();
+    const s = active(),
+      revision = s.revision,
+      path = s.path;
+    if (!path || dirty(s)) return;
+    try {
+      const text = await invoke<string>("read_note", { path });
+      if (
+        active() === s &&
+        s.revision === revision &&
+        !dirty(s) &&
+        s.path === path &&
+        s.text !== text
+      ) {
+        s.text = text;
+        s.baseline = text;
+        s.revision++;
+        setActive(s);
+      }
+    } catch (e) {
+      if (active() === s && (!retryOpenPath || retryOpenPath === path)) {
+        retryOpenPath ??= path;
+        reportNotebook(
+          "This note is unavailable on disk. Your open copy is still here. " +
+            e,
+        );
+      }
+    }
+  }
+  async function close() {
+    leaving = true;
+    indexRun++;
+    await booted;
+    if (await save()) {
+      storage("last-note", pendingOpen ?? { path: active().path, id: active().id });
+      await appWindow.destroy();
     } else {
-      // On refresh, reload the file if this window has one registered
-      const files = getOpenFiles()
-      const myFile = Object.entries(files).find(([_, label]) => label === appWindow.label)?.[0]
-      if (myFile) {
-        readTextFile(myFile).then(content => {
-          setContent(content)
-          setCurrentFilePath(myFile)
-        }).catch(() => {
-          // File no longer exists, clean up
-          unregisterWindow(appWindow.label)
-        })
-      }
+      leaving = false;
+      void refresh();
     }
+  }
+  onMount(async () => {
+    const bind = async (name: string, action: () => void, all = false) => {
+      const off = await listen(name, () => {
+        if (all || document.hasFocus()) action();
+      });
+      cleanup.push(off);
+    };
+    try {
+      await bind(
+        "prepare-quit",
+        () => {
+          void requestQuit();
+        },
+        true,
+      );
+      await bind(
+        "quit-cancelled",
+        () => {
+          void resumeAfterQuit();
+        },
+        true,
+      );
+      await bind(
+        "notebook-access-granted",
+        () => {
+          void booted.then(() => {
+            if (!leaving && !disposed) void retryNotebook();
+          });
+        },
+        true,
+      );
+      cleanup.push(
+        await appWindow.onCloseRequested((e) => {
+          e.preventDefault();
+          void close();
+        }),
+      );
 
-    // Only respond to menu events if this window is focused
-    const unlistenNew = listen('menu-new-note', () => {
-      if (document.hasFocus()) newNote()
-    })
-    const unlistenNewWindow = listen('menu-new-window', () => {
-      if (document.hasFocus()) openNewWindow()
-    })
-    const unlistenCloseWindow = listen('menu-close-window', () => {
-      if (document.hasFocus()) {
-        saveNow()
-        unregisterWindow(appWindow.label)
-        appWindow.close()
+      const info = await invoke<{ directory: string; drafts: Draft[]; restoreDrafts: boolean }>(
+        "notebook_info",
+      );
+      prefix = "notebook:" + info.directory + ":";
+      setAccess(readJSON(prefix + "access", {}));
+      const recovery = new Map<string, Draft>();
+      // Recovery belongs to app startup. A newly opened window shares these
+      // stores with live editors; importing their drafts would save stale copies.
+      if (info.restoreDrafts) {
+        for (const d of info.drafts) recovery.set(d.id, d);
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i)!;
+          if (key.startsWith(prefix + "draft:")) {
+            const d = readJSON<Draft | null>(key, null);
+            if (d) recovery.set(d.id, d);
+          }
+        }
       }
-    })
-    const unlistenOpen = listen('menu-open-note', () => {
-      if (document.hasFocus()) setQuickOpenVisible(true)
-    })
-    const unlistenCycleTheme = listen('menu-cycle-theme', () => {
-      if (document.hasFocus()) toggleTheme()
-    })
-    const unlistenThemeSystem = listen('menu-theme-system', () => {
-      if (document.hasFocus()) setThemeMode('system')
-    })
-    const unlistenThemeLight = listen('menu-theme-light', () => {
-      if (document.hasFocus()) setThemeMode('light')
-    })
-    const unlistenThemeDark = listen('menu-theme-dark', () => {
-      if (document.hasFocus()) setThemeMode('dark')
-    })
-
-    // Save on window close and unregister
-    const unlistenClose = appWindow.onCloseRequested(() => {
-      saveNow() // Don't await - let it save in background
-      unregisterWindow(appWindow.label)
-    })
-
-    // Save on window blur, refresh cache on focus
-    const handleBlur = () => {
-      saveNow()
-      document.body.classList.remove('cmd-held') // Clear stuck cursor
-    }
-    const handleFocus = () => refreshNotesCache()
-    window.addEventListener('blur', handleBlur)
-    window.addEventListener('focus', handleFocus)
-
-    // Save before browser unload (backup)
-    const handleBeforeUnload = () => saveNow()
-    window.addEventListener('beforeunload', handleBeforeUnload)
-
-    // Cmd+drag anywhere to move window (capture phase to prevent other handlers)
-    const handleMouseDown = (e: MouseEvent) => {
-      if (e.metaKey && e.button === 0) {
-        e.preventDefault()
-        e.stopPropagation()
-        appWindow.startDragging()
+      for (const d of recovery.values())
+        sessions.set(d.id, { ...d, revision: 0 });
+      const params = new URLSearchParams(location.search),
+        requested = params.get("file");
+      const last = readJSON<{ path: string | null; id: string } | null>(
+        prefix + "window:" + appWindow.label,
+        appWindow.label === "main"
+          ? readJSON(prefix + "last-note", null)
+          : null,
+      );
+      const recovered = last ? sessions.get(last.id) : undefined;
+      let s =
+        recovered ??
+        (appWindow.label === "main"
+          ? Array.from(sessions.values())[0]
+          : undefined);
+      if (requested || (!s && last?.path)) {
+        const path = requested ?? last!.path!;
+        const waiting = setTimeout(() => {
+          if (!leaving) {
+            setNotice("Opening your notebook…");
+            void presentWindow();
+          }
+        }, 750);
+        try {
+          const text = await invoke<string>("read_note", { path });
+          s = {
+            ...fresh(),
+            id: last?.path === path ? last.id : crypto.randomUUID(),
+            path,
+            text,
+            baseline: text,
+          };
+        } catch (e) {
+          pendingOpen = { path, id: last?.id ?? crypto.randomUUID() };
+          reportNotebook("The previous note could not be opened: " + e);
+        } finally {
+          clearTimeout(waiting);
+          if (notice() === "Opening your notebook…") setNotice("");
+        }
       }
+      if (!s) s = fresh();
+      await activate(s);
+      setReady(true);
+      if (recovery.size)
+        flash("Recovered unfinished writing from your last session.");
+      await Promise.all([
+        bind("menu-shortcuts", toggleShortcuts),
+        bind("menu-new-note", () => void newNote()),
+        bind("menu-open-note", () => {
+          if (quick()) focus();
+          else {
+            setQuick(true);
+            void refresh();
+          }
+        }),
+        bind("menu-new-window", () => openNewWindow()),
+        bind("menu-close-window", () => void close()),
+        bind("menu-cycle-theme", toggleTheme),
+        bind("menu-theme-system", () => applyTheme("system")),
+        bind("menu-theme-light", () => applyTheme("light")),
+        bind("menu-theme-dark", () => applyTheme("dark")),
+        bind("menu-save", () => void save()),
+        bind("menu-check", () => {
+          if (quick() && activeHit) {
+            openNewWindow(activeHit.note.path);
+            focus();
+          } else editor?.command("check");
+        }),
+        ...[
+          "find",
+          "find-next",
+          "find-previous",
+          "select-line",
+          "bullet",
+          "checklist",
+          "indent",
+          "outdent",
+        ].map((name) => bind("menu-" + name, () => editor?.command(name))),
+      ]);
+      const onBlur = () => {
+          void save();
+          document.body.classList.remove("cmd-held");
+        },
+        onFocus = () => void externalRefresh();
+      const onKey = (e: KeyboardEvent) => {
+        if (
+          e.type === "keydown" &&
+          (e.metaKey || e.ctrlKey) &&
+          e.code === "Slash" &&
+          !e.shiftKey &&
+          !e.altKey
+        ) {
+          e.preventDefault();
+          e.stopPropagation();
+          toggleShortcuts();
+        }
+        if (e.key === "Meta")
+          document.body.classList.toggle("cmd-held", e.type === "keydown");
+      };
+      const onDrag = (e: MouseEvent) => {
+        if (
+          e.metaKey &&
+          e.button === 0 &&
+          !(e.target as HTMLElement).closest(
+            "[data-url],.link-preview,.quick-open,.cm-search,button,input",
+          )
+        ) {
+          e.preventDefault();
+          void appWindow.startDragging();
+        }
+      };
+      window.addEventListener("blur", onBlur);
+      window.addEventListener("focus", onFocus);
+      window.addEventListener("keydown", onKey, true);
+      window.addEventListener("keyup", onKey);
+      window.addEventListener("mousedown", onDrag, true);
+      const interval = setInterval(() => {
+        if (document.hasFocus()) void externalRefresh();
+      }, 4000);
+      cleanup.push(() => {
+        clearInterval(interval);
+        window.removeEventListener("blur", onBlur);
+        window.removeEventListener("focus", onFocus);
+        window.removeEventListener("keydown", onKey, true);
+        window.removeEventListener("keyup", onKey);
+        window.removeEventListener("mousedown", onDrag, true);
+      });
+    } catch (e) {
+      report(e);
+    } finally {
+      finishBoot();
     }
-    window.addEventListener('mousedown', handleMouseDown, true)
-
-    // Show move cursor when Cmd is held
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Meta') {
-        document.body.classList.add('cmd-held')
-      }
+    if (leaving) return;
+    try {
+      await presentWindow();
+      if (!presented || leaving) return;
+      void refresh();
+      for (const other of sessions.values())
+        if (other !== active() && dirty(other))
+          void queue.flush(other).catch(report);
+    } catch (e) {
+      report(e);
     }
-    const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.key === 'Meta') {
-        document.body.classList.remove('cmd-held')
-      }
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    window.addEventListener('keyup', handleKeyUp)
-
-    onCleanup(() => {
-      unlistenNew.then(fn => fn())
-      unlistenNewWindow.then(fn => fn())
-      unlistenCloseWindow.then(fn => fn())
-      unlistenOpen.then(fn => fn())
-      unlistenCycleTheme.then(fn => fn())
-      unlistenThemeSystem.then(fn => fn())
-      unlistenThemeLight.then(fn => fn())
-      unlistenThemeDark.then(fn => fn())
-      unlistenClose.then(fn => fn())
-      window.removeEventListener('blur', handleBlur)
-      window.removeEventListener('focus', handleFocus)
-      window.removeEventListener('beforeunload', handleBeforeUnload)
-      window.removeEventListener('mousedown', handleMouseDown, true)
-      window.removeEventListener('keydown', handleKeyDown)
-      window.removeEventListener('keyup', handleKeyUp)
-      document.body.classList.remove('cmd-held')
-      if (saveTimeout) clearTimeout(saveTimeout)
-      if (statusTimeout) clearTimeout(statusTimeout)
-    })
-  })
-
+  });
+  onCleanup(() => {
+    disposed = true;
+    indexRun++;
+    clearTimeout(timer);
+    clearTimeout(noticeTimer);
+    cleanup.forEach((fn) => fn());
+  });
   return (
     <div class="app">
       <div class="titlebar" data-tauri-drag-region>
-        <span class={`titlebar-title ${showTitleInBar() ? 'visible' : ''}`}>
-          {content().split('\n')[0]?.replace(/^#+\s*/, '') || ''}
+        <span class="titlebar-title" classList={{ visible: scrolled() }}>
+          {active()
+            .text.split("\n")
+            .find((s) => s.trim())
+            ?.replace(/^#+\s*/, "") ?? ""}
         </span>
       </div>
-      <Editor
-        content={content()}
-        onChange={handleContentChange}
-        onNewNote={newNote}
-        onOpenNote={() => setQuickOpenVisible(true)}
-        onNewWindow={() => openNewWindow()}
-        onToggleTheme={toggleTheme}
-        onSystemTheme={() => setThemeMode('system')}
-        onScrollPastTitle={setShowTitleInBar}
-      />
-      <Show when={quickOpenVisible()}>
-        <QuickOpen
-          fileAccessTimes={fileAccessTimes()}
-          currentFile={currentFilePath()}
-          notes={cachedNotes()}
-          onSelect={openFile}
-          onSelectNewWindow={(path) => {
-            setQuickOpenVisible(false)
-            openNewWindow(path)
+      <Show when={ready()}>
+        <Editor
+          id={active().id}
+          content={active().text}
+          position={restore()}
+          match={match()}
+          onChange={changed}
+          onPosition={storePosition}
+          onReady={(h) => (editor = h)}
+          onScrollPastTitle={setScrolled}
+          onNewNote={() => void newNote()}
+          onOpenNote={() => {
+            setQuick(true);
+            void refresh();
           }}
-          onClose={() => setQuickOpenVisible(false)}
+          onNewWindow={() => openNewWindow()}
+          onToggleTheme={toggleTheme}
+          onSystemTheme={() => applyTheme("system")}
+          onError={flash}
         />
       </Show>
-      <Show when={statusMessage()}>
-        <div class="status-message">{statusMessage()}</div>
+      <Show when={quick()}>
+        <QuickOpen
+          onActive={(hit) => (activeHit = hit)}
+          notes={notes()}
+          access={access()}
+          current={active().path}
+          loading={hydrating()}
+          unavailable={catalogueUnavailable()}
+          onClose={focus}
+          onSelect={(hit, newWindow) => {
+            if (newWindow) {
+              focus();
+              openNewWindow(hit.note.path);
+            } else void openFile(hit.note.path, hit);
+          }}
+        />
+      </Show>
+      <Show when={shortcuts()}>
+        <Shortcuts
+          onClose={() => {
+            setShortcuts(false);
+            editor?.focus();
+          }}
+        />
+      </Show>
+      <Show when={error()}>
+        <div class="problem" role="alert">
+          <span>{error()}</span>
+          <button onClick={() => void (retryKind() === "notebook" ? retryNotebook() : save())}>
+            {retryKind() === "notebook" ? "Retry opening" : "Retry save"}
+          </button>
+          <button onClick={() => setError("")} aria-label="Dismiss error">
+            ×
+          </button>
+        </div>
+      </Show>
+      <Show when={notice()}>
+        <div class="notice" role="status">
+          {notice()}
+        </div>
       </Show>
     </div>
-  )
+  );
 }
-
-export default App
+export default App;

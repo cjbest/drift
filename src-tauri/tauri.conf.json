@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Drift",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "identifier": "com.drift.app",
   "build": {
     "frontendDist": "../dist",
@@ -20,7 +20,9 @@
         "resizable": true,
         "fullscreen": false,
         "titleBarStyle": "Overlay",
-        "hiddenTitle": true
+        "hiddenTitle": true,
+        "visible": false,
+        "backgroundColor": "#faf7f0"
       }
     ],
     "security": {

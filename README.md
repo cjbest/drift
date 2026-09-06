@@ -6,76 +6,47 @@ The markdown editor I always wanted for my personal notes.
   <img src="assets/demo2.gif" alt="Drift demo" width="600">
 </p>
 
-Most note apps are slow, bloated, or want to own your data. Drift is different:
-
-- **Instant** - Native macOS app, not Electron. Launches in under a second.
-- **Plain markdown files** - Your notes live in `~/Documents/Drift`. Open them in any editor.
-- **AI that helps** - Cmd+K fixes typos, grammar, and fills in placeholders.
-- **Zero friction** - Auto-save, auto-naming from content, Cmd+P to find anything.
+Notes are plain Markdown files, named from their contents and saved
+automatically. Cmd+P searches the notebook.
 
 ## Shortcuts
 
-| | |
+| Shortcut | Action |
 |----------|--------|
 | **Cmd+P** | Quick open |
-| **Cmd+K** | AI fix selection |
 | **Cmd+N** | New note |
 | **Cmd+F** | Find in document |
 | **Cmd+D** | Toggle dark/light |
+| **Cmd+/** | Keyboard shortcuts |
 
-## Development
+Type `[]` or `-[]` followed by Space at the start of a line to begin a checklist.
+Cmd+Return checks or unchecks every checklist item in the selection.
+
+## Mac development
+
+Build and run **Drift Preview**, a separate app that uses a development copy of
+the notebook:
 
 ```bash
 npm install
-npm run tauri dev
+./scripts/preview-desktop.sh
 ```
 
-## Build
+To build without launching, run `npm run build:desktop-preview`. See the
+[desktop guide](DESKTOP-DESIGN.md) for notebook configuration, interaction
+details, and tests. Development and automated tests must use notebook copies.
 
-```bash
-npm run tauri build
-```
+`npm run build:desktop` builds the main **Drift.app**. Both desktop build
+commands use an available Apple signing identity so macOS can recognize
+updates and retain folder permissions. If several identities are installed,
+choose one with `DRIFT_SIGNING_IDENTITY`. Configure the installed main app's
+notebook as described in the desktop guide before using it with existing notes.
 
-## iPhone app
+## iPhone and iPad
 
-The main iPhone and iPad app lives in `drift-ios`. It edits the same Markdown
-folder, with full-text search, local recovery drafts, and conflict-safe saves.
-See the [iOS build and testing guide](drift-ios/README.md), or run
+The iOS app lives in `drift-ios` and can use the same Markdown folder as the Mac
+app. See the [iOS build and testing guide](drift-ios/README.md), or run
 `./scripts/preview-ios.sh` for a separate simulator preview with sample notes.
-
-## Claude Agent
-
-This repo has an automated Claude agent that can fix issues and respond to PR feedback.
-
-### Creating Issues
-
-Add the `claude` label to any issue and Claude will:
-1. Analyze the issue and explore the codebase
-2. Capture a "before" screenshot proving the problem
-3. Implement the fix
-4. Capture an "after" screenshot proving it works
-5. Record a demo GIF showing the feature
-6. Open a PR with all the evidence
-
-### Iterating on PRs
-
-Comment `@claude <feedback>` on any PR to request changes. Claude will:
-1. Read your feedback and the conversation history
-2. Update the implementation
-3. Re-record the demo
-4. Push the changes
-
-### Running Locally
-
-```bash
-# Fix an issue
-npm run fix -- --issue 123 "Issue description"
-
-# Adjust a PR
-npm run fix -- --pr 8 "Make it smoother"
-```
-
-Requires `ANTHROPIC_API_KEY` in environment or `.env` file.
 
 ---
 
