@@ -1,8 +1,10 @@
 mod notebook;
 mod notebook_location;
+mod recent_folders;
 use notebook::*;
 use std::{
     collections::{HashMap, HashSet},
+    path::PathBuf,
     sync::{
         atomic::{AtomicBool, Ordering},
         Mutex,
@@ -90,19 +92,29 @@ fn focus_note_window(label: String, app: tauri::AppHandle) -> Result<(), String>
     Ok(())
 }
 fn begin_quit(app: &tauri::AppHandle) {
+    prepare_quit(app, None);
+}
+fn prepare_quit(app: &tauri::AppHandle, selection: Option<notebook_location::Selection>) {
     lifecycle_trace(app, "quit-requested");
     let state = app.state::<Windows>();
     let mut waiting = state.quitting.lock().unwrap();
     if waiting.is_some() {
+        if selection.is_some() {
+            state.choosing_notebook.store(false, Ordering::SeqCst);
+        }
         return;
     }
+    // Claim the folder switch and its save-before-quit request together. A
+    // normal Quit must not interleave between these two state changes.
+    *state.notebook_selection.lock().unwrap() = selection;
     let labels: HashSet<_> = app.webview_windows().keys().cloned().collect();
-    if labels.is_empty() {
+    let complete = labels.is_empty();
+    *waiting = Some(labels);
+    if complete {
         drop(waiting);
         finish_quit(app);
         return;
     }
-    *waiting = Some(labels);
     drop(waiting);
     let _ = app.emit("prepare-quit", ());
 }
@@ -153,12 +165,47 @@ fn quit_ready(label: String, app: tauri::AppHandle) {
 }
 #[tauri::command]
 fn cancel_quit(app: tauri::AppHandle, state: State<Windows>) {
-    *state.quitting.lock().unwrap() = None;
+    let mut waiting = state.quitting.lock().unwrap();
+    *waiting = None;
     *state.notebook_selection.lock().unwrap() = None;
     state.choosing_notebook.store(false, Ordering::SeqCst);
+    drop(waiting);
     let _ = app.emit("quit-cancelled", ());
 }
-fn choose_notebook(app: &tauri::AppHandle) {
+fn open_notebook_folder(app: &tauri::AppHandle, path: PathBuf) {
+    if path == app.state::<Notebook>().root {
+        app.state::<Windows>()
+            .choosing_notebook
+            .store(false, Ordering::SeqCst);
+        let _ = app.emit("notebook-access-granted", ());
+        return;
+    }
+    let handle = app.clone();
+    // Folder providers and disk access can be slow; keep them off the UI thread.
+    tauri::async_runtime::spawn_blocking(move || {
+        let selection = handle
+            .path()
+            .app_data_dir()
+            .map_err(|e| e.to_string())
+            .and_then(|data| notebook_location::Selection::prepare(&data, &path));
+        match selection {
+            Ok(selection) => {
+                prepare_quit(&handle, Some(selection));
+            }
+            Err(error) => {
+                handle
+                    .state::<Windows>()
+                    .choosing_notebook
+                    .store(false, Ordering::SeqCst);
+                let _ = handle.emit(
+                    "notebook-switch-failed",
+                    format!("Could not open this folder: {error} Use File → Change Folder → Choose Folder… to locate it or allow access."),
+                );
+            }
+        }
+    });
+}
+fn choose_notebook(app: &tauri::AppHandle, directory: Option<PathBuf>) {
     #[cfg(target_os = "macos")]
     {
         // Development must never redirect the copied notebook to real notes.
@@ -171,9 +218,13 @@ fn choose_notebook(app: &tauri::AppHandle) {
         {
             return;
         }
+        if let Some(directory) = directory {
+            open_notebook_folder(app, directory);
+            return;
+        }
         let root = app.state::<Notebook>().root.clone();
         let handle = app.clone();
-        let _ = app.run_on_main_thread(move || {
+        if let Err(error) = app.run_on_main_thread(move || {
             extern "C" {
                 fn drift_choose_notebook(path: *const std::ffi::c_char) -> *mut std::ffi::c_char;
                 fn drift_free_notebook_path(path: *mut std::ffi::c_char);
@@ -199,71 +250,19 @@ fn choose_notebook(app: &tauri::AppHandle) {
                     .into_owned()
             };
             unsafe { drift_free_notebook_path(selected) };
-            if std::path::Path::new(&path) == root {
-                handle
-                    .state::<Windows>()
-                    .choosing_notebook
-                    .store(false, Ordering::SeqCst);
-                let _ = handle.emit("notebook-access-granted", ());
-                return;
-            }
-            // Folder providers and disk access can be slow; keep them off the UI thread.
-            tauri::async_runtime::spawn_blocking(move || {
-                let selection = handle
-                    .path()
-                    .app_data_dir()
-                    .map_err(|e| e.to_string())
-                    .and_then(|data| {
-                        notebook_location::Selection::prepare(&data, std::path::Path::new(&path))
-                    });
-                match selection {
-                    Ok(selection) => {
-                        if handle.state::<Windows>().quitting.lock().unwrap().is_some() {
-                            handle
-                                .state::<Windows>()
-                                .choosing_notebook
-                                .store(false, Ordering::SeqCst);
-                            return;
-                        }
-                        *handle.state::<Windows>().notebook_selection.lock().unwrap() =
-                            Some(selection);
-                        begin_quit(&handle);
-                    }
-                    Err(error) => {
-                        handle
-                            .state::<Windows>()
-                            .choosing_notebook
-                            .store(false, Ordering::SeqCst);
-                        let _ = handle.emit(
-                            "notebook-switch-failed",
-                            format!("Could not open this notebook: {error}"),
-                        );
-                    }
-                }
-            });
-        });
+            open_notebook_folder(&handle, PathBuf::from(path));
+        }) {
+            app.state::<Windows>()
+                .choosing_notebook
+                .store(false, Ordering::SeqCst);
+            let _ = app.emit(
+                "notebook-switch-failed",
+                format!("Could not open the folder chooser: {error}"),
+            );
+        }
     }
     #[cfg(not(target_os = "macos"))]
-    let _ = app;
-}
-fn allow_notebook_access(app: &tauri::AppHandle) {
-    #[cfg(target_os = "macos")]
-    {
-        let root = app.state::<Notebook>().root.clone();
-        let handle = app.clone();
-        let _ = app.run_on_main_thread(move || {
-            extern "C" {
-                fn drift_allow_notebook_access(path: *const std::ffi::c_char) -> bool;
-            }
-            if let Ok(path) = std::ffi::CString::new(root.to_string_lossy().as_bytes()) {
-                if unsafe { drift_allow_notebook_access(path.as_ptr()) } {
-                    let _ = handle.emit("notebook-access-granted", ());
-                }
-            }
-        });
-    }
-    #[cfg(not(target_os = "macos"))]
-    let _ = app;
+    let _ = (app, directory);
 }
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -283,8 +282,6 @@ pub fn run() {
             list_notes,
             read_note,
             save_note,
-            reveal_notebook,
-            reveal_history,
             claim_note,
             window_for_note,
             focus_note_window,
@@ -314,6 +311,9 @@ pub fn run() {
                     std::env::var("DRIFT_NOTEBOOK_MODE").as_deref() == Ok("preview")
                 );
             }
+            let folders = notebook_location::folders(&data, &store.root, preview)
+                .map_err(std::io::Error::other)?;
+            let change_folder = recent_folders::menu(app, folders, preview)?;
             app.manage(store);
             let item = |id: &str, title: &str, key: Option<&str>| {
                 MenuItem::with_id(app, id, title, true, key)
@@ -343,18 +343,8 @@ pub fn run() {
                     &item("new-note", "New Note", Some("CmdOrCtrl+N"))?,
                     &item("new-window", "New Window", Some("CmdOrCtrl+Shift+N"))?,
                     &item("open-note", "Open Note…", Some("CmdOrCtrl+P"))?,
-                    &item("save", "Save", Some("CmdOrCtrl+S"))?,
                     &PredefinedMenuItem::separator(app)?,
-                    &MenuItem::with_id(
-                        app,
-                        "choose-notebook",
-                        "Choose Notebook Folder…",
-                        !preview,
-                        None::<&str>,
-                    )?,
-                    &item("reveal-notebook", "Show Notebook in Finder", None)?,
-                    &item("allow-notebook-access", "Allow Notebook Access…", None)?,
-                    &item("reveal-history", "Saved History…", None)?,
+                    &change_folder,
                     &PredefinedMenuItem::separator(app)?,
                     &item("close-window", "Close Window", Some("CmdOrCtrl+W"))?,
                 ],
@@ -437,16 +427,12 @@ pub fn run() {
         })
         .on_menu_event(|app, event| match event.id().as_ref() {
             "quit" => begin_quit(app),
-            "choose-notebook" => choose_notebook(app),
-            "allow-notebook-access" => allow_notebook_access(app),
-            "reveal-notebook" | "reveal-history" => {
-                let store = app.state::<Notebook>();
-                let path = if event.id().as_ref() == "reveal-notebook" {
-                    store.root.clone()
-                } else {
-                    store.data.join("History")
-                };
-                let _ = std::process::Command::new("open").arg(path).spawn();
+            "choose-notebook" => choose_notebook(app, None),
+            id if id.starts_with("recent-folder-") => {
+                let directory = app.state::<recent_folders::RecentFolders>().directory(id);
+                if let Some(directory) = directory {
+                    choose_notebook(app, Some(directory));
+                }
             }
             id => {
                 if let Some(w) = app

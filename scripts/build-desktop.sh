@@ -37,10 +37,10 @@ signing_identity="$DRIFT_SIGNING_IDENTITY"
 unset APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_ID APPLE_PASSWORD
 unset APPLE_API_ISSUER APPLE_API_KEY APPLE_API_KEY_PATH APPLE_TEAM_ID
 
-# Tauri signs any nested code before the enclosing app. Re-sign the app itself
-# explicitly as well, so the final bundle always uses the selected identity.
+# Tauri signs nested code and the enclosing app with the selected identity.
+# Verify that signature without signing again: another signing pass can trigger
+# another Keychain password prompt for no additional protection.
 APPLE_SIGNING_IDENTITY="$signing_identity" npm exec -- tauri "${build_args[@]}"
-/usr/bin/codesign --force --sign "$signing_identity" --timestamp=none "$bundle"
 /usr/bin/codesign --verify --deep --strict --verbose=2 "$bundle"
 signed_team="$(/usr/bin/codesign -dv --verbose=4 "$bundle" 2>&1 | /usr/bin/sed -n 's/^TeamIdentifier=//p')"
 if [[ "$signed_team" != "$DRIFT_APPLE_TEAM_ID" ]]; then

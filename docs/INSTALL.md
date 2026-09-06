@@ -79,10 +79,12 @@ Upgrades keep the current notebook. Older installations using the app-owned
 `~/Library/Application Support/com.drift.app/Notebook` stay there, and any
 explicitly configured folder is preserved.
 
-File → Show Notebook in Finder reveals the current folder. Preserve an existing
-`~/Library/Application Support/com.drift.app/notebook-location.json` on upgrades.
+Preserve an existing `~/Library/Application Support/com.drift.app/notebook-location.json`
+on upgrades.
 
-Use **File → Choose Notebook Folder…** to select or create a different folder.
+Use **File → Change Folder** to return to a previously used folder, or
+**Choose Folder…** in that submenu to select or create another one. The current
+folder has a checkmark; other folders appear in most recent order.
 Drift saves its open notes and reopens in the selected folder. Existing notes
 stay where they are; the command does not move or merge notebooks. Recovery
 and history remain separate for each folder. A failed save cancels the switch
@@ -90,8 +92,8 @@ so the current writing stays available.
 
 Do not edit the notebook configuration by hand or replace it during an upgrade.
 Legacy configurations containing an absolute path as a JSON string remain
-supported. **File → Allow Notebook Access…** grants macOS access to the current
-folder if needed; it does not change the notebook location. For iCloud sync,
+supported. To grant macOS access to the current folder again, use
+**File → Change Folder → Choose Folder…** and select that same folder. For iCloud sync,
 choose the same actual Markdown folder on both devices; do not assume another
 Mac's path or move an existing notebook without the user's instruction.
 

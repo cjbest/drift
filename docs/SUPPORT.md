@@ -18,8 +18,8 @@ On a new Mac installation, just start writing. Drift keeps your notes in
 **Documents → Drift** and opens a short introduction the first time. Existing
 installations keep their current folder.
 
-Use **File → Choose Notebook Folder…** to choose or create another folder, or
-**File → Show Notebook in Finder** to see the current files. Changing folders
+Use **File → Change Folder** to return to a recent folder, or **Choose Folder…**
+in that submenu to choose or create another one. Changing folders
 saves your open notes and reopens Drift; it leaves existing notes in their
 original folder. For setup details, see the
 [installation guide](INSTALL.md#notebook-location).

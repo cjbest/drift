@@ -645,7 +645,6 @@ function App() {
         bind("menu-theme-system", () => applyTheme("system")),
         bind("menu-theme-light", () => applyTheme("light")),
         bind("menu-theme-dark", () => applyTheme("dark")),
-        bind("menu-save", () => void save()),
         bind("menu-check", () => {
           if (quick() && activeHit) {
             openNewWindow(activeHit.note.path);

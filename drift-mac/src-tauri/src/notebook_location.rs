@@ -19,6 +19,12 @@ enum Location {
         notebooks: BTreeMap<String, String>,
         #[serde(
             default,
+            rename = "recentDirectories",
+            skip_serializing_if = "Vec::is_empty"
+        )]
+        recent_directories: Vec<String>,
+        #[serde(
+            default,
             rename = "createDirectory",
             skip_serializing_if = "std::ops::Not::not"
         )]
@@ -40,6 +46,62 @@ fn read(data: &Path) -> Result<Option<Location>, String> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(e) => Err(e.to_string()),
     }
+}
+
+fn legacy_notebook_exists(data: &Path) -> Result<bool, String> {
+    let mut exists = false;
+    for name in ["Notebook", "Recovery", "History"] {
+        match fs::symlink_metadata(data.join(name)) {
+            Ok(_) => exists = true,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e.to_string()),
+        }
+    }
+    Ok(exists)
+}
+
+fn selected_folders(
+    directory: String,
+    notebooks: &BTreeMap<String, String>,
+    recent_directories: Vec<String>,
+) -> Vec<String> {
+    let previous = if recent_directories.is_empty() {
+        // Older configurations retained recovery mappings but not visit order.
+        notebooks.keys().cloned().collect()
+    } else {
+        recent_directories
+    };
+    std::iter::once(directory).chain(previous).collect()
+}
+
+fn distinct_folders(paths: impl IntoIterator<Item = PathBuf>) -> Vec<PathBuf> {
+    let mut folders = Vec::new();
+    for path in paths {
+        // Compare stored paths without resolving symlinks or touching providers.
+        if path.is_absolute() && !folders.contains(&path) {
+            folders.push(path);
+        }
+    }
+    folders
+}
+
+pub fn folders(data: &Path, current: &Path, preview: bool) -> Result<Vec<PathBuf>, String> {
+    if preview {
+        return Ok(vec![current.to_path_buf()]);
+    }
+    let previous = match read(data)? {
+        Some(Location::Legacy(directory)) => vec![directory],
+        Some(Location::Selected {
+            directory,
+            notebooks,
+            recent_directories,
+            ..
+        }) => selected_folders(directory, &notebooks, recent_directories),
+        None => Vec::new(),
+    };
+    Ok(distinct_folders(
+        std::iter::once(current.to_path_buf()).chain(previous.into_iter().map(PathBuf::from)),
+    ))
 }
 
 fn storage(
@@ -70,15 +132,7 @@ pub fn load(data: &Path, documents: &Path, preview: bool) -> Result<Notebook, St
     }
     let (directory, notebook_data, create_directory) = match read(data)? {
         None => {
-            let mut legacy = false;
-            for name in ["Notebook", "Recovery", "History"] {
-                match fs::symlink_metadata(data.join(name)) {
-                    Ok(_) => legacy = true,
-                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-                    Err(e) => return Err(e.to_string()),
-                }
-            }
-            if legacy {
+            if legacy_notebook_exists(data)? {
                 // Even an empty legacy notebook is an existing installation.
                 return Notebook::new(data.to_path_buf());
             }
@@ -100,6 +154,7 @@ pub fn load(data: &Path, documents: &Path, preview: bool) -> Result<Notebook, St
             let config = Location::Selected {
                 directory: directory_string.clone(),
                 notebooks: BTreeMap::from([(directory_string, relative)]),
+                recent_directories: Vec::new(),
                 create_directory: true,
                 initial_note: None,
             };
@@ -117,6 +172,7 @@ pub fn load(data: &Path, documents: &Path, preview: bool) -> Result<Notebook, St
             notebooks,
             create_directory,
             initial_note,
+            ..
         }) => {
             let notebook_data = storage(data, &directory, &notebooks)?;
             (
@@ -166,6 +222,7 @@ pub(crate) fn complete_default_setup(
     if let Some(Location::Selected {
         directory,
         notebooks,
+        recent_directories,
         create_directory: true,
         ..
     }) = read(data)?
@@ -174,6 +231,7 @@ pub(crate) fn complete_default_setup(
             let config = Location::Selected {
                 directory,
                 notebooks,
+                recent_directories,
                 create_directory: false,
                 initial_note,
             };
@@ -191,6 +249,7 @@ pub(crate) fn acknowledge_initial_note(data: &Path, root: &Path) -> Result<(), S
     if let Some(Location::Selected {
         directory,
         notebooks,
+        recent_directories,
         create_directory,
         initial_note: Some(_),
     }) = read(data)?
@@ -199,6 +258,7 @@ pub(crate) fn acknowledge_initial_note(data: &Path, root: &Path) -> Result<(), S
             let config = Location::Selected {
                 directory,
                 notebooks,
+                recent_directories,
                 create_directory,
                 initial_note: None,
             };
@@ -232,11 +292,35 @@ impl Selection {
         drop(file);
         fs::remove_file(probe).map_err(|e| e.to_string())?;
 
-        let mut notebooks = match read(data)? {
-            Some(Location::Legacy(previous)) => BTreeMap::from([(previous, "Live".into())]),
-            Some(Location::Selected { notebooks, .. }) => notebooks,
-            None => BTreeMap::new(),
+        let (mut notebooks, previous) = match read(data)? {
+            Some(Location::Legacy(previous)) => (
+                BTreeMap::from([(previous.clone(), "Live".into())]),
+                vec![previous],
+            ),
+            Some(Location::Selected {
+                directory,
+                notebooks,
+                recent_directories,
+                ..
+            }) => {
+                let previous = selected_folders(directory, &notebooks, recent_directories);
+                (notebooks, previous)
+            }
+            None => (
+                BTreeMap::new(),
+                if legacy_notebook_exists(data)? {
+                    vec![data.join("Notebook").to_string_lossy().into_owned()]
+                } else {
+                    Vec::new()
+                },
+            ),
         };
+        let recent_directories = distinct_folders(
+            std::iter::once(directory.to_path_buf()).chain(previous.into_iter().map(PathBuf::from)),
+        )
+        .into_iter()
+        .map(|path| path.to_string_lossy().into_owned())
+        .collect();
         let directory = directory.to_string_lossy().into_owned();
         if Path::new(&directory) != data.join("Notebook") {
             notebooks
@@ -249,6 +333,7 @@ impl Selection {
         let contents = serde_json::to_vec_pretty(&Location::Selected {
             directory,
             notebooks,
+            recent_directories,
             create_directory: false,
             initial_note: None,
         })
@@ -511,5 +596,190 @@ mod tests {
             before
         );
         fs::remove_dir_all(data).unwrap();
+    }
+
+    #[test]
+    fn recent_folders_survive_restart_and_repeated_switches_without_duplicates() {
+        let (base, data, documents) = fresh_location();
+        let original = Notebook::new(data.clone()).unwrap();
+        let first = base.join("First");
+        let second = base.join("Second");
+        fs::create_dir(&first).unwrap();
+        fs::create_dir(&second).unwrap();
+        assert_eq!(
+            folders(&data, &original.root, false).unwrap(),
+            vec![original.root.clone()]
+        );
+        for directory in [&first, &second, &first, &first] {
+            Selection::prepare(&data, directory)
+                .unwrap()
+                .commit()
+                .unwrap();
+        }
+        let restarted = load(&data, &documents, false).unwrap();
+        assert_eq!(restarted.root, first);
+        assert_eq!(
+            folders(&data, &restarted.root, false).unwrap(),
+            vec![first.clone(), second.clone(), original.root.clone()]
+        );
+        Selection::prepare(&data, &original.root)
+            .unwrap()
+            .commit()
+            .unwrap();
+        let restored = load(&data, &documents, false).unwrap();
+        assert_eq!(restored.data, original.data);
+        assert_eq!(
+            folders(&data, &restored.root, false).unwrap(),
+            vec![original.root, first, second]
+        );
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn abandoned_and_failed_selections_leave_recent_folders_unchanged() {
+        let (base, data, documents) = fresh_location();
+        let original = load(&data, &documents, false).unwrap();
+        let next = base.join("Next");
+        fs::create_dir(&next).unwrap();
+        let before = fs::read(data.join("notebook-location.json")).unwrap();
+        drop(Selection::prepare(&data, &next).unwrap());
+        assert!(Selection::prepare(&data, &base.join("Missing")).is_err());
+        assert_eq!(
+            fs::read(data.join("notebook-location.json")).unwrap(),
+            before
+        );
+        assert_eq!(
+            folders(&data, &original.root, false).unwrap(),
+            vec![original.root.clone()]
+        );
+
+        let pending = Selection::prepare(&data, &next).unwrap();
+        let temporarily_unavailable = base.join("Unavailable app data");
+        fs::rename(&data, &temporarily_unavailable).unwrap();
+        fs::write(&data, "Storage is unavailable").unwrap();
+        assert!(pending.commit().is_err());
+        fs::remove_file(&data).unwrap();
+        fs::rename(&temporarily_unavailable, &data).unwrap();
+        assert_eq!(
+            fs::read(data.join("notebook-location.json")).unwrap(),
+            before
+        );
+        let restarted = load(&data, &documents, false).unwrap();
+        assert_eq!(restarted.root, original.root);
+        assert_eq!(
+            folders(&data, &restarted.root, false).unwrap(),
+            vec![original.root]
+        );
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn old_recovery_mappings_become_recent_folders_on_the_next_successful_switch() {
+        let (base, data, documents) = fresh_location();
+        fs::create_dir_all(&data).unwrap();
+        let first = base.join("A unavailable provider");
+        let second = base.join("B unavailable provider");
+        let next = base.join("Next");
+        fs::create_dir(&next).unwrap();
+        let notebooks = BTreeMap::from([
+            (first.to_string_lossy().into_owned(), "Live".to_owned()),
+            (
+                second.to_string_lossy().into_owned(),
+                format!("Notebooks/{}", Uuid::new_v4()),
+            ),
+        ]);
+        // This is the selected-folder format from before recency was recorded.
+        let old_config = serde_json::json!({
+            "directory": second,
+            "notebooks": notebooks,
+        });
+        atomic(
+            &data.join("notebook-location.json"),
+            &serde_json::to_vec(&old_config).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            folders(&data, &second, false).unwrap(),
+            vec![second.clone(), first.clone()]
+        );
+        assert!(!first.exists());
+        assert!(!second.exists());
+        Selection::prepare(&data, &next).unwrap().commit().unwrap();
+        let restarted = load(&data, &documents, false).unwrap();
+        assert_eq!(
+            folders(&data, &restarted.root, false).unwrap(),
+            vec![next, second, first.clone()]
+        );
+        match read(&data).unwrap().unwrap() {
+            Location::Selected { notebooks, .. } => {
+                assert_eq!(notebooks[&first.to_string_lossy().into_owned()], "Live");
+            }
+            _ => panic!("A successful switch should migrate the configuration"),
+        }
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn legacy_string_choice_is_kept_in_recent_folders() {
+        let (base, data, documents) = fresh_location();
+        fs::create_dir_all(&data).unwrap();
+        let previous = base.join("Legacy provider");
+        let next = base.join("Next");
+        fs::create_dir(&next).unwrap();
+        atomic(
+            &data.join("notebook-location.json"),
+            &serde_json::to_vec(&previous).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            folders(&data, &previous, false).unwrap(),
+            vec![previous.clone()]
+        );
+        Selection::prepare(&data, &next).unwrap().commit().unwrap();
+        let restarted = load(&data, &documents, false).unwrap();
+        assert_eq!(
+            folders(&data, &restarted.root, false).unwrap(),
+            vec![next, previous]
+        );
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn setup_and_welcome_acknowledgment_preserve_recent_folders() {
+        let (base, data, documents) = fresh_location();
+        let original = load(&data, &documents, false).unwrap();
+        let previous = base.join("Previous");
+        let config_path = data.join("notebook-location.json");
+        let mut config: serde_json::Value =
+            serde_json::from_slice(&fs::read(&config_path).unwrap()).unwrap();
+        config["recentDirectories"] = serde_json::json!([original.root, previous]);
+        atomic(&config_path, &serde_json::to_vec(&config).unwrap()).unwrap();
+
+        complete_default_setup(&data, &original.root, Some("Drift.md".into())).unwrap();
+        assert_eq!(
+            folders(&data, &original.root, false).unwrap(),
+            vec![original.root.clone(), previous.clone()]
+        );
+        acknowledge_initial_note(&data, &original.root).unwrap();
+        assert_eq!(
+            folders(&data, &original.root, false).unwrap(),
+            vec![original.root, previous]
+        );
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn preview_folder_menu_ignores_even_unreadable_live_configuration() {
+        let (base, data, _) = fresh_location();
+        fs::create_dir_all(&data).unwrap();
+        fs::write(data.join("notebook-location.json"), "Invalid config").unwrap();
+        let preview_root = base.join("Copied notebook");
+        assert_eq!(
+            folders(&data, &preview_root, true).unwrap(),
+            vec![preview_root.clone()]
+        );
+        assert!(folders(&data, &preview_root, false).is_err());
+        assert!(!preview_root.exists());
+        fs::remove_dir_all(base).unwrap();
     }
 }

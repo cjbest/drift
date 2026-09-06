@@ -494,22 +494,6 @@ pub async fn save_note(draft: Draft, store: State<'_, Notebook>) -> Result<Saved
         .await
         .map_err(err)?
 }
-#[tauri::command]
-pub async fn reveal_notebook(store: State<'_, Notebook>) -> Result<(), String> {
-    std::process::Command::new("open")
-        .arg(&store.root)
-        .spawn()
-        .map_err(err)?;
-    Ok(())
-}
-#[tauri::command]
-pub async fn reveal_history(store: State<'_, Notebook>) -> Result<(), String> {
-    std::process::Command::new("open")
-        .arg(store.data.join("History"))
-        .spawn()
-        .map_err(err)?;
-    Ok(())
-}
 
 #[cfg(test)]
 mod tests {

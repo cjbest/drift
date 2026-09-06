@@ -91,10 +91,27 @@ context. Keep the initial editor unavailable until its note is loaded; typing
 must never be replaced by a late introduction. Failed access must leave a usable
 retry path. Subsequent launches restore the last-used note as usual.
 
-File → Choose Notebook Folder… uses the heading “Choose which folder to keep
-your notes in”. It saves every open window before reopening in the selected
-folder. A save failure cancels the switch. Selecting a folder never moves or
-merges notes; each folder retains separate history and recovery.
+File → Change Folder lists the current folder with a checkmark, then previously
+used folders in most recent order. Same-named folders show their paths so the
+choices remain distinct. Choose Folder… opens the picker with the heading
+“Choose which folder to keep your notes in”. Both routes save every open window
+before reopening in the selected folder. A save failure cancels the switch.
+Selecting a folder never moves or merges notes; each folder retains separate
+history and recovery.
+
+The File menu contains New Note, New Window, Open Note…, Change Folder, and
+Close Window. Saving is automatic; there is no manual Save command or shortcut.
+Selecting the current folder again grants access and retries opening the notes.
+Folder history persists across launches and only changes after a successful
+switch. Reading the submenu does not access the folders or wait for cloud
+providers. Development preview shows only the copied notebook and disables
+switching folders.
+
+Folder-menu verification passed 35 native Rust tests, 3 save-session tests, and
+78 Chromium/WebKit checks. A separately identified native QA app, using only
+disposable folders under the preview data directory, verified recent-folder
+switching, persisted order, adding a folder through the picker, automatic saving
+before switching, and retaining the current folder when a recent one is missing.
 
 ## Verification
 
@@ -253,9 +270,9 @@ notebook's appearance, reading positions, history, and recovery. Test notebooks
 and their preferences remain separate. Preserve the installed app's outer
 directory when exchanging signed Contents so its Dock reference stays valid.
 
-File → Allow Notebook Access… opens a standard macOS folder chooser for the
-configured notebook. It grants access to that existing folder without moving
-notes or changing the notebook location. Stable certificate signing preserves
+File → Change Folder → Choose Folder… opens a standard macOS folder chooser. Selecting the
+configured folder again grants access without moving notes or changing the
+notebook location. Stable certificate signing preserves
 the app's identity across subsequent updates.
 
 Protected-folder access is deferred until commands can report failures in the
