@@ -37,7 +37,9 @@
       margin: 0 0 14px;
       font: italic 400 clamp(48px, 7.5svh, 68px)/1 Newsreader, Georgia, serif;
     }
-    .intro { max-width: 760px; margin: 0 auto; font-size: 19px; line-height: 1.5; text-wrap: pretty; }
+    .intro-row { display: flex; align-items: center; justify-content: center; gap: 16px; max-width: 820px; margin: 0 auto; text-align: left; }
+    .avatar { flex: none; width: 56px; height: 56px; border-radius: 50%; object-fit: cover; }
+    .intro { margin: 0; font-size: 19px; line-height: 1.5; text-wrap: pretty; }
     .intro span { display: block; }
     a { color: inherit; text-decoration-thickness: 1px; text-underline-offset: .2em; }
     a:hover { text-decoration-color: var(--muted); }
@@ -48,8 +50,14 @@
     .iphone { grid-area: iphone; }
     .stage { height: var(--media-height); display: flex; align-items: center; justify-content: center; }
     .stage img { display: block; width: auto; height: 100%; max-width: 100%; object-fit: contain; }
-    .desktop-window { width: min(100%, calc(var(--media-height) * 1596 / 1154)); filter: drop-shadow(0 8px 14px #302b2514); }
-    .desktop-window img { width: 100%; height: auto; clip-path: inset(1.56% 1.13% 1.39% 1.13% round 2.1%); }
+    .desktop-window { position: relative; width: min(100%, calc(var(--media-height) * 1596 / 1154)); }
+    video { display: block; width: 100%; height: auto; border-radius: 10px; box-shadow: 0 8px 24px #302b2512; }
+    .playback { position: absolute; right: 10px; bottom: 10px; display: grid; place-items: center; width: 44px; height: 44px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); color: var(--ink); cursor: pointer; }
+    .playback[hidden] { display: none; }
+    .playback svg { width: 16px; height: 16px; }
+    .desktop-window[data-playing="true"] .playback { opacity: 0; }
+    .desktop-window:hover .playback, .desktop-window:focus-within .playback { opacity: 1; }
+    .desktop-window[data-playing="true"] .play-icon, .desktop-window:not([data-playing="true"]) .pause-icon { display: none; }
     .download { display: inline-flex; align-items: center; justify-content: center; gap: 9px; margin-top: 23px; min-height: 44px; padding: 9px 17px; border: 1px solid var(--line); border-radius: 7px; background: transparent; color: var(--ink); font: inherit; font-size: 16px; line-height: 24px; text-decoration: none; }
     .download:disabled { opacity: 1; cursor: default; -webkit-text-fill-color: var(--ink); }
     a.download { border-color: var(--ink); background: var(--ink); color: var(--paper); }
@@ -61,6 +69,7 @@
     @media (max-width: 700px) {
       body { padding: 28px 22px; }
       h1 { font-size: 52px; margin-bottom: 16px; }
+      .intro-row { flex-direction: column; gap: 14px; text-align: center; }
       .intro { max-width: 440px; font-size: 17px; line-height: 1.55; }
       .intro span + span { margin-top: 8px; }
       .apps { display: flex; flex-direction: column; gap: 44px; margin-top: 30px; }
@@ -70,16 +79,22 @@
       .download { margin-top: 20px; }
       footer { margin-top: 40px; }
     }
+    @media (hover: none), (prefers-reduced-motion: reduce) {
+      .desktop-window[data-playing="true"] .playback { opacity: 1; }
+    }
   </style>
 </head>
 <body>
   <main>
     <header>
       <h1>Drift</h1>
-      <p class="intro">
-        <span>Hi, I’m <a href="https://substack.com/@cb">Chris</a>, and I obsessively made the perfect note-taking app for myself.</span>
-        <span>If you would like to try it too, here it is.</span>
-      </p>
+      <div class="intro-row">
+        <img class="avatar" src="assets/chris.jpg" width="56" height="56" alt="Chris Best">
+        <p class="intro">
+          <span>Hi, I'm <a href="https://substack.com/@cb">Chris</a>, and I obsessively made the perfect note-taking app for myself.</span>
+          <span>I use it every day. You can try it too, if you'd like.</span>
+        </p>
+      </div>
     </header>
 
     <div class="apps">
@@ -99,7 +114,14 @@
         <h2 class="sr-only" id="mac-title">Drift for Mac</h2>
         <div class="stage">
           <div class="desktop-window">
-            <img src="assets/desktop.png" width="1596" height="1154" alt="A light Drift window on Mac, with a checklist: a delightful place for your notes, checklists, fast search, keyboard driven, dark mode, and nothing you don’t want.">
+            <video width="1596" height="1154" muted loop playsinline controls preload="metadata" poster="assets/desktop.png" aria-label="Drift on Mac: checklists, fast search, keyboard shortcuts, and dark mode.">
+              <source src="assets/demo.mp4" type="video/mp4">
+              <a href="assets/demo.mp4">Watch the Drift demo</a>
+            </video>
+            <button class="playback" type="button" aria-label="Play demo" title="Play demo" hidden>
+              <svg class="play-icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M6 3.5 16 10 6 16.5z"/></svg>
+              <svg class="pause-icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M5 4h3v12H5zm7 0h3v12h-3z"/></svg>
+            </button>
           </div>
         </div>
         <!-- Replace this disabled button with the verified notarized DMG link when available. -->
@@ -110,7 +132,30 @@
       </section>
     </div>
 
-    <footer><a href="https://github.com/cjbest/drift">Source code here</a></footer>
+    <footer>Source code <a href="https://github.com/cjbest/drift">here</a></footer>
   </main>
+  <script>
+    const video = document.querySelector('video');
+    const playback = document.querySelector('.playback');
+    const movie = document.querySelector('.desktop-window');
+    const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+    video.controls = false;
+    playback.hidden = false;
+    function updatePlayback() {
+      const label = video.paused ? 'Play demo' : 'Pause demo';
+      playback.setAttribute('aria-label', label);
+      playback.title = label;
+      movie.dataset.playing = String(!video.paused);
+    }
+    playback.addEventListener('click', () => {
+      if (video.paused) video.play().catch(updatePlayback);
+      else video.pause();
+    });
+    video.addEventListener('play', updatePlayback);
+    video.addEventListener('pause', updatePlayback);
+    reducedMotion.addEventListener('change', () => { if (reducedMotion.matches) video.pause(); });
+    if (!reducedMotion.matches) video.play().catch(updatePlayback);
+    updatePlayback();
+  </script>
 </body>
 </html>
