@@ -23,10 +23,14 @@ The workflow can also be run manually. See
 [GitHub's Pages workflow guide](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
 
 The Mac demo uses Chris's September 6, 2026, 12:43 PM recording, showing the
-whole window and desktop background. `docs/site/assets/desktop-demo.mp4` keeps
-the original 29-second performance at 1990 × 1502, encoded as H.264 at 30 fps
-(CRF 20, slow preset, YUV 4:2:0, fast start), with audio and recording metadata
-removed. `desktop-demo.jpg` is the clean light-mode frame at 16.5 seconds.
+whole window and desktop background during the opening drag. The video then
+smoothly zooms to 117% from 4.2 to 5.5 seconds, around the paste, and holds that
+framing for the remaining demo. The whole window stays visible.
+`docs/site/assets/desktop-demo.mp4` preserves the 29-second performance at
+1990 × 1502, encoded as H.264 at 30 fps (CRF 20, slow preset, YUV 4:2:0,
+fast start), with audio and recording metadata removed. The centered zoom uses
+a cubic smoothstep and 2× intermediate scaling to keep movement smooth.
+`desktop-demo.jpg` is the clean light-mode frame at 14.5 seconds from this cut.
 To replace the recording, update the video, poster, and video's intrinsic
 dimensions and aspect-ratio calculation in the page. The README's original
 GIF and linked MP4 are independent and remain in `docs/assets`.
