@@ -1,11 +1,12 @@
 # iPhone release copy
 
-Prepared for the first public TestFlight beta. These are proposed App Store
-Connect field values, not a record of an uploaded or approved build.
+Prepared for the first public TestFlight beta. The app record is registered;
+the copy below is not evidence of an uploaded or approved build.
 
 ## App information
 
-- Name: pending a listing name; **Drift** is already taken in App Store Connect.
+- Name: **Drift — Markdown Notes**
+- Apple app ID: `6809245122`
 - Bundle ID: `best.christopher.drift`, registered under the owner's personal
   membership. The on-device display name remains **Drift**.
 - Subtitle: **A quiet place for your notes**
