@@ -5,7 +5,6 @@ on:
     branches: [main]
     paths:
       - docs/site/**
-      - docs/assets/demo.mp4
       - docs/assets/iphone.png
       - drift-mac/public/fonts/**
       - drift-mac/src-tauri/icons/icon.png

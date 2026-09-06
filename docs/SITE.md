@@ -22,10 +22,14 @@ assets in the ignored `dist/site` directory. It does not publish the rest of
 The workflow can also be run manually. See
 [GitHub's Pages workflow guide](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
 
-The Mac demo uses the approved human recording in `docs/assets/demo.mp4`, with
-its whole frame visible. Its poster is the 18.5-second frame. To replace the
-recording, update that video, its poster, and the video's intrinsic dimensions
-and aspect-ratio calculation in the page. The README's GIF is independent.
+The Mac demo uses Chris's September 6, 2026, 12:43 PM recording, showing the
+whole window and desktop background. `docs/site/assets/desktop-demo.mp4` keeps
+the original 29-second performance at 1990 × 1502, encoded as H.264 at 30 fps
+(CRF 20, slow preset, YUV 4:2:0, fast start), with audio and recording metadata
+removed. `desktop-demo.jpg` is the clean light-mode frame at 16.5 seconds.
+To replace the recording, update the video, poster, and video's intrinsic
+dimensions and aspect-ratio calculation in the page. The README's original
+GIF and linked MP4 are independent and remain in `docs/assets`.
 The iPhone image is shared with the README; the font and its license are copied
 from the Mac app. `assets/chris.jpg` is the profile photo from
 [Chris's Substack profile](https://substack.com/@cb), stored locally so visitors
