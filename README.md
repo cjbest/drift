@@ -3,7 +3,7 @@
 The markdown editor I always wanted for my personal notes.
 
 <p align="center">
-  <a href="docs/assets/demo.mp4"><img src="docs/assets/demo.gif" alt="Drift on Mac: checklists, fast search, keyboard shortcuts, and dark mode" width="720"></a>
+  <a href="docs/assets/demo.mp4"><img src="docs/assets/demo.gif?v=zoom" alt="Drift on Mac: checklists, fast search, keyboard shortcuts, and dark mode" width="720"></a>
 </p>
 
 Notes are plain Markdown files, named from their contents and saved

@@ -27,15 +27,18 @@ whole window and desktop background during the opening drag. The video then
 smoothly zooms to 117% from 4.2 to 5.5 seconds, around the paste, and holds that
 framing for the remaining demo. The whole window stays visible, with an even
 24-pixel wallpaper border after the zoom.
-`docs/site/assets/desktop-demo.mp4` preserves the 29-second performance at
+`docs/assets/demo.mp4` preserves the 29-second performance at
 1870 × 1474, encoded as H.264 at 30 fps (CRF 20, slow preset, YUV 4:2:0,
 fast start), with audio and recording metadata removed. The centered zoom uses
 a cubic smoothstep and 2× intermediate scaling to keep movement smooth.
 The final crop is 1870 × 1474 at (40, 4) in the 1990 × 1502 zoomed frame.
 `desktop-demo.jpg` is the clean light-mode frame at 14.5 seconds from this cut.
 To replace the recording, update the video, poster, and video's intrinsic
-dimensions and aspect-ratio calculation in the page. The README's original
-GIF and linked MP4 are independent and remain in `docs/assets`.
+dimensions and aspect-ratio calculation in the page. The README links to this
+same MP4 and displays a 1200-pixel-wide, 15 fps GIF derived from it in
+`docs/assets/demo.gif` (global palette, Bayer dithering, optimized with
+Gifsicle). Keep the GIF in sync when changing the demo; its image URL includes a version query
+to avoid serving an older cached recording on GitHub.
 The iPhone image is shared with the README; the font and its license are copied
 from the Mac app. `assets/chris.jpg` is the profile photo from
 [Chris's Substack profile](https://substack.com/@cb), stored locally so visitors
