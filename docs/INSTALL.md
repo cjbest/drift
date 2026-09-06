@@ -121,11 +121,18 @@ open drift-ios/Drift.xcodeproj
 Use the normal **Drift** scheme. The project intentionally has no default
 development team. Select the user's own team in Xcode, or pass
 `DEVELOPMENT_TEAM` in command-line build arguments. Do not use an employer's
-team or commit personal signing settings. For a new user's device install, select an available bundle identifier
-under their team if `com.drift.notes` cannot be provisioned. Record that choice
-and keep it for subsequent updates. Existing installations must retain their
-team and bundle identity to preserve the app and selected-folder state; never
-delete the installed app to solve a signing error.
+team or commit personal signing settings. The public app uses
+`best.christopher.drift`. For a new user's source build, select an available
+bundle identifier under their own team if that identifier cannot be provisioned.
+Record that choice and keep it for subsequent updates. Existing installations
+must retain their team and bundle identity to preserve the app and selected-folder
+state; never delete the installed app to solve a signing error.
+
+The public app installs separately from the older `com.drift.notes` development
+app. To migrate, let any pending writing save in the old app, then choose the
+same external Markdown folder in the public app. Folder permissions, settings,
+and local recovery drafts do not transfer. Keep the old app until the notes open
+correctly in the new one; installing the public app does not remove it.
 
 Trust and unlock the connected device, enable Developer Mode when Xcode asks,
 select it as the destination, and build/run. Apple account login, device trust,

@@ -1,6 +1,6 @@
 name: Drift
 options:
-  bundleIdPrefix: com.drift
+  bundleIdPrefix: best.christopher
   deploymentTarget:
     iOS: "17.0"
   developmentLanguage: en
@@ -15,7 +15,7 @@ settings:
     CURRENT_PROJECT_VERSION: 6
     MARKETING_VERSION: "0.2"
     APP_DISPLAY_NAME: Drift
-    PRODUCT_BUNDLE_IDENTIFIER: com.drift.notes
+    PRODUCT_BUNDLE_IDENTIFIER: best.christopher.drift
     ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
     CODE_SIGN_STYLE: Automatic
@@ -44,7 +44,7 @@ targets:
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
-        PRODUCT_BUNDLE_IDENTIFIER: com.drift.notes.tests
+        PRODUCT_BUNDLE_IDENTIFIER: best.christopher.drift.tests
 
   DriftUITests:
     type: bundle.ui-testing
@@ -56,5 +56,5 @@ targets:
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
-        PRODUCT_BUNDLE_IDENTIFIER: com.drift.notes.uitests
+        PRODUCT_BUNDLE_IDENTIFIER: best.christopher.drift.uitests
         TEST_TARGET_NAME: Drift

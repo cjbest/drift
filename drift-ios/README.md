@@ -4,8 +4,12 @@ A native notebook for your plain Markdown files. Choose a folder once. To share
 notes with the Mac app, choose the same folder in iCloud Drive on both devices.
 
 This is the main Drift iOS app, built around UIKit navigation and text editing.
-The normal `Drift` target updates the existing `com.drift.notes` installation
-and keeps its selected folder. The interface stays compact: search and compose
+The normal `Drift` target uses `best.christopher.drift` for the public app. It
+installs separately from the older `com.drift.notes` development app. To use
+existing notes, choose the same external Markdown folder in the new app; folder
+permissions, settings, and local recovery drafts do not transfer between apps.
+Keep the old app installed until any pending writing has saved and the notes
+open correctly in the new app. The interface stays compact: search and compose
 above the list, and almost nothing but the text inside a note.
 
 - Full-text search with matching excerpts; results open at the matching passage.

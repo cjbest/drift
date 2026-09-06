@@ -5,16 +5,17 @@ Connect field values, not a record of an uploaded or approved build.
 
 ## App information
 
-- Name: **Drift** (check availability in the personal developer account).
+- Name: pending a listing name; **Drift** is already taken in App Store Connect.
+- Bundle ID: `best.christopher.drift`, registered under the owner's personal
+  membership. The on-device display name remains **Drift**.
 - Subtitle: **A quiet place for your notes**
 - Primary category: **Productivity**
 - Support URL: <https://github.com/cjbest/drift/blob/main/docs/SUPPORT.md>
 - Privacy policy URL: <https://github.com/cjbest/drift/blob/main/docs/PRIVACY.md>
-- Marketing URL: <https://github.com/cjbest/drift>
+- Marketing URL: <https://cjbest.github.io/drift/>
 - Keywords: `markdown,notes,notebook,writing,checklist,plain text,icloud`
 
-Confirm the personal account's bundle identifier and review-contact details
-before creating the record. Keep the app free for the initial TestFlight beta.
+Confirm the review-contact details before submitting. Keep the app free for the initial TestFlight beta.
 Public App Store pricing, territories, and seller details need to be set before
 the later store release.
 
@@ -27,7 +28,7 @@ you and your notes. Notes are plain Markdown files, named from their contents
 and saved automatically.
 
 Choose a folder, then start writing. Search across your whole notebook, make
-checklists, and switch between light and dark mode. Pull down in a note for
+checklists, and write in light or dark mode. Pull down in a note for
 a clean reading view.
 
 Use a folder in iCloud Drive to keep the same notes available in Drift on your
@@ -55,7 +56,7 @@ Drift does not require a login or a paid account.
 2. In the system Files picker, choose or create an empty folder in **On My
    iPhone/iPad** or **iCloud Drive**. A local folder is sufficient to review the
    app; iCloud is optional.
-3. Tap **+** to create a note. The first line becomes its title. Type some text,
+3. Tap **+** to create a note. The first nonempty line becomes its title. Type some text,
    then go back to the notebook; writing saves automatically.
 4. Search for text in the note and open the result.
 5. The notebook's options menu includes folder selection, the privacy policy,
@@ -63,7 +64,7 @@ Drift does not require a login or a paid account.
    in an open note to toggle Read Mode.
 
 The app accesses only the folder selected through Apple's document picker.
-It has no account, subscription, external service, or demo credentials.
+It has no account, subscription, Drift-hosted service, or demo credentials.
 
 ## Submission checks
 
@@ -78,6 +79,8 @@ It has no account, subscription, external service, or demo credentials.
   or custom encryption. TestFlight diagnostics are handled by Apple.
 - For external TestFlight, complete the beta description, feedback email,
   review contact, and reviewer notes, then submit to beta review.
+- Create an internal TestFlight group before the external group. Upload for
+  App Store Connect; do not restrict the build to “TestFlight Internal Only.”
 - For a permanent App Store release, prepare separate full-resolution iPhone
   and iPad screenshots from the release build. The README's two-phone image
   is promotional artwork, not a store screenshot set.

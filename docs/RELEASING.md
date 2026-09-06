@@ -185,16 +185,23 @@ Use the normal **Drift** target and the same verified personal membership.
 `Drift Preview` remains a disposable local installation. The product and privacy
 details for App Store Connect are in [APP-STORE.md](APP-STORE.md).
 
+The public iOS bundle ID is `best.christopher.drift`, the reverse-domain form of
+the owner's `christopher.best` domain. It is registered under the personal team.
+It installs separately from the old `com.drift.notes` development app; see the
+[migration instructions](INSTALL.md#iphone-and-ipad). Keep this public identity
+stable for subsequent updates. The Preview target keeps its existing identifier.
+
 Create the Drift app record under the personal team, archive a distribution build,
 and upload it through Xcode Organizer. Select the personal team explicitly during
 archive/export and inspect the resulting signing team before upload. The old
-company development team must not be reused. If the existing bundle identifier
-is unavailable to the personal team, stop and resolve app ownership and identifier
-choice before changing it; do not silently replace an installed app's identity.
+company development team must not be reused.
 
-For the first beta, create an external TestFlight group and public invitation
-link, complete the beta review information, and submit the build for external
+For the first beta, create an internal TestFlight group first, then an external
+group. Upload for App Store Connect rather than “TestFlight Internal Only.”
+Complete the beta review information and submit the build for external
 testing. External testers need Apple's TestFlight app, not a developer account.
 Builds expire 90 days after upload. See [Apple's TestFlight guide](https://developer.apple.com/help/app-store-connect/test-a-beta-version/testflight-overview).
+Enable the external group's public invitation link after beta approval; see
+[Apple's external tester instructions](https://developer.apple.com/help/app-store-connect/test-a-beta-version/invite-external-testers/).
 Only add **Try on iPhone** to the README once its actual invitation link works.
 Enable the iPhone download on the [landing page](SITE.md) at the same time.
