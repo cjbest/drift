@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="660" height="400" viewBox="0 0 660 400">
+  <rect width="660" height="400" fill="#faf7f0"/>
+  <text x="330" y="76" text-anchor="middle" font-family="Newsreader, Georgia, serif" font-style="italic" font-size="44" fill="#302b25">Drift</text>
+  <path d="M 286,218 L 374,218 M 360,204 L 374,218 L 360,232" style="fill:none;stroke:#92734e;stroke-width:3.5;stroke-linecap:round;stroke-linejoin:round"/>
+  <text x="330" y="256" text-anchor="middle" font-family="Helvetica, sans-serif" font-size="14" fill="#776d60">drag</text>
+</svg>

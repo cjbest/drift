@@ -81,7 +81,12 @@ versions aligned when incrementing the version. From the repository root:
 ./scripts/release-desktop.sh
 ```
 
-The script uses Tauri's standard drag-to-Applications DMG. It builds the normal
+The script uses Tauri's drag-to-Applications DMG with a warm background, the Drift
+wordmark, and an arrow to Applications labeled “drag.” The artwork source is
+`drift-mac/src-tauri/dmg/background.svg`; regenerate its Retina PNG with
+`node drift-mac/src-tauri/dmg/render.mjs` after installing the desktop test tools.
+Check the mounted Finder window after artwork or icon-position changes.
+It builds the normal
 `com.drift.app` app for Apple Silicon (`arm64`), with a release-only minimum of
 macOS 14. This is the declared compatibility floor, not evidence that every
 supported OS has been tested. The initial release must say **Apple Silicon**;
