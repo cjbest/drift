@@ -1,492 +1,323 @@
-import SwiftUI
 import UIKit
 
-/// UITextView wrapper. Three responsibilities:
-///   - True read-only mode (no keyboard, no selection, scroll-only).
-///   - Style the first non-blank line as a heading (Newsreader italic, large),
-///     with breathing room before the body.
-///   - Hide all chrome from the visible area; expose a single Read Mode
-///     toggle by overscrolling above the top of content (pull-to-toggle).
-struct EditorTextView: UIViewRepresentable {
-    @Binding var text: String
-    let isEditable: Bool
-    var autoFocus: Bool = false
-    var topContentInset: CGFloat = 8
-    var bottomContentInset: CGFloat = 40
-    var onToggleReadMode: () -> Void = {}
-    var onScroll: (CGFloat) -> Void = { _ in }
-
-    func makeUIView(context: Context) -> StyledTextView {
-        let tv = StyledTextView()
-        tv.delegate = context.coordinator
-        tv.font = text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ? Self.headingFont
-            : Self.bodyFont
-        tv.textColor = Theme.inkUIColor
-        tv.tintColor = Theme.accentUIColor
-        tv.applyPaperChrome()
-        tv.setBaseTextContainerInset(
-            UIEdgeInsets(top: topContentInset, left: 16, bottom: bottomContentInset, right: 16)
-        )
-        tv.contentInsetAdjustmentBehavior = .never
-        tv.alwaysBounceVertical = true
-        tv.keyboardDismissMode = .interactive
-        tv.text = text
-        tv.isEditable = isEditable
-        tv.isSelectable = isEditable
-        configurePull(on: tv)
-        Self.applyFirstLineHeading(to: tv, force: true)
-        tv.selectedRange = NSRange(location: 0, length: 0)
-        Self.updateTypingAttributes(for: tv)
-        tv.setContentOffset(.zero, animated: false)
-        if autoFocus {
-            tv.focusWhenReady()
-        }
-        return tv
-    }
-
-    func updateUIView(_ uiView: StyledTextView, context: Context) {
-        context.coordinator.update(self)
-        if uiView.contentInsetAdjustmentBehavior != .never {
-            uiView.contentInsetAdjustmentBehavior = .never
-        }
-        uiView.applyPaperChrome()
-        uiView.setBaseTextContainerInset(
-            UIEdgeInsets(top: topContentInset, left: 16, bottom: bottomContentInset, right: 16)
-        )
-        if uiView.text != text {
-            let cursor = uiView.selectedRange
-            uiView.text = text
-            uiView.selectedRange = NSRange(
-                location: min(cursor.location, (uiView.text as NSString).length),
-                length: 0
-            )
-            Self.applyFirstLineHeading(to: uiView, force: true)
-        }
-        if uiView.isEditable != isEditable {
-            uiView.isEditable = isEditable
-        }
-        if uiView.isSelectable != isEditable {
-            uiView.isSelectable = isEditable
-        }
-        configurePull(on: uiView)
-    }
-
-    func makeCoordinator() -> Coordinator { Coordinator(self) }
-
-    final class Coordinator: NSObject, UITextViewDelegate {
-        private var parent: EditorTextView
-        private var restingOffsetY: CGFloat?
-        private var lastReportedScrollY: CGFloat?
-
-        init(_ parent: EditorTextView) {
-            self.parent = parent
-        }
-
-        func update(_ parent: EditorTextView) {
-            self.parent = parent
-        }
-
-        func textViewDidChange(_ textView: UITextView) {
-            parent.text = textView.text ?? ""
-            EditorTextView.applyFirstLineHeading(to: textView)
-            (textView as? StyledTextView)?.scheduleCaretVisibilityUpdate()
-        }
-
-        func textViewDidChangeSelection(_ textView: UITextView) {
-            EditorTextView.updateTypingAttributes(for: textView)
-            (textView as? StyledTextView)?.scheduleCaretVisibilityUpdate()
-        }
-
-        func scrollViewDidScroll(_ scrollView: UIScrollView) {
-            (scrollView as? StyledTextView)?.handleScroll()
-            if restingOffsetY == nil, scrollView.contentOffset.y >= 0 {
-                restingOffsetY = scrollView.contentOffset.y
-            }
-            let relativeY = max(0, scrollView.contentOffset.y - (restingOffsetY ?? 0))
-            let clampedY = min(relativeY, 76)
-            if lastReportedScrollY.map({ abs($0 - clampedY) > 2 }) ?? true {
-                lastReportedScrollY = clampedY
-                parent.onScroll(clampedY)
-            }
-        }
-
-        func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
-            (scrollView as? StyledTextView)?.handleEndDragging()
-        }
-    }
-
-    // MARK: - Pull config
-
-    private func configurePull(on tv: StyledTextView) {
-        tv.pullTitle = isEditable ? "Read Mode" : "Exit Read Mode"
-        tv.onPullTrigger = onToggleReadMode
-    }
-
-    // MARK: - Styling
-
-    private static var bodyFont: UIFont {
-        Theme.bodyUIFont()
-    }
-
-    private static var headingFont: UIFont {
-        Theme.editorTitleUIFont()
-    }
-
-    private static var headingParagraphStyle: NSParagraphStyle {
-        let style = NSMutableParagraphStyle()
-        style.paragraphSpacing = 16
-        return style
-    }
-
-    static func applyFirstLineHeading(to textView: UITextView, force: Bool = false) {
-        let storage = textView.textStorage
-        let full = NSRange(location: 0, length: storage.length)
-        guard full.length > 0 else {
-            (textView as? StyledTextView)?.lastStyledHeadingKey = nil
-            updateTypingAttributes(for: textView)
-            return
-        }
-
-        let firstLine = firstNonBlankLineRange(in: textView.text ?? "")
-        let headingKey = firstLine.map { range in
-            let ns = (textView.text ?? "") as NSString
-            return "\(range.location):\(range.length):\(ns.substring(with: range))"
-        } ?? "none"
-
-        if !force,
-           (textView as? StyledTextView)?.lastStyledHeadingKey == headingKey {
-            updateTypingAttributes(for: textView)
-            return
-        }
-
-        storage.beginEditing()
-        storage.removeAttribute(.paragraphStyle, range: full)
-        storage.addAttribute(.font, value: bodyFont, range: full)
-        storage.addAttribute(.foregroundColor, value: Theme.inkUIColor, range: full)
-        if let firstLine {
-            storage.addAttribute(.font, value: headingFont, range: firstLine)
-            storage.addAttribute(.paragraphStyle, value: headingParagraphStyle, range: firstLine)
-        }
-        storage.endEditing()
-        (textView as? StyledTextView)?.lastStyledHeadingKey = headingKey
-        updateTypingAttributes(for: textView)
-    }
-
-    static func updateTypingAttributes(for textView: UITextView) {
-        let text = textView.text ?? ""
-        let selectedLocation = textView.selectedRange.location
-        let headingRange = firstNonBlankLineRange(in: text)
-        let useHeading: Bool
-
-        if text.isEmpty || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            useHeading = true
-        } else if let headingRange {
-            useHeading = selectedLocation <= headingRange.location + headingRange.length
-        } else {
-            useHeading = false
-        }
-
-        var attributes: [NSAttributedString.Key: Any] = [
-            .font: useHeading ? headingFont : bodyFont,
-            .foregroundColor: Theme.inkUIColor,
-        ]
-        if useHeading {
-            attributes[.paragraphStyle] = headingParagraphStyle
-        }
-        if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            textView.font = headingFont
-        }
-        textView.typingAttributes = attributes
-    }
-
-    private static func firstNonBlankLineRange(in text: String) -> NSRange? {
-        let ns = text as NSString
-        var loc = 0
-        while loc < ns.length {
-            let lineRange = ns.lineRange(for: NSRange(location: loc, length: 0))
-            let lineText = ns.substring(with: lineRange)
-            if !lineText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                var endLoc = lineRange.location + lineRange.length
-                if endLoc > lineRange.location {
-                    let last = ns.character(at: endLoc - 1)
-                    if last == 10 || last == 13 { endLoc -= 1 }
-                }
-                return NSRange(location: lineRange.location, length: endLoc - lineRange.location)
-            }
-            if lineRange.length == 0 { break }
-            loc = lineRange.location + lineRange.length
-        }
-        return nil
-    }
-}
-
-/// UITextView with a pull-down-to-toggle affordance: a small label sitting
-/// above the top of content (in the rubber-band region). User pulls down
-/// past `triggerThreshold`, releases, and `onPullTrigger` fires.
-final class StyledTextView: UITextView {
+/// A native plain-text editor. Formatting changes attributes in place; text,
+/// selection, marked text, undo, and scrolling remain owned by UIKit.
+@MainActor
+final class EditorTextView: UITextView, @preconcurrency NSTextStorageDelegate {
     private let pullLabel = UILabel()
-    private var userInterfaceStyleRegistration: (any UITraitChangeRegistration)?
-    private var keyboardObservers: [NSObjectProtocol] = []
-    private var baseTextContainerInset = UIEdgeInsets(top: 8, left: 16, bottom: 40, right: 16)
-    private var keyboardOverlap: CGFloat = 0
-    private var keyboardTopInWindow: CGFloat?
-    private var pendingCaretVisibilityUpdate = false
-    var lastStyledHeadingKey: String?
-
-    /// Title shown in the overscroll area (e.g. "Read Mode" / "Exit Read Mode").
-    var pullTitle: String = "" {
+    private var headingRange: NSRange?
+    private var changedRange: NSRange?
+    private var isApplyingStyle = false
+    private var pageTopInset: CGFloat = 12
+    private var pageHorizontalInset: CGFloat = 20
+    private var pageBottomInset: CGFloat = 32
+    private var allowsPageOverscroll = true
+    private var pendingCaretUpdate = false
+    private var pullIsPrimed = false
+    private var pullCanToggle = true
+    var onPullReadMode: (() -> Void)?
+    var isReading = false {
         didSet {
-            pullLabel.text = pullTitle
+            pullLabel.text = isReading ? "Exit Read Mode" : "Read Mode"
+            accessibilityHint = isReading ? "Pull down to exit Read Mode." : "Pull down for Read Mode."
+            updatePullFeedback()
             setNeedsLayout()
         }
     }
 
-    /// Callback invoked when the user releases past the trigger threshold.
-    var onPullTrigger: () -> Void = {}
-
-    private let pullLabelY: CGFloat = -38
-    private let triggerThreshold: CGFloat = 78
-
     init() {
         super.init(frame: .zero, textContainer: nil)
-        applyPaperChrome()
+        backgroundColor = Theme.paperUIColor
+        textColor = Theme.inkUIColor
+        tintColor = Theme.accentUIColor
+        font = Theme.bodyUIFont()
+        adjustsFontForContentSizeCategory = true
+        keyboardDismissMode = .interactive
+        alwaysBounceVertical = true
+        contentInsetAdjustmentBehavior = .never
+        automaticallyAdjustsScrollIndicatorInsets = false
+        textContainer.lineFragmentPadding = 0
+        textContainerInset = UIEdgeInsets(top: 12, left: 20, bottom: 32, right: 20)
+        allowsEditingTextAttributes = false
+        isFindInteractionEnabled = true
+        autocorrectionType = .yes
+        spellCheckingType = .yes
+        smartQuotesType = .yes
+        smartDashesType = .yes
+        accessibilityIdentifier = "note-editor"
+        accessibilityLabel = "Note"
+        textStorage.delegate = self
+
+        pullLabel.text = "Read Mode"
+        pullLabel.font = Theme.mono(12, style: .caption1)
         pullLabel.textColor = Theme.accentUIColor.withAlphaComponent(0.4)
-        pullLabel.font = UIFont(name: "JetBrainsMono-Regular", size: 12)
-            ?? UIFont.monospacedSystemFont(ofSize: 12, weight: .regular)
         pullLabel.textAlignment = .center
+        pullLabel.isUserInteractionEnabled = false
+        pullLabel.accessibilityIdentifier = "pull-mode-label"
+        pullLabel.accessibilityElementsHidden = true
+        pullLabel.alpha = 0
         addSubview(pullLabel)
-        userInterfaceStyleRegistration = registerForTraitChanges([UITraitUserInterfaceStyle.self]) {
-            (textView: StyledTextView, _) in
-            textView.applyPaperChrome()
-        }
-        observeKeyboard()
-    }
-
-    required init?(coder: NSCoder) { fatalError() }
-
-    deinit {
-        for observer in keyboardObservers {
-            NotificationCenter.default.removeObserver(observer)
+        accessibilityHint = "Pull down for Read Mode."
+        updatePaperAppearance()
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (textView: EditorTextView, _) in
+            textView.updatePaperAppearance()
         }
     }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     override func didMoveToWindow() {
         super.didMoveToWindow()
-        applyPaperChrome()
-        window?.backgroundColor = Theme.paperUIColor
-        window?.rootViewController?.view.backgroundColor = Theme.paperUIColor
+        updatePaperAppearance()
     }
 
-    func applyPaperChrome() {
-        let interfaceStyle: UIUserInterfaceStyle = (window?.traitCollection ?? traitCollection).userInterfaceStyle == .dark
-            ? .dark
-            : .light
+    private func updatePaperAppearance() {
+        keyboardAppearance = (window?.traitCollection ?? traitCollection).userInterfaceStyle == .dark ? .dark : .light
         backgroundColor = Theme.paperUIColor
-        isOpaque = true
-        keyboardAppearance = interfaceStyle == .dark ? .dark : .light
-    }
-
-    func setBaseTextContainerInset(_ inset: UIEdgeInsets) {
-        guard abs(baseTextContainerInset.top - inset.top) > 0.5
-            || abs(baseTextContainerInset.left - inset.left) > 0.5
-            || abs(baseTextContainerInset.bottom - inset.bottom) > 0.5
-            || abs(baseTextContainerInset.right - inset.right) > 0.5
-        else {
-            applyEffectiveInsets()
-            return
-        }
-
-        baseTextContainerInset = inset
-        applyEffectiveInsets()
-    }
-
-    private func observeKeyboard() {
-        let center = NotificationCenter.default
-        keyboardObservers = [
-            center.addObserver(
-                forName: UIResponder.keyboardWillChangeFrameNotification,
-                object: nil,
-                queue: .main
-            ) { [weak self] notification in
-                self?.updateKeyboardOverlap(from: notification)
-            },
-            center.addObserver(
-                forName: UIResponder.keyboardWillHideNotification,
-                object: nil,
-                queue: .main
-            ) { [weak self] notification in
-                self?.keyboardOverlap = 0
-                self?.keyboardTopInWindow = nil
-                self?.animateInsets(with: notification)
-            },
-        ]
-    }
-
-    private func updateKeyboardOverlap(from notification: Notification) {
-        guard let window,
-              let keyboardFrame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect
-        else {
-            keyboardOverlap = 0
-            keyboardTopInWindow = nil
-            animateInsets(with: notification)
-            return
-        }
-
-        let keyboardInWindow = window.convert(keyboardFrame, from: nil)
-        let textViewInWindow = convert(bounds, to: window)
-        let overlap = max(0, textViewInWindow.maxY - keyboardInWindow.minY)
-        keyboardOverlap = min(bounds.height, overlap)
-        keyboardTopInWindow = keyboardOverlap > 0 ? keyboardInWindow.minY : nil
-        animateInsets(with: notification)
-    }
-
-    private func animateInsets(with notification: Notification) {
-        let duration = notification.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? TimeInterval ?? 0
-        let curveRaw = notification.userInfo?[UIResponder.keyboardAnimationCurveUserInfoKey] as? UInt ?? 0
-        var options = UIView.AnimationOptions(rawValue: curveRaw << 16)
-        options.insert(.beginFromCurrentState)
-
-        guard duration > 0 else {
-            applyEffectiveInsets()
-            keepCaretVisible(animated: false)
-            return
-        }
-
-        UIView.animate(withDuration: duration, delay: 0, options: options) {
-            self.applyEffectiveInsets()
-            self.layoutIfNeeded()
-            self.keepCaretVisible(animated: false)
-        } completion: { _ in
-            self.keepCaretVisible(animated: false)
-        }
-    }
-
-    private func applyEffectiveInsets() {
-        let lineHeight = max(font?.lineHeight ?? 0, typingAttributes[.font].flatMap { ($0 as? UIFont)?.lineHeight } ?? 0, 24)
-        let effectiveInset = Self.effectiveTextContainerInset(
-            baseInset: baseTextContainerInset,
-            boundsHeight: bounds.height,
-            lineHeight: lineHeight,
-            keyboardOverlap: keyboardOverlap
-        )
-
-        if abs(textContainerInset.top - effectiveInset.top) > 0.5
-            || abs(textContainerInset.left - effectiveInset.left) > 0.5
-            || abs(textContainerInset.bottom - effectiveInset.bottom) > 0.5
-            || abs(textContainerInset.right - effectiveInset.right) > 0.5 {
-            textContainerInset = effectiveInset
-        }
-
-        scrollIndicatorInsets = UIEdgeInsets(top: 0, left: 0, bottom: keyboardOverlap, right: 0)
-    }
-
-    static func effectiveTextContainerInset(
-        baseInset: UIEdgeInsets,
-        boundsHeight: CGFloat,
-        lineHeight: CGFloat,
-        keyboardOverlap: CGFloat
-    ) -> UIEdgeInsets {
-        let keyboardBottom = baseInset.bottom + keyboardOverlap
-        let pageOverscroll = max(0, boundsHeight - baseInset.top - lineHeight)
-        let effectiveBottom = keyboardOverlap > 0
-            ? keyboardBottom
-            : max(keyboardBottom, pageOverscroll)
-
-        return UIEdgeInsets(
-            top: baseInset.top,
-            left: baseInset.left,
-            bottom: effectiveBottom,
-            right: baseInset.right
-        )
-    }
-
-    func scheduleCaretVisibilityUpdate(animated: Bool = false) {
-        guard !pendingCaretVisibilityUpdate else { return }
-        pendingCaretVisibilityUpdate = true
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            self.pendingCaretVisibilityUpdate = false
-            self.keepCaretVisible(animated: animated)
-        }
-    }
-
-    private func keepCaretVisible(animated: Bool) {
-        guard isEditable,
-              isFirstResponder,
-              keyboardOverlap > 0,
-              let window,
-              let selectedTextRange
-        else { return }
-
-        layoutManager.ensureLayout(for: textContainer)
-        layoutIfNeeded()
-
-        let caret = caretRect(for: selectedTextRange.end)
-        guard !caret.isNull, !caret.isInfinite, caret.height > 0 else { return }
-
-        let textViewInWindow = convert(bounds, to: window)
-        let caretInWindow = convert(caret, to: window)
-        let bottomLimit = min(keyboardTopInWindow ?? window.bounds.maxY, textViewInWindow.maxY) - 18
-        let topLimit = textViewInWindow.minY + 18
-
-        var nextOffset = contentOffset
-        if caretInWindow.maxY > bottomLimit {
-            nextOffset.y += caretInWindow.maxY - bottomLimit
-        } else if caretInWindow.minY < topLimit {
-            nextOffset.y -= topLimit - caretInWindow.minY
-        } else {
-            return
-        }
-
-        let minOffsetY = -contentInset.top
-        let maxOffsetY = max(minOffsetY, contentSize.height - bounds.height + contentInset.bottom)
-        nextOffset.y = min(max(nextOffset.y, minOffsetY), maxOffsetY)
-
-        guard abs(nextOffset.y - contentOffset.y) > 0.5 else { return }
-        setContentOffset(nextOffset, animated: animated)
+        updatePullFeedback()
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        applyEffectiveInsets()
-        let fitting = pullLabel.sizeThatFits(CGSize(width: bounds.width, height: 32))
-        pullLabel.frame = CGRect(
-            x: (bounds.width - fitting.width) / 2,
-            y: pullLabelY,
-            width: fitting.width,
-            height: fitting.height
-        )
+        applyPageInsets()
+        let hintWidth = max(0, bounds.width - pageHorizontalInset * 2)
+        let size = pullLabel.sizeThatFits(CGSize(width: hintWidth, height: 40))
+        // Reveal the hint above the title, below the status area, rather than
+        // placing it behind the Dynamic Island at the release threshold.
+        pullLabel.frame = CGRect(x: (bounds.width - size.width) / 2, y: pageTopInset - 42, width: size.width, height: size.height)
     }
 
-    func handleScroll() {
-        // Visual cue: label brightens once past the trigger threshold so the
-        // user knows releasing now will fire the action.
-        let primed = contentOffset.y <= -triggerThreshold
-        pullLabel.textColor = primed
-            ? Theme.accentUIColor
-            : Theme.accentUIColor.withAlphaComponent(0.4)
+    func configurePageInsets(top: CGFloat, horizontal: CGFloat, bottom: CGFloat, allowsOverscroll: Bool) {
+        pageTopInset = top
+        pageHorizontalInset = horizontal
+        pageBottomInset = bottom
+        allowsPageOverscroll = allowsOverscroll
+        applyPageInsets()
     }
 
-    func handleEndDragging() {
-        if contentOffset.y <= -triggerThreshold {
-            onPullTrigger()
+    private func applyPageInsets() {
+        // The extra space is after the document, allowing a short note to
+        // move upward into a reading position. Never insert space into text.
+        // Even a single-line note gets the complete 76-point retreat. The
+        // compact type otherwise leaves a short note unable to hide Back.
+        let pageSpace = max(0, bounds.height - pageTopInset - Theme.editorTitleUIFont().lineHeight + 76)
+        let bottom = allowsPageOverscroll ? max(pageBottomInset, pageSpace) : pageBottomInset
+        let inset = UIEdgeInsets(top: pageTopInset, left: pageHorizontalInset, bottom: bottom, right: pageHorizontalInset)
+        if textContainerInset != inset { textContainerInset = inset }
+    }
+
+    func updatePullFeedback() {
+        let isPrimed = pullCanToggle && contentOffset.y <= -78
+        pullIsPrimed = isPrimed
+        let depth = max(0, -contentOffset.y)
+        pullLabel.alpha = pullCanToggle ? min(1, max(0, (depth - 12) / 24)) : 0
+        pullLabel.textColor = Theme.accentUIColor.withAlphaComponent(isPrimed ? 1 : 0.4)
+        pullLabel.accessibilityElementsHidden = !pullCanToggle || depth < 20
+        pullLabel.accessibilityValue = isPrimed ? "Release to \(isReading ? "exit" : "enter") Read Mode" : nil
+    }
+
+    func beginPull(keyboardIsVisible: Bool) {
+        // A downward drag dismissing the keyboard must not also switch modes.
+        pullCanToggle = !keyboardIsVisible
+        updatePullFeedback()
+    }
+
+    func finishPull() {
+        guard pullIsPrimed, contentOffset.y <= -78 else { return }
+        pullIsPrimed = false
+        onPullReadMode?()
+    }
+
+    func keepCaretVisibleAfterLayout() {
+        guard isFirstResponder, isEditable, !pendingCaretUpdate else { return }
+        pendingCaretUpdate = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.pendingCaretUpdate = false
+            guard self.isFirstResponder, self.isEditable, !self.isDragging,
+                  let selection = self.selectedTextRange else { return }
+            self.layoutManager.ensureLayout(for: self.textContainer)
+            let caret = self.caretRect(for: selection.end)
+            guard !caret.isNull, caret.height > 0 else { return }
+            let visibleBottom = self.bounds.maxY - 18
+            let visibleTop = self.bounds.minY + (self.window?.safeAreaInsets.top ?? 0) + 18
+            var offset = self.contentOffset
+            if caret.maxY > visibleBottom { offset.y += caret.maxY - visibleBottom }
+            else if caret.minY < visibleTop { offset.y -= visibleTop - caret.minY }
+            else { return }
+            let maximum = max(0, self.contentSize.height - self.bounds.height)
+            offset.y = min(maximum, max(0, offset.y))
+            if abs(offset.y - self.contentOffset.y) > 0.5 { self.setContentOffset(offset, animated: false) }
         }
     }
 
-    func focusWhenReady(attempt: Int = 0) {
-        let configuredDelay = ProcessInfo.processInfo.environment["DRIFT_FOCUS_DELAY_MS"]
-            .flatMap(Double.init)
-            .map { max(0, $0) / 1000 } ?? 0
-        let delay = attempt == 0 ? configuredDelay : 0.05
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-            guard let self, self.isEditable else { return }
-            if self.window != nil {
-                self.applyPaperChrome()
-                self.becomeFirstResponder()
-            } else if attempt < 10 {
-                self.focusWhenReady(attempt: attempt + 1)
+    /// Used only when opening a document or accepting a clean external refresh.
+    func loadText(_ newText: String, preservingPosition: Bool = false) {
+        let selection = selectedRange
+        let offset = contentOffset
+        text = newText
+        headingRange = nil
+        restyleAll()
+        if preservingPosition {
+            restoreSelection(selection)
+            setContentOffset(offset, animated: false)
+        } else {
+            selectedRange = NSRange(location: 0, length: 0)
+        }
+        undoManager?.removeAllActions()
+    }
+
+    func restoreSelection(_ selection: NSRange) {
+        let length = textStorage.length
+        let location = min(selection.location, length)
+        selectedRange = NSRange(location: location, length: min(selection.length, length - location))
+    }
+
+    func restyleAll() {
+        guard markedTextRange == nil else { return }
+        changedRange = NSRange(location: 0, length: textStorage.length)
+        styleChangedText()
+        pullLabel.font = Theme.mono(12, style: .caption1)
+    }
+
+    func textStorage(_ textStorage: NSTextStorage, didProcessEditing editedMask: NSTextStorage.EditActions, range editedRange: NSRange, changeInLength delta: Int) {
+        guard !isApplyingStyle, editedMask.contains(.editedCharacters) else { return }
+        changedRange = changedRange.map { NSUnionRange($0, editedRange) } ?? editedRange
+    }
+
+    func styleChangedText() {
+        // Restyling a composition can prematurely commit Chinese/Japanese input.
+        guard !isApplyingStyle else { return }
+        guard markedTextRange == nil else { return }
+        guard changedRange != nil else { updateTypingStyle(); return }
+        let string = textStorage.string as NSString
+        let length = string.length
+        let newHeading = firstNonblankLine(in: string)
+        isApplyingStyle = true
+        let manager = undoManager
+        let wasUndoEnabled = manager?.isUndoRegistrationEnabled == true
+        if wasUndoEnabled { manager?.disableUndoRegistration() }
+        textStorage.beginEditing()
+
+        if length > 0 {
+            if let changedRange {
+                let location = min(changedRange.location, length)
+                let range = NSRange(location: location, length: min(changedRange.length, length - location))
+                applyBodyStyle(to: string.paragraphRange(for: range))
+            }
+            // Reset the prior heading too, including when return/backspace
+            // changes which paragraph is first. This work stays near the edit.
+            let prefixEnd = min(length, max(NSMaxRange(headingRange ?? NSRange()), NSMaxRange(newHeading ?? NSRange())))
+            if prefixEnd > 0 { applyBodyStyle(to: NSRange(location: 0, length: prefixEnd)) }
+            if let newHeading {
+                textStorage.addAttributes(headingAttributes, range: newHeading)
             }
         }
+        textStorage.endEditing()
+        if wasUndoEnabled { manager?.enableUndoRegistration() }
+        isApplyingStyle = false
+        headingRange = newHeading
+        changedRange = nil
+        updateTypingStyle()
+    }
+
+    func updateTypingStyle() {
+        guard markedTextRange == nil else { return }
+        let location = selectedRange.location
+        let heading = headingRange
+        let isHeading = textStorage.length == 0 || heading.map {
+            location >= $0.location && location <= NSMaxRange($0)
+        } == true
+        typingAttributes = isHeading ? headingAttributes : bodyAttributes
+    }
+
+    private var bodyAttributes: [NSAttributedString.Key: Any] {
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineSpacing = 0
+        paragraph.paragraphSpacing = 0
+        return [.font: Theme.bodyUIFont(), .foregroundColor: Theme.inkUIColor, .paragraphStyle: paragraph]
+    }
+
+    private var headingAttributes: [NSAttributedString.Key: Any] {
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.paragraphSpacing = 8
+        paragraph.lineSpacing = 0
+        return [.font: Theme.editorTitleUIFont(), .foregroundColor: Theme.inkUIColor, .paragraphStyle: paragraph]
+    }
+
+    private func applyBodyStyle(to range: NSRange) {
+        guard range.length > 0, NSMaxRange(range) <= textStorage.length else { return }
+        textStorage.setAttributes(bodyAttributes, range: range)
+    }
+
+    private func firstNonblankLine(in string: NSString) -> NSRange? {
+        var location = 0
+        while location < string.length {
+            let line = string.lineRange(for: NSRange(location: location, length: 0))
+            var end = NSMaxRange(line)
+            while end > line.location && (string.character(at: end - 1) == 10 || string.character(at: end - 1) == 13) { end -= 1 }
+            let contents = NSRange(location: line.location, length: end - line.location)
+            if !string.substring(with: contents).trimmingCharacters(in: .whitespaces).isEmpty { return contents }
+            location = NSMaxRange(line)
+        }
+        return nil
+    }
+
+    override func paste(_ sender: Any?) {
+        // Files remain plain Markdown even when pasting styled web content.
+        guard let string = UIPasteboard.general.string else { super.paste(sender); return }
+        insertText(string)
+    }
+
+    /// List continuation goes through UITextInput so one undo restores the
+    /// original line. Returning on an empty item ends the list.
+    func continueList(for range: NSRange, replacement: String) -> Bool {
+        guard replacement == "\n", range.length == 0, markedTextRange == nil else { return false }
+        let string = textStorage.string as NSString
+        guard range.location <= string.length else { return false }
+        let line = string.lineRange(for: NSRange(location: range.location, length: 0))
+        let prefixRange = NSRange(location: line.location, length: range.location - line.location)
+        let beforeCursor = string.substring(with: prefixRange)
+        let pattern = #"^(\s*)(?:([-*+])\s+(?:\[([ xX])\]\s+)?|(\d+)([.)])\s+)(.*)$"#
+        guard let expression = try? NSRegularExpression(pattern: pattern),
+              let match = expression.firstMatch(in: beforeCursor, range: NSRange(location: 0, length: (beforeCursor as NSString).length))
+        else { return false }
+        let source = beforeCursor as NSString
+        func capture(_ index: Int) -> String {
+            let range = match.range(at: index)
+            return range.location == NSNotFound ? "" : source.substring(with: range)
+        }
+        let indentation = capture(1)
+        let content = capture(6)
+        let tailRange = NSRange(location: range.location, length: NSMaxRange(line) - range.location)
+        let hasTextAfterCursor = !string.substring(with: tailRange).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        if content.trimmingCharacters(in: .whitespaces).isEmpty && !hasTextAfterCursor {
+            let start = position(from: beginningOfDocument, offset: line.location)!
+            let end = position(from: beginningOfDocument, offset: range.location)!
+            if let selection = textRange(from: start, to: end) { replace(selection, withText: indentation) }
+        } else {
+            let marker: String
+            if let number = Int(capture(4)), number < Int.max {
+                marker = "\(number + 1)\(capture(5)) "
+            } else if match.range(at: 3).location != NSNotFound {
+                marker = "\(capture(2)) [ ] "
+            } else {
+                marker = "\(capture(2)) "
+            }
+            insertText("\n" + indentation + marker)
+        }
+        return true
+    }
+
+    func insertListMarker(_ marker: String) {
+        guard isEditable, markedTextRange == nil else { return }
+        let string = textStorage.string as NSString
+        let line = string.lineRange(for: NSRange(location: min(selectedRange.location, string.length), length: 0))
+        guard let start = position(from: beginningOfDocument, offset: line.location),
+              let insertion = textRange(from: start, to: start) else { return }
+        let oldSelection = selectedRange
+        replace(insertion, withText: marker)
+        restoreSelection(NSRange(location: oldSelection.location + (marker as NSString).length, length: oldSelection.length))
+        becomeFirstResponder()
     }
 }

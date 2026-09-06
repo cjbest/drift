@@ -1,5 +1,7 @@
 # Drift Development Notes
 
+See [AGENTS.md](AGENTS.md) for the shared aesthetic and interaction guidance.
+
 ## Rules
 
 - **Menu + Hotkey**: Every new functionality that has a keyboard shortcut must also be added to the app menu, with the hotkey displayed in the menu item.

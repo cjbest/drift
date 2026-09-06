@@ -36,6 +36,13 @@ npm run tauri dev
 npm run tauri build
 ```
 
+## iPhone app
+
+The main iPhone and iPad app lives in `drift-ios`. It edits the same Markdown
+folder, with full-text search, local recovery drafts, and conflict-safe saves.
+See the [iOS build and testing guide](drift-ios/README.md), or run
+`./scripts/preview-ios.sh` for a separate simulator preview with sample notes.
+
 ## Claude Agent
 
 This repo has an automated Claude agent that can fix issues and respond to PR feedback.
