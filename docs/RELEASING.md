@@ -72,7 +72,9 @@ fingerprints are identifiers, not passwords.
 ### Build the download
 
 Finish the application tests listed in [DESKTOP-DESIGN.md](DESKTOP-DESIGN.md)
-and check the release diff first. Keep the Tauri, npm, and Cargo application
+and check and commit the release diff first. The script requires a clean
+checkout, rejects source changes during the build, and records the exact commit
+in `release.json` beside the submission. Keep the Tauri, npm, and Cargo application
 versions aligned when incrementing the version. From the repository root:
 
 ```sh

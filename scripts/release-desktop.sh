@@ -2,6 +2,7 @@
 set -euo pipefail
 script_dir="$(cd "$(dirname "$0")" && pwd)"
 desktop_dir="$(cd "$script_dir/../drift-mac" && pwd)"
+repo_dir="$(cd "$script_dir/.." && pwd)"
 cd "$desktop_dir"
 
 usage() {
@@ -35,7 +36,7 @@ if [[ "$(uname -s)" != Darwin || "$(uname -m)" != arm64 ]]; then
   exit 1
 fi
 commands=(node xcrun)
-if [[ "$mode" != finish ]]; then commands+=(npm cargo rustc); fi
+if [[ "$mode" != finish ]]; then commands+=(npm cargo rustc git); fi
 for command in "${commands[@]}"; do
   command -v "$command" >/dev/null || { echo "Missing prerequisite: $command" >&2; exit 1; }
 done
@@ -88,6 +89,11 @@ verify_application() {
 }
 
 if [[ "$mode" == build ]]; then
+  if [[ -n "$(git -C "$repo_dir" status --porcelain)" ]]; then
+    echo "Commit the reviewed release changes and start from a clean checkout." >&2
+    exit 1
+  fi
+  source_commit="$(git -C "$repo_dir" rev-parse HEAD)"
   version="$(json_value src-tauri/tauri.conf.json version)"
   [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Use a numeric release version." >&2; exit 1; }
   # Isolate release output from installed/development builds. Disallow inherited
@@ -98,6 +104,10 @@ if [[ "$mode" == build ]]; then
   export APPLE_SIGNING_IDENTITY="$DRIFT_SIGNING_IDENTITY"
   config='{"bundle":{"macOS":{"minimumSystemVersion":"14.0","hardenedRuntime":true}}}'
   npm exec -- tauri build --target aarch64-apple-darwin --bundles app dmg --config "$config" --ci
+  if [[ "$(git -C "$repo_dir" rev-parse HEAD)" != "$source_commit" || -n "$(git -C "$repo_dir" status --porcelain)" ]]; then
+    echo "Source changed during the release build. Review and commit it before rebuilding." >&2
+    exit 1
+  fi
   bundle_dir="$CARGO_TARGET_DIR/aarch64-apple-darwin/release/bundle"
   verify_application "$bundle_dir/macos/Drift.app"
   built_dmg="$bundle_dir/dmg/Drift_${version}_aarch64.dmg"
@@ -110,12 +120,12 @@ if [[ "$mode" == build ]]; then
   # disk image here, before its one notarization submission; never re-sign later.
   /usr/bin/codesign --force --sign "$DRIFT_SIGNING_IDENTITY" --timestamp "$dmg"
   verify_signature "$dmg"
-  node --input-type=module - "$dmg" "$DRIFT_APPLE_TEAM_ID" "$DRIFT_SIGNING_IDENTITY" > "$release_dir/release.json" <<'NODE'
+  node --input-type=module - "$dmg" "$DRIFT_APPLE_TEAM_ID" "$DRIFT_SIGNING_IDENTITY" "$source_commit" > "$release_dir/release.json" <<'NODE'
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-const [dmg, team, identity] = process.argv.slice(2);
-console.log(JSON.stringify({ file: path.basename(dmg), team, identity: identity.toUpperCase(), sha256: crypto.createHash('sha256').update(fs.readFileSync(dmg)).digest('hex') }, null, 2));
+const [dmg, team, identity, sourceCommit] = process.argv.slice(2);
+console.log(JSON.stringify({ file: path.basename(dmg), team, identity: identity.toUpperCase(), sourceCommit, sha256: crypto.createHash('sha256').update(fs.readFileSync(dmg)).digest('hex') }, null, 2));
 NODE
   /usr/bin/xcrun notarytool submit "$dmg" --keychain-profile "$DRIFT_NOTARY_PROFILE" --no-wait --output-format json > "$release_dir/submission.json"
 else
