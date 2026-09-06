@@ -36,9 +36,9 @@ The final crop is 1870 × 1474 at (40, 4) in the 1990 × 1502 zoomed frame.
 To replace the recording, update the video, poster, and video's intrinsic
 dimensions and aspect-ratio calculation in the page. The README links to this
 same MP4 and displays a 1200-pixel-wide, 15 fps GIF derived from it in
-`docs/assets/demo.gif` (global palette, Bayer dithering, optimized with
-Gifsicle). Keep the GIF in sync when changing the demo; its image URL includes a version query
-to avoid serving an older cached recording on GitHub.
+`docs/assets/desktop-demo.gif` (global palette, Bayer dithering, optimized with
+Gifsicle). Keep the GIF in sync when changing the demo. Use a new GIF
+filename when replacing it to avoid GitHub serving an older cached recording.
 The iPhone image is shared with the README; the font and its license are copied
 from the Mac app. `assets/chris.jpg` is the profile photo from
 [Chris's Substack profile](https://substack.com/@cb), stored locally so visitors
