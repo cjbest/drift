@@ -1,0 +1,14 @@
+#!/bin/bash
+set -euo pipefail
+repo_dir="$(cd "$(dirname "$0")/.." && pwd)"
+output_dir="$repo_dir/dist/site"
+rm -rf "$output_dir"
+mkdir -p "$output_dir/assets"
+cp "$repo_dir/docs/site/index.html" "$output_dir/index.html"
+cp "$repo_dir/docs/site/assets/desktop.png" "$output_dir/assets/desktop.png"
+cp "$repo_dir/docs/assets/iphone.png" "$output_dir/assets/iphone.png"
+cp "$repo_dir/drift-mac/public/fonts/Newsreader-Italic.ttf" "$output_dir/assets/Newsreader-Italic.ttf"
+cp "$repo_dir/drift-mac/public/fonts/OFL.txt" "$output_dir/assets/Newsreader-OFL.txt"
+cp "$repo_dir/drift-mac/src-tauri/icons/icon.png" "$output_dir/assets/favicon.png"
+touch "$output_dir/.nojekyll"
+echo "Built landing page: $output_dir"

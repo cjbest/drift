@@ -169,6 +169,9 @@ Only after the release asset exists and the downloaded copy works, add a
 and replace-app flow; no automatic updater is shipped yet. Do not promise
 automatic updates in the release copy.
 
+Enable the corresponding download on the [landing page](SITE.md) after the same
+verification, using the actual release asset URL and its system requirements.
+
 ## iPhone and iPad
 
 Use the normal **Drift** target and the same verified personal membership.
@@ -187,3 +190,4 @@ link, complete the beta review information, and submit the build for external
 testing. External testers need Apple's TestFlight app, not a developer account.
 Builds expire 90 days after upload. See [Apple's TestFlight guide](https://developer.apple.com/help/app-store-connect/test-a-beta-version/testflight-overview).
 Only add **Try on iPhone** to the README once its actual invitation link works.
+Enable the iPhone download on the [landing page](SITE.md) at the same time.
