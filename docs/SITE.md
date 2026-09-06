@@ -25,11 +25,13 @@ The workflow can also be run manually. See
 The Mac demo uses Chris's September 6, 2026, 12:43 PM recording, showing the
 whole window and desktop background during the opening drag. The video then
 smoothly zooms to 117% from 4.2 to 5.5 seconds, around the paste, and holds that
-framing for the remaining demo. The whole window stays visible.
+framing for the remaining demo. The whole window stays visible, with an even
+24-pixel wallpaper border after the zoom.
 `docs/site/assets/desktop-demo.mp4` preserves the 29-second performance at
-1990 × 1502, encoded as H.264 at 30 fps (CRF 20, slow preset, YUV 4:2:0,
+1870 × 1474, encoded as H.264 at 30 fps (CRF 20, slow preset, YUV 4:2:0,
 fast start), with audio and recording metadata removed. The centered zoom uses
 a cubic smoothstep and 2× intermediate scaling to keep movement smooth.
+The final crop is 1870 × 1474 at (40, 4) in the 1990 × 1502 zoomed frame.
 `desktop-demo.jpg` is the clean light-mode frame at 14.5 seconds from this cut.
 To replace the recording, update the video, poster, and video's intrinsic
 dimensions and aspect-ratio calculation in the page. The README's original
