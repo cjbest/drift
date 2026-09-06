@@ -291,7 +291,7 @@ mod tests {
         task.join().unwrap();
         assert_eq!(fs::read_dir(&notebook.root).unwrap().count(), 1);
         let welcome = notebook.root.join("Drift.md");
-        assert_eq!(fs::read_to_string(&welcome).unwrap(), "Drift\n\nStart writing. Your notes save automatically.\n\n⌘N — New note\n⌘P — Find a note\n⌘/ — All shortcuts\n");
+        assert_eq!(fs::read_to_string(&welcome).unwrap(), "Drift\n\nStart writing. Your notes save automatically.\n\n⌘ N — New note\n⌘ P — Find a note\n⌘ / — All shortcuts\n");
         assert_eq!(
             initial_note(&data, &notebook.root).unwrap().as_deref(),
             Some("Drift.md")

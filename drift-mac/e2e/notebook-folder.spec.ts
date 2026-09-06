@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { previewMocks } from "./preview-mocks";
 
-const welcome = "Drift\n\nStart writing. Your notes save automatically.\n\n⌘N — New note\n⌘P — Find a note\n⌘/ — All shortcuts\n";
+const welcome = "Drift\n\nStart writing. Your notes save automatically.\n\n⌘ N — New note\n⌘ P — Find a note\n⌘ / — All shortcuts\n";
 
 test("fresh onboarding presents before folder access and opens the intro ready for typing at its end", async ({ page }) => {
   await page.addInitScript(previewMocks({ "Drift.md": welcome }));

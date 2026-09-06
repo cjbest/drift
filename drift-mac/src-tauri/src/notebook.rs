@@ -54,7 +54,7 @@ pub struct NotebookInfo {
     pub initialize_notebook: bool,
 }
 
-const WELCOME: &str = "Drift\n\nStart writing. Your notes save automatically.\n\n⌘N — New note\n⌘P — Find a note\n⌘/ — All shortcuts\n";
+const WELCOME: &str = "Drift\n\nStart writing. Your notes save automatically.\n\n⌘ N — New note\n⌘ P — Find a note\n⌘ / — All shortcuts\n";
 
 fn err(e: impl std::fmt::Display) -> String {
     e.to_string()
