@@ -1,7 +1,7 @@
 # Landing page
 
 The public landing page is served by GitHub Pages at
-https://cjbest.github.io/drift/. Its source is `docs/site/index.html`.
+https://drift.christopher.best/. Its source is `docs/site/index.html`.
 It is a static page with no analytics, cookies, or external font requests.
 A small script controls the looping demo and respects reduced-motion settings.
 The iPhone section comes first on mobile; desktop shows both apps side by side.
@@ -21,6 +21,13 @@ assets in the ignored `dist/site` directory. It does not publish the rest of
 `main`. GitHub Pages must use **GitHub Actions** as its publishing source.
 The workflow can also be run manually. See
 [GitHub's Pages workflow guide](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
+
+The Pages custom domain is `drift.christopher.best`. In Name.com's DNS settings
+for `christopher.best`, the `drift` host must have a `CNAME` record pointing to
+`cjbest.github.io`. Configure the custom domain in the repository's Pages
+settings and enable **Enforce HTTPS** after GitHub provisions the certificate.
+This Actions-based deployment does not use a `CNAME` file. The original
+https://cjbest.github.io/drift/ address redirects to the custom domain.
 
 The Mac demo uses Chris's September 6, 2026, 12:43 PM recording, showing the
 whole window and desktop background during the opening drag. The video then

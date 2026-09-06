@@ -12,7 +12,7 @@ Connect field values, not a record of an uploaded or approved build.
 - Primary category: **Productivity**
 - Support URL: <https://github.com/cjbest/drift/blob/main/docs/SUPPORT.md>
 - Privacy policy URL: <https://github.com/cjbest/drift/blob/main/docs/PRIVACY.md>
-- Marketing URL: <https://cjbest.github.io/drift/>
+- Marketing URL: <https://drift.christopher.best/>
 - Keywords: `markdown,notes,notebook,writing,checklist,plain text,icloud`
 
 Confirm the review-contact details before submitting. Keep the app free for the initial TestFlight beta.
