@@ -62,3 +62,7 @@ After completing the checks in [RELEASING.md](RELEASING.md), replace the relevan
 the verified Mac DMG or iPhone TestFlight/App Store URL. Remove `disabled`,
 `type`, and `aria-describedby`, and update its availability text. For Mac, show
 the version, Apple silicon requirement, and minimum macOS version.
+
+Keep the filled button for the Mac in the desktop layout and for the iPhone in
+the mobile layout. The other download stays outlined even when both are live.
+An unavailable download stays outlined and disabled.
