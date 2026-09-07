@@ -20,7 +20,6 @@ const groups = [
       ["Select line", "⌘ L"],
       ["Toggle bullet list", "⇧ ⌘ 8"],
       ["Toggle checklist", "⇧ ⌘ L"],
-      ["Start a checklist", "[] Space"],
       ["Check / uncheck", "⌘ Return"],
       ["Indent / outdent", "Tab / ⇧ Tab"],
     ],

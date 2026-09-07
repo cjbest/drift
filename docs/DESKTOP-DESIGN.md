@@ -19,6 +19,10 @@ Keep the monospaced body, comfortable line height, centered wide-window page,
 hanging bullets and checklists, native editing keys, and space beyond the final
 line. A subdued title appears in the window bar after the heading scrolls out.
 Cmd+drag moves the window; Cmd+click follows links. Links must win over dragging.
+With no search query, quick-open follows when notes were last opened or edited,
+newest first. Its displayed dates use that same time, so opening an older note
+moves it up with a matching date. Search prioritizes exact titles, then partial
+titles, then body matches, with last-used dates ordering ties.
 The title receives a restrained Newsreader italic treatment; paper, ink, and
 selection use the warm sepia palette. Both light and dark appearances work.
 
@@ -192,10 +196,12 @@ The polish suite covers typing after an empty marker, converting in both
 directions, mixed selections, and toggling back to plain text.
 
 Cmd+Return applies to every checkbox on the selected lines. If any are unchecked,
-it checks them all; if all are checked, it unchecks them. Plain lines stay intact,
+it checks them all; if all are checked, it unchecks them. When no selected line
+has a checkbox, it creates unchecked checklist items, preserving indentation and
+cursor placement. Plain lines in a selection containing checkboxes stay intact,
 and a selection ending at the start of the next line excludes that line. The
 selection is retained and the batch is one undoable change. With only a cursor,
-the command still applies to the current line.
+the command applies to the current line.
 
 Typing `[]`, `-[]`, or `- []` followed by Space at the start of a line expands
 to `- [ ] `, preserving indentation and placing the cursor after the marker.

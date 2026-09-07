@@ -12,6 +12,7 @@ use std::{
 };
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{Emitter, Manager, State};
+use tauri_plugin_shell::ShellExt;
 struct LifecycleTiming {
     started: std::time::Instant,
     enabled: bool,
@@ -325,6 +326,7 @@ pub fn run() {
                 true,
                 &[
                     &PredefinedMenuItem::about(app, None, None)?,
+                    &item("check-for-updates", "Check for Updates…", None)?,
                     &PredefinedMenuItem::separator(app)?,
                     &PredefinedMenuItem::services(app, None)?,
                     &PredefinedMenuItem::separator(app)?,
@@ -427,6 +429,12 @@ pub fn run() {
         })
         .on_menu_event(|app, event| match event.id().as_ref() {
             "quit" => begin_quit(app),
+            #[allow(deprecated)] // Reuse the shell plugin that already opens note links.
+            "check-for-updates" => {
+                if let Err(error) = app.shell().open("https://drift.christopher.best/", None) {
+                    eprintln!("Could not open the Drift website: {error}");
+                }
+            }
             "choose-notebook" => choose_notebook(app, None),
             id if id.starts_with("recent-folder-") => {
                 let directory = app.state::<recent_folders::RecentFolders>().directory(id);

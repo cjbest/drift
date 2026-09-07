@@ -166,7 +166,7 @@ export function QuickOpen(props: Props) {
                     </span>
                   </div>
                   <span class="quick-open-date">
-                    {dateLabel(hit.note.modified)}
+                    {dateLabel(hit.lastUsed)}
                   </span>
                 </div>
               )}

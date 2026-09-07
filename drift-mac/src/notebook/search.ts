@@ -7,6 +7,7 @@ export interface Note {
 }
 export interface Hit {
   note: Note;
+  lastUsed: number;
   from: number;
   length: number;
   excerpt: string;
@@ -37,6 +38,7 @@ export function searchNotes(
     return [
       {
         note,
+        lastUsed: Math.max(note.modified, access[note.path] ?? 0),
         from,
         length: q.length,
         excerpt: clean(text.slice(start, end)),
@@ -65,8 +67,7 @@ export function searchNotes(
       if (delta) return delta;
     }
     return (
-      Math.max(b.note.modified, access[b.note.path] ?? 0) -
-        Math.max(a.note.modified, access[a.note.path] ?? 0) ||
+      b.lastUsed - a.lastUsed ||
       a.note.path.localeCompare(b.note.path)
     );
   });

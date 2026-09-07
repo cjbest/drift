@@ -144,6 +144,61 @@ async function selectList(page: import("@playwright/test").Page, body: string) {
 const savedList = (page: import("@playwright/test").Page) =>
   page.evaluate(() => (window as any).__mockFS.get("List conversion.md"));
 
+for (const indent of ["", "  "]) {
+  test(`Command Return starts an empty checklist ready for typing (${indent.length} spaces)`, async ({
+    page,
+  }) => {
+    await page.keyboard.insertText("List conversion\n\n" + indent);
+    await page.keyboard.press("Meta+Enter");
+    await page.keyboard.insertText("First task");
+    await expect
+      .poll(() => savedList(page))
+      .toBe("List conversion\n\n" + indent + "- [ ] First task");
+    await page.keyboard.press("Meta+Enter");
+    await expect
+      .poll(() => savedList(page))
+      .toBe("List conversion\n\n" + indent + "- [x] First task");
+    await page.keyboard.press("Meta+Enter");
+    await expect
+      .poll(() => savedList(page))
+      .toBe("List conversion\n\n" + indent + "- [ ] First task");
+  });
+}
+
+test("Command Return turns a plain line into a checklist and retains the cursor", async ({
+  page,
+}) => {
+  await page.keyboard.insertText("List conversion\n\nBuy milk");
+  for (let i = 0; i < 4; i++) await page.keyboard.press("ArrowLeft");
+  await page.keyboard.press("Meta+Enter");
+  await expect.poll(() => savedList(page)).toBe("List conversion\n\n- [ ] Buy milk");
+  await page.keyboard.insertText("more ");
+  await expect
+    .poll(() => savedList(page))
+    .toBe("List conversion\n\n- [ ] Buy more milk");
+});
+
+test("the check menu creates selected checklist items in one undoable change", async ({
+  page,
+}) => {
+  const original = "List conversion\n\nPlain\n  * Nested\n1. Numbered";
+  await selectList(page, "Plain\n  * Nested\n1. Numbered");
+  await page.evaluate(() => (window as any).__emit("menu-check"));
+  await expect
+    .poll(() => savedList(page))
+    .toBe("List conversion\n\n- [ ] Plain\n  - [ ] Nested\n- [ ] Numbered");
+  await page.keyboard.press("Meta+Enter");
+  await expect
+    .poll(() => savedList(page))
+    .toBe("List conversion\n\n- [x] Plain\n  - [x] Nested\n- [x] Numbered");
+  await page.keyboard.press("Meta+z");
+  await expect
+    .poll(() => savedList(page))
+    .toBe("List conversion\n\n- [ ] Plain\n  - [ ] Nested\n- [ ] Numbered");
+  await page.keyboard.press("Meta+z");
+  await expect.poll(() => savedList(page)).toBe(original);
+});
+
 test("selected bullets convert to checklists and back without stacking markers", async ({
   page,
 }) => {
@@ -201,6 +256,20 @@ test("Command Return checks the whole mixed selection and then unchecks it", asy
     .toBe(
       "List conversion\n\n- [x] First\n  * [x] Done\nPlain text\n+ [x] Last",
     );
+});
+
+test("Command Return preserves checklist prefixes with extra spacing or numbering", async ({
+  page,
+}) => {
+  await selectList(page, "-  [ ] Wide\n  *\t[X] Tab\n1. [ ] Numbered");
+  await page.keyboard.press("Meta+Enter");
+  await expect
+    .poll(() => savedList(page))
+    .toBe("List conversion\n\n-  [x] Wide\n  *\t[X] Tab\n1. [x] Numbered");
+  await page.keyboard.press("Meta+Enter");
+  await expect
+    .poll(() => savedList(page))
+    .toBe("List conversion\n\n-  [ ] Wide\n  *\t[ ] Tab\n1. [ ] Numbered");
 });
 
 test("checking a selection that ends at a line start leaves that next item alone", async ({
