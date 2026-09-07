@@ -39,11 +39,18 @@ framing for the remaining demo. The whole window stays visible, with an even
 fast start), with audio and recording metadata removed. The centered zoom uses
 a cubic smoothstep and 2× intermediate scaling to keep movement smooth.
 The final crop is 1870 × 1474 at (40, 4) in the 1990 × 1502 zoomed frame.
-`desktop-demo.jpg` is the clean light-mode frame at 14.5 seconds from this cut,
-shown when reduced motion is requested or autoplay is unavailable. Autoplay
-loads against a `#8ba099` background sampled from the opening wallpaper's sky,
-so the later poster frame does not flash before the video starts. The demo's
-1870:1474 aspect ratio is reserved before its media loads.
+`desktop-demo.jpg` is the first decoded frame of this cut, requested immediately
+and shown while the video loads, when reduced motion is requested, or when
+autoplay is unavailable. It stays beneath the video until a decoded frame is
+ready, then the video appears without a fade to avoid blending moving frames
+with the still. A versioned image URL refreshes the previously cached poster.
+The demo's
+1870:1474 aspect ratio is reserved before its media loads, with the video
+positioned inside it so intrinsic media sizing cannot move the page. Native
+controls are absent from the initial markup to prevent a Safari loading-overlay
+flash. Frame callbacks are backed by a loaded-frame check because some browsers
+skip compositor callbacks while a video is fully transparent. Without
+JavaScript, the still links directly to the demo.
 To replace the recording, update the video, poster, and video's intrinsic
 dimensions and aspect-ratio calculation in the page. The README links to this
 same MP4 and displays a 1200-pixel-wide, 15 fps GIF derived from it in
