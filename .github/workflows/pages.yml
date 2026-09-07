@@ -10,6 +10,7 @@ on:
       - drift-mac/public/fonts/**
       - drift-mac/src-tauri/icons/icon.png
       - scripts/build-site.sh
+      - scripts/site/build-page.mjs
       - .github/workflows/pages.yml
   workflow_dispatch:
 

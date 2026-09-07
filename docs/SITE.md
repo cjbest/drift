@@ -14,8 +14,9 @@ python3 -m http.server 4173 --bind 127.0.0.1 --directory dist/site
 ```
 
 Open http://127.0.0.1:4173/. The build assembles only the page and its selected
-assets in the ignored `dist/site` directory. It does not publish the rest of
-`docs` or require npm dependencies.
+assets in the ignored `dist/site` directory. It requires Node.js, using only
+its standard library; no npm dependencies are needed. It does not publish the
+rest of `docs`.
 
 `.github/workflows/pages.yml` deploys changes to the site and its inputs on
 `main`. GitHub Pages must use **GitHub Actions** as its publishing source.
@@ -70,10 +71,26 @@ same MP4 and displays a 1200-pixel-wide, 15 fps GIF derived from it in
 `docs/assets/desktop-demo.gif` (global palette, Bayer dithering, optimized with
 Gifsicle). Keep the GIF in sync when changing the demo. Use a new GIF
 filename when replacing it to avoid GitHub serving an older cached recording.
-The iPhone image is shared with the README; the font and its license are copied
-from the Mac app. `assets/chris.jpg` is the profile photo from
-[Chris's Substack profile](https://substack.com/@cb), stored locally so visitors
-do not contact Substack just to load the page.
+The iPhone source is shared with the README. The page preloads responsive 800-
+and 1200-pixel lossless WebP derivatives (106 and 172 KiB, versus the original
+1.7 MiB PNG). An explicit aspect ratio keeps their rounded raster dimensions
+from changing the layout. `assets/chris.jpg` is the original photo from
+[Chris's Substack profile](https://substack.com/@cb); the visible 56-pixel avatar
+uses a 168-pixel WebP derivative with the original color profile (7 KiB, versus
+812 KiB). All assets stay local to the site.
+
+`scripts/site/build-page.mjs` embeds that small avatar and `drift-title.woff2`
+directly in the built HTML, so neither waits for another network request.
+The title font contains only the glyphs needed for “Drift”, preserving the
+original Newsreader weight and optical-size axes. `font-display: block` avoids
+briefly showing a substitute font while the embedded bytes decode. The full
+font and OFL license are also copied from the Mac app. Keep the embedded font
+out of preload links: Safari rejects its data URL when preloaded with CORS.
+Regenerate the subset with FontTools and Brotli installed:
+
+```sh
+pyftsubset drift-mac/public/fonts/Newsreader-Italic.ttf --text=Drift --flavor=woff2 --output-file=docs/site/assets/drift-title.woff2 --no-recalc-timestamp
+```
 
 ## Search and sharing
 
