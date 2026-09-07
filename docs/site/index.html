@@ -84,6 +84,8 @@
     .avatar { flex: none; width: 56px; height: 56px; border-radius: 50%; object-fit: cover; }
     .intro { margin: 0; font-size: 19px; line-height: 1.5; text-wrap: pretty; }
     .intro span { display: block; }
+    .intro sup { font-size: .65em; line-height: 0; }
+    .intro sup a { text-decoration: none; }
     a { color: inherit; text-decoration-thickness: 1px; text-underline-offset: .2em; }
     a:hover { text-decoration-color: var(--muted); }
     a:focus-visible, button:focus-visible { outline: 2px solid #926b38; outline-offset: 5px; }
@@ -107,6 +109,9 @@
     .download svg { width: 16px; height: 16px; }
     .availability { margin: 8px 0 0; color: var(--muted); font-size: 14px; line-height: 20px; }
     footer { margin-top: 30px; text-align: center; color: var(--muted); font-size: 14px; line-height: 22px; }
+    .footnotes { width: fit-content; max-width: 100%; margin: 0 auto; padding-left: 1.4em; text-align: left; }
+    .footnotes li + li { margin-top: 4px; }
+    .footnotes li { scroll-margin-top: 24px; }
     .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
     @media (width > 700px) {
       .mac a.download { border-color: var(--ink); background: var(--ink); color: var(--paper); }
@@ -139,8 +144,8 @@
       <div class="intro-row">
         <img class="avatar" src="assets/chris.jpg" width="56" height="56" alt="Chris Best">
         <p class="intro">
-          <span>I’m <a href="https://substack.com/@cb">Chris</a>. I hate every note-taking app except this one, because I’m weird.</span>
-          <span>I use it every day. Maybe you’re weird in the same way.</span>
+          <span>Hi, I’m <a href="https://substack.com/@cb">Chris</a>. I take a lot of notes,<sup><a id="footnote-ref-1" href="#footnote-1" aria-label="Footnote 1">1</a></sup> so I want an app that feels exactly right.</span>
+          <span>I made Drift for me, but maybe it’s for you too.<sup><a id="footnote-ref-2" href="#footnote-2" aria-label="Footnote 2">2</a></sup></span>
         </p>
       </div>
     </header>
@@ -179,7 +184,12 @@
       </section>
     </div>
 
-    <footer>Source code <a href="https://github.com/cjbest/drift">here</a></footer>
+    <footer aria-label="Footnotes">
+      <ol class="footnotes">
+        <li id="footnote-1" tabindex="-1">Yes, even though AI note-taking apps exist.</li>
+        <li id="footnote-2" tabindex="-1">Source code is <a href="https://github.com/cjbest/drift">here</a> if you want to hack on it.</li>
+      </ol>
+    </footer>
   </main>
   <script>
     const video = document.querySelector('video');
