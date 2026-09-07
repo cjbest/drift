@@ -1,7 +1,7 @@
 {
   "name": "drift",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -12,7 +12,7 @@
     "test:ui": "playwright test --ui",
     "test:headed": "playwright test --headed",
     "build:desktop-preview": "../scripts/build-desktop.sh preview",
-    "test:desktop": "tsx --test tests/*.test.ts && playwright test e2e/desktop-rebuild.spec.ts e2e/desktop-polish.spec.ts e2e/lifecycle.spec.ts e2e/links.spec.ts e2e/checklist-shorthand.spec.ts",
+    "test:desktop": "tsx --test tests/*.test.ts && playwright test e2e/desktop-rebuild.spec.ts e2e/desktop-polish.spec.ts e2e/lifecycle.spec.ts e2e/links.spec.ts e2e/checklist-shorthand.spec.ts e2e/note-order.spec.ts",
     "build:desktop": "../scripts/build-desktop.sh main"
   },
   "dependencies": {

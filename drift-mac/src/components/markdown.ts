@@ -267,14 +267,16 @@ export const toggleCheckbox: Command = (view) => {
   const boxes: { from: number; checked: boolean }[] = [];
   for (let i = first; i <= last; i++) {
     const line = doc.line(i);
-    const match = line.text.match(/^([ \t]*[-*+] \[)([ xX])\]/);
+    const match = line.text.match(
+      /^([ \t]*(?:[-*+]|\d+[.)])[ \t]+\[)([ xX])\]/,
+    );
     if (match)
       boxes.push({
         from: line.from + match[1].length,
         checked: match[2] !== " ",
       });
   }
-  if (!boxes.length) return false;
+  if (!boxes.length) return toggleList("check")(view);
   const check = boxes.some((box) => !box.checked);
   view.dispatch({
     changes: boxes
