@@ -23,9 +23,9 @@ automatically. There is also an iPhone app.
 
 ## Try it!
 
-[Download Drift for Mac](https://github.com/cjbest/drift/releases/download/v0.2.0/Drift-0.2.0-macOS-AppleSilicon.dmg)
+[Download Drift for Mac](https://github.com/cjbest/drift/releases/download/v0.2.1/Drift-0.2.1-macOS-AppleSilicon.dmg)
 
-Version 0.2.0 · Apple silicon · macOS 14 or later.
+Version 0.2.1 · Apple silicon · macOS 14 or later.
 
 Open the download and drag Drift to Applications.
 
