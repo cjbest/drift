@@ -176,6 +176,10 @@ Only after the release asset exists and the downloaded copy works, add a
 and replace-app flow; no automatic updater is shipped yet. Do not promise
 automatic updates in the release copy.
 
+From 0.2.1, **Drift → Check for Updates…** opens the public website. It does
+not check version numbers, download an update, or restart the app. Keep the
+website's version and download link current when publishing a new release.
+
 Enable the corresponding download on the [landing page](SITE.md) after the same
 verification, using the actual release asset URL and its system requirements.
 
