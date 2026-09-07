@@ -43,18 +43,28 @@ matrix, limited range, and the sRGB transfer function. Leaving the transfer
 function unspecified made Safari brighten the video relative to the still
 poster. These tags were added without re-encoding or changing any frames.
 The final crop is 1870 × 1474 at (40, 4) in the 1990 × 1502 zoomed frame.
-`desktop-demo.jpg` is the first decoded frame of this cut, requested immediately
-and shown while the video loads, when reduced motion is requested, or when
-autoplay is unavailable. It stays beneath the video until a decoded frame is
-ready, then the video appears without a fade to avoid blending moving frames
-with the still. A versioned image URL refreshes the previously cached poster.
+`desktop-demo-first-frame.mp4` contains only the first frame, copied without
+re-encoding. This paused preview preloads immediately and uses the same native
+video renderer as the full demo. Safari otherwise samples a JPEG and video
+slightly differently, making the picture shift by a fraction of a pixel.
+The preview remains still while the demo loads, when reduced motion is
+requested, or when autoplay is unavailable. Once the full video's decoded frame
+is ready, the preview is hidden in the same update that reveals the video,
+without a fade. This also prevents doubled antialiasing at the rounded corners.
+`desktop-demo.jpg` is the first-frame fallback if the preview fails or JavaScript
+is disabled. Regenerate the paused preview when changing the demo:
+
+```sh
+ffmpeg -i docs/assets/demo.mp4 -map 0:v:0 -frames:v 1 -c:v copy -movflags +faststart docs/site/assets/desktop-demo-first-frame.mp4
+```
+
 The demo's 1870:1474 aspect ratio is reserved before its media loads, with the video
 positioned inside it so intrinsic media sizing cannot move the page. Native
 controls are absent from the initial markup to prevent a Safari loading-overlay
 flash. Frame callbacks are backed by a loaded-frame check because some browsers
 skip compositor callbacks while a video is fully transparent. Without
 JavaScript, the still links directly to the demo.
-To replace the recording, update the video, poster, and video's intrinsic
+To replace the recording, update the video, both previews, and video's intrinsic
 dimensions and aspect-ratio calculation in the page. The README links to this
 same MP4 and displays a 1200-pixel-wide, 15 fps GIF derived from it in
 `docs/assets/desktop-demo.gif` (global palette, Bayer dithering, optimized with
