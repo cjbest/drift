@@ -58,13 +58,18 @@ Open Graph and X link previews, and basic structured data identifying Drift
 and Chris. `robots.txt` allows crawling and points to the one-page sitemap.
 There are no invented ratings, app-store offers, or tracking integrations.
 
-The 1200 × 630 social preview uses the existing app screenshots and local font.
-Regenerate it after changing those assets (requires the Mac app's installed
-Playwright dependencies and Chromium):
+The 1200 × 630 social preview is a wide crop of the actual dark-mode desktop
+editor at 28.5 seconds in `docs/assets/demo.mp4`. It keeps the window controls,
+title, and completed checklist, with the mouse pointer below the crop. The
+generator crops 1560 × 819 pixels at (24, 24), then scales to the card size.
+Regenerate it after changing the demo (requires Node and FFmpeg on PATH):
 
 ```sh
 node scripts/site/render-social-preview.mjs
 ```
+
+`social-preview-desktop-dark.png` has a new URL for refreshed image caches.
+The earlier `social-preview.png` remains available for cached page metadata.
 
 The favicon is the Mac app's 512-pixel icon. The 180-pixel Apple touch icon is
 derived from the opaque iOS app icon. To refresh it on a Mac:
