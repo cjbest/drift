@@ -38,14 +38,17 @@ framing for the remaining demo. The whole window stays visible, with an even
 1870 × 1474, encoded as H.264 at 30 fps (CRF 20, slow preset, YUV 4:2:0,
 fast start), with audio and recording metadata removed. The centered zoom uses
 a cubic smoothstep and 2× intermediate scaling to keep movement smooth.
+The H.264 stream and MP4 container explicitly identify BT.709 primaries and
+matrix, limited range, and the sRGB transfer function. Leaving the transfer
+function unspecified made Safari brighten the video relative to the still
+poster. These tags were added without re-encoding or changing any frames.
 The final crop is 1870 × 1474 at (40, 4) in the 1990 × 1502 zoomed frame.
 `desktop-demo.jpg` is the first decoded frame of this cut, requested immediately
 and shown while the video loads, when reduced motion is requested, or when
 autoplay is unavailable. It stays beneath the video until a decoded frame is
 ready, then the video appears without a fade to avoid blending moving frames
 with the still. A versioned image URL refreshes the previously cached poster.
-The demo's
-1870:1474 aspect ratio is reserved before its media loads, with the video
+The demo's 1870:1474 aspect ratio is reserved before its media loads, with the video
 positioned inside it so intrinsic media sizing cannot move the page. Native
 controls are absent from the initial markup to prevent a Safari loading-overlay
 flash. Frame callbacks are backed by a loaded-frame check because some browsers
