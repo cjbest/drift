@@ -1,4 +1,5 @@
 import { RangeSetBuilder } from "@codemirror/state";
+import type { SelectionRange } from "@codemirror/state";
 import { syntaxTree } from "@codemirror/language";
 import { documentLinks, linkAttributes, compactLinkSource } from "./links";
 import type { NoteLink } from "./links";
@@ -78,9 +79,15 @@ const mark = (className: string, link?: NoteLink) =>
     attributes: link ? linkAttributes(link) : undefined,
   });
 
+const isEditingLink = (selection: SelectionRange, link: NoteLink) =>
+  selection.empty
+    ? selection.head >= link.from && selection.head <= link.to
+    : selection.from < link.to && selection.to > link.from;
+
 export const notebookMarkdown = ViewPlugin.fromClass(
   class {
     decorations: DecorationSet;
+    selectionLinks: NoteLink[] = [];
     constructor(view: EditorView) {
       this.decorations = this.build(view);
     }
@@ -88,14 +95,23 @@ export const notebookMarkdown = ViewPlugin.fromClass(
       if (
         u.docChanged ||
         u.viewportChanged ||
-        u.selectionSet ||
         u.geometryChanged ||
-        syntaxTree(u.startState) !== syntaxTree(u.state)
+        syntaxTree(u.startState) !== syntaxTree(u.state) ||
+        (u.selectionSet &&
+          this.selectionLinks.some(
+            (link) =>
+              isEditingLink(u.startState.selection.main, link) !==
+              isEditingLink(u.state.selection.main, link),
+          ))
       )
         this.decorations = this.build(u.view);
     }
     build(view: EditorView) {
       const decos: { from: number; to: number; value: Decoration }[] = [];
+      // Selection only changes Markdown rendering when a compact link opens or
+      // closes. Keep those boundaries so dragging through ordinary text leaves
+      // the visible decorations and parsed links intact.
+      const selectionLinks: NoteLink[] = [];
       const add = (from: number, to: number, value: Decoration) =>
         decos.push({ from, to, value });
       const doc = view.state.doc,
@@ -161,14 +177,13 @@ export const notebookMarkdown = ViewPlugin.fromClass(
               mark("italic-text"),
             );
           for (const link of documentLinks(view.state, line.from, line.to)) {
-            const editing = selection.empty
-              ? selection.head >= link.from && selection.head <= link.to
-              : selection.from < link.to && selection.to > link.from;
+            const editing = isEditingLink(selection, link);
             if (
               link.labelFrom !== undefined &&
               link.labelTo !== undefined &&
               link.tailFrom !== undefined
             ) {
+              selectionLinks.push(link);
               add(link.from, link.labelFrom, mark("md-marker"));
               add(link.labelFrom, link.labelTo, mark("note-link", link));
               if (!editing)
@@ -184,18 +199,21 @@ export const notebookMarkdown = ViewPlugin.fromClass(
                 );
               else
                 add(link.tailFrom, link.to, mark("md-marker note-link", link));
-            } else if (link.to - link.from > 60 && !editing) {
-              add(
-                link.from,
-                link.to,
-                Decoration.replace({
-                  widget: new LinkTail(
-                    link,
-                    doc.sliceString(link.editFrom, link.editTo),
-                  ),
-                }),
-              );
-            } else add(link.from, link.to, mark("note-link", link));
+            } else {
+              if (link.to - link.from > 60) selectionLinks.push(link);
+              if (link.to - link.from > 60 && !editing)
+                add(
+                  link.from,
+                  link.to,
+                  Decoration.replace({
+                    widget: new LinkTail(
+                      link,
+                      doc.sliceString(link.editFrom, link.editTo),
+                    ),
+                  }),
+                );
+              else add(link.from, link.to, mark("note-link", link));
+            }
           }
         }
       }
@@ -207,6 +225,7 @@ export const notebookMarkdown = ViewPlugin.fromClass(
       );
       const builder = new RangeSetBuilder<Decoration>();
       for (const d of decos) builder.add(d.from, d.to, d.value);
+      this.selectionLinks = selectionLinks;
       return builder.finish();
     }
   },

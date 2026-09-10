@@ -167,10 +167,25 @@ Help → Keyboard Shortcuts (Cmd+/) opens a temporary reference. Escape or the
 same shortcut returns to the existing editor selection. Handle this key before
 CodeMirror's default comment command so opening help never edits the document.
 
-Selection backgrounds are measured per visual row, using CodeMirror's
-bidi-aware rectangles and caret layer. A selected newline extends horizontally
+Selection backgrounds are measured per visual row, using native text-range
+rectangles and CodeMirror's caret layer. A selected newline extends horizontally
 without joining through the line spacing; body text, titles, and wrapped lists
 keep the same selection height as the range grows.
+
+Selection painting measures each rendered logical line once, then groups its
+text rectangles into visual rows. Avoid coordinate hit-testing for each selected
+row: the repeated wrapped-line searches made large selections lag as they grew.
+Native range rectangles preserve bidi gaps and inline font metrics; empty lines
+use the editor's caret metrics. Selection-only Markdown updates rebuild the
+decorations only when a compact link expands or contracts.
+
+`e2e/selection-performance.spec.ts` covers bounded hit-testing on a 100-paragraph
+note, exact drag/copy contents, blank lines, mixed-direction text, and highlight
+alignment after resizing, scrolling, editing, and link expansion. A local
+50-update benchmark at 600 × 900 measured the selection layer at 139 ms median
+before the change and at most 1 ms afterward in WebKit (September 10, 2026).
+These are synthetic browser painting measurements, not end-to-end native input
+latency.
 
 `e2e/desktop-polish.spec.ts` checks those selection transitions and the shortcut
 reference, including unchanged note text and focus restoration. Window placement
