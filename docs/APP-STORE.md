@@ -1,7 +1,9 @@
 # iPhone release copy
 
-Prepared for the first public TestFlight beta. The app record is registered;
-the copy below is not evidence of an uploaded or approved build.
+The first public TestFlight beta is live. Build **0.2 (6)** was verified as
+**Approved** in App Store Connect on September 16, 2026. The Public Beta
+group's invitation was enabled and verified the same day:
+<https://testflight.apple.com/join/YfEQ1TSH>.
 
 ## App information
 
