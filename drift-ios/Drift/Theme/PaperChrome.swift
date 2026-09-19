@@ -83,14 +83,21 @@ final class PaperEdgeFade: UIView {
 
 /// Keep UIKit's interactive transition while pages provide their own chrome.
 @MainActor
-final class PaperNavigationController: UINavigationController, UIGestureRecognizerDelegate {
+final class PaperNavigationController: UINavigationController, UIGestureRecognizerDelegate, UINavigationControllerDelegate {
+    var onDidShow: (() -> Void)?
+
     override func viewDidLoad() {
         super.viewDidLoad()
+        delegate = self
         view.backgroundColor = Theme.paperUIColor
         navigationBar.tintColor = Theme.accentUIColor
         setNavigationBarHidden(true, animated: false)
         interactivePopGestureRecognizer?.delegate = self
         interactivePopGestureRecognizer?.isEnabled = true
+    }
+
+    func navigationController(_ navigationController: UINavigationController, didShow viewController: UIViewController, animated: Bool) {
+        onDidShow?()
     }
 
     func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {

@@ -38,6 +38,9 @@ final class NotebookViewController: UIViewController, UITableViewDelegate, UITex
     private var hasLoaded = false
     private let launchPreferences = LaunchPreferences()
     private var launchPending = true
+    private var launchOverride: LaunchDestination?
+    private var launchSession = LaunchSessionPolicy.configured()
+    private var preparingLaunchTransition = false
     private var messageView: UIView?
     private var messageTask: Task<Void, Never>?
     private lazy var newNoteCommand = UIKeyCommand(title: "New Note", action: #selector(createNote), input: "n", modifierFlags: .command)
@@ -49,6 +52,10 @@ final class NotebookViewController: UIViewController, UITableViewDelegate, UITex
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        (navigationController as? PaperNavigationController)?.onDidShow = { [weak self] in
+            // UIKit finishes clearing the transition coordinator after didShow.
+            Task { @MainActor in self?.applyLaunchDestinationIfReady() }
+        }
         view.backgroundColor = Theme.paperUIColor
         view.tintColor = Theme.accentUIColor
         definesPresentationContext = true
@@ -58,7 +65,12 @@ final class NotebookViewController: UIViewController, UITableViewDelegate, UITex
         cancelButton.accessibilityIdentifier = "search-cancel"
         cancelButton.alpha = 0
         cancelButton.isHidden = true
-        folderButton.menu = folderMenu()
+        // Keep the presented menu (including its active submenu) intact while
+        // background catalogue updates render the list. Resolve current options
+        // synchronously each time it opens instead of replacing it on refresh.
+        folderButton.menu = UIMenu(children: [UIDeferredMenuElement.uncached { [weak self] completion in
+            completion(self?.folderMenu().children ?? [])
+        }])
         folderButton.showsMenuAsPrimaryAction = true
         search.delegate = self
         search.placeholder = "Search notes"
@@ -124,10 +136,27 @@ final class NotebookViewController: UIViewController, UITableViewDelegate, UITex
         observers.append(NotificationCenter.default.addObserver(forName: NoteStore.didChange, object: store, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.storeChanged() }
         })
-        observers.append(NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in
-                guard let self, self.navigationController?.topViewController === self else { return }
-                await self.refresh()
+        observers.append(NotificationCenter.default.addObserver(forName: UIScene.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] notification in
+            MainActor.assumeIsolated {
+                guard let self, let scene = notification.object as? UIScene,
+                      scene === self.notebookScene else { return }
+                self.launchSession.enteredBackground()
+            }
+        })
+        observers.append(NotificationCenter.default.addObserver(forName: UIScene.didActivateNotification, object: nil, queue: .main) { [weak self] notification in
+            MainActor.assumeIsolated {
+                guard let self, let scene = notification.object as? UIScene,
+                      scene === self.notebookScene else { return }
+                if self.launchSession.becameActive() { self.launchPending = true }
+                self.applyLaunchDestinationIfReady()
+                if self.navigationController?.topViewController === self {
+                    Task { await self.refresh() }
+                }
+            }
+        })
+        observers.append(NotificationCenter.default.addObserver(forName: QuickNoteAction.didRequestNewNote, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.applyLaunchDestinationIfReady()
             }
         })
         observers.append(NotificationCenter.default.addObserver(forName: UIContentSizeCategory.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
@@ -281,29 +310,93 @@ final class NotebookViewController: UIViewController, UITableViewDelegate, UITex
         applyLaunchDestinationIfReady()
     }
 
+    private var notebookScene: UIWindowScene? {
+        navigationController?.viewIfLoaded?.window?.windowScene
+    }
+
+    private func clearLaunchRequest() {
+        launchPending = false
+        launchOverride = nil
+    }
+
     private func applyLaunchDestinationIfReady() {
-        guard launchPending, isViewLoaded, view.window != nil,
-              navigationController?.topViewController === self, !opening, !switchingFolder else { return }
+        guard isViewLoaded, let navigationController, let scene = notebookScene,
+              scene.activationState == .foregroundActive else { return }
+        if QuickNoteAction.shared.consumePendingRequest(for: scene.session.persistentIdentifier) {
+            launchOverride = .newNote
+            launchPending = true
+        }
+        guard launchPending, !opening, !switchingFolder, !preparingLaunchTransition else { return }
+        // didShow retries after either a completed or cancelled transition.
+        guard navigationController.transitionCoordinator == nil else { return }
         guard let folder = store.folderURL else {
-            if hasLoaded { launchPending = false }
+            // An explicit New Note action survives first-use folder selection.
+            if hasLoaded, launchOverride == nil { clearLaunchRequest() }
             return
         }
-        switch launchPreferences.destination {
+        let destination = launchOverride ?? launchPreferences.destination
+        if let editor = navigationController.topViewController as? NoteEditorViewController {
+            if destination == .openLast {
+                clearLaunchRequest()
+                return
+            }
+            if destination == .newNote, editor.isEmptyComposer {
+                clearLaunchRequest()
+                editor.focusEmptyComposer()
+                return
+            }
+            preparingLaunchTransition = true
+            Task { [weak self] in
+                let preserved = await editor.prepareForLaunchTransition()
+                guard let self else { return }
+                self.preparingLaunchTransition = false
+                guard preserved else { self.clearLaunchRequest(); return }
+                guard self.launchPending, scene.activationState == .foregroundActive,
+                      navigationController.topViewController === editor else { return }
+                self.returnToNotebookForLaunch()
+            }
+            return
+        }
+        guard navigationController.topViewController === self else { return }
+        if navigationController.presentedViewController != nil {
+            navigationController.dismiss(animated: false) { [weak self] in
+                self?.applyLaunchDestinationIfReady()
+            }
+            return
+        }
+        switch destination {
         case .notesList:
-            launchPending = false
+            clearLaunchRequest()
+            search.text = ""
+            search.resignFirstResponder()
+            render()
         case .newNote:
-            launchPending = false
+            clearLaunchRequest()
             createNote()
         case .openLast:
-            guard let url = launchPreferences.lastNote(in: folder) else { launchPending = false; return }
+            guard let url = launchPreferences.lastNote(in: folder) else { clearLaunchRequest(); return }
             if let note = store.notes.first(where: { $0.url == url }) {
-                launchPending = false
+                clearLaunchRequest()
                 open(note, resuming: true)
             } else if hasLoaded && !store.isLoading {
                 // Deleted or unavailable notes leave the notebook usable.
-                launchPending = false
+                clearLaunchRequest()
             }
         }
+    }
+
+    private func returnToNotebookForLaunch() {
+        guard let navigationController else { return }
+        if navigationController.presentedViewController != nil {
+            navigationController.dismiss(animated: false) { [weak self] in
+                self?.returnToNotebookForLaunch()
+            }
+            return
+        }
+        preparingLaunchTransition = true
+        navigationController.popToRootViewController(animated: false)
+        preparingLaunchTransition = false
+        applyLaunchDestinationIfReady()
     }
 
     private func render() {
@@ -315,7 +408,6 @@ final class NotebookViewController: UIViewController, UITableViewDelegate, UITex
         composeButton.isEnabled = hasFolder && !opening && !switchingFolder
         cancelButton.isEnabled = !opening && !switchingFolder
         folderButton.isEnabled = !opening && !switchingFolder
-        folderButton.menu = folderMenu()
         updateSearchChrome()
         view.setNeedsLayout()
         let currentQuery = query
@@ -377,7 +469,7 @@ final class NotebookViewController: UIViewController, UITableViewDelegate, UITex
         }
     }
 
-    @objc private func searchChanged() { launchPending = false; render() }
+    @objc private func searchChanged() { clearLaunchRequest(); render() }
     func textFieldDidBeginEditing(_ textField: UITextField) { updateSearchChrome() }
     func textFieldDidEndEditing(_ textField: UITextField) { updateSearchChrome() }
     func textFieldShouldReturn(_ textField: UITextField) -> Bool { textField.resignFirstResponder(); return true }
@@ -419,7 +511,7 @@ final class NotebookViewController: UIViewController, UITableViewDelegate, UITex
 
     private func open(_ note: Note, resuming: Bool = false) {
         guard !opening, !switchingFolder else { return }
-        launchPending = false
+        clearLaunchRequest()
         opening = true
         composeButton.isEnabled = false
         cancelButton.isEnabled = false
@@ -435,7 +527,7 @@ final class NotebookViewController: UIViewController, UITableViewDelegate, UITex
 
     @objc private func createNote() {
         guard !opening, !switchingFolder, store.folderURL != nil else { return }
-        launchPending = false
+        clearLaunchRequest()
         opening = true
         composeButton.isEnabled = false
         cancelButton.isEnabled = false
@@ -486,6 +578,7 @@ final class NotebookViewController: UIViewController, UITableViewDelegate, UITex
            let selected = table.indexPathForSelectedRow {
             table.deselectRow(at: selected, animated: true)
         }
+        applyLaunchDestinationIfReady()
     }
 
     func tableView(_ tableView: UITableView, contextMenuConfigurationForRowAt indexPath: IndexPath, point: CGPoint) -> UIContextMenuConfiguration? {
@@ -554,7 +647,6 @@ final class NotebookViewController: UIViewController, UITableViewDelegate, UITex
             UIAction(title: destination.title, state: launchPreferences.destination == destination ? .on : .off) { [weak self] _ in
                 guard let self else { return }
                 self.launchPreferences.destination = destination
-                self.folderButton.menu = self.folderMenu()
             }
         }
         actions.append(UIMenu(title: "On Launch", image: UIImage(systemName: "arrow.up.forward.app"), children: destinations))
@@ -571,7 +663,7 @@ final class NotebookViewController: UIViewController, UITableViewDelegate, UITex
 
     private func chooseFolder() {
         guard !opening, !switchingFolder else { return }
-        launchPending = false
+        if launchOverride == nil { clearLaunchRequest() }
         // iPad exposes Locations directly in the picker's sidebar; the Browse
         // tab and its illustration are specific to the phone picker.
         if traitCollection.userInterfaceIdiom == .pad {
@@ -635,7 +727,6 @@ final class NotebookViewController: UIViewController, UITableViewDelegate, UITex
     }
 
     private func showUndo() {
-        folderButton.menu = folderMenu()
         showMessage("Note deleted", undo: true)
     }
 

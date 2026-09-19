@@ -23,6 +23,9 @@ above the list, and almost nothing but the text inside a note.
   Previews appear in place without changing row heights or scroll position.
 - The composer stays temporary until there is meaningful writing. Opening a
   blank page and going back creates no note or trash entry.
+- On Launch chooses Notes List, Open Last, or New Note, on a cold launch or after
+  five minutes in the background. Quicker returns keep your place. Long-press the
+  Home Screen icon for New Note at any time.
 - Native back navigation, selection, undo, dictation, and keyboard avoidance.
 - A readable editor with Dynamic Type, compact spacing, and a floating Back
   control that moves away as you scroll. Pull beyond the top of the page to

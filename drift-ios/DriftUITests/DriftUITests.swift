@@ -24,8 +24,9 @@ final class DriftUITests: XCTestCase {
         return url
     }
 
-    private func launchApp() -> XCUIApplication {
+    private func launchApp(arguments: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
+        app.launchArguments = arguments
         app.launchEnvironment["DRIFT_TEST_FOLDER"] = tempFolder.path
         XCUIDevice.shared.orientation = .portrait
         app.launch()
@@ -188,6 +189,92 @@ final class DriftUITests: XCTestCase {
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
         back(in: app)
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: tempFolder.path).filter { $0.hasSuffix(".md") }, ["A thought.md"])
+    }
+
+    func testNotebookOptionsStaysOpenWhenPreviewsArrive() throws {
+        try checkNotebookMenuDuringHydration(showLaunchChoices: false)
+    }
+
+    func testLaunchSubmenuStaysOpenWhenPreviewsArrive() throws {
+        try checkNotebookMenuDuringHydration(showLaunchChoices: true)
+    }
+
+    private func checkNotebookMenuDuringHydration(showLaunchChoices: Bool) throws {
+        let title = "A preview on its way"
+        let body = "This preview arrives while the notebook menu is open."
+        let url = try seed(title: title, body: body)
+        // Hold the actual provider read, without delaying metadata publication
+        // or adding a test-only timing hook to the app.
+        let barrier = MenuHydrationBarrier(url: url)
+        defer { barrier.release() }
+        try barrier.waitUntilHolding()
+        let app = launchApp(arguments: ["-drift.onLaunch", "notesList"])
+        defer { app.terminate() }
+        let row = noteRow(title, in: app)
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        XCTAssertFalse(row.label.contains(body), "The menu must open before its preview has arrived")
+        XCTAssertTrue(barrier.isHolding)
+        app.buttons["Notebook Options"].tap()
+        let onLaunch = app.collectionViews.buttons["On Launch"]
+        XCTAssertTrue(onLaunch.waitForExistence(timeout: 3))
+        if showLaunchChoices { onLaunch.tap() }
+        let visibleAction = app.collectionViews.buttons[showLaunchChoices ? "Notes List" : "Refresh Notes"]
+        XCTAssertTrue(visibleAction.waitForExistence(timeout: 3))
+        XCTAssertTrue(barrier.isHolding, "The read must remain blocked until the menu is visible")
+
+        barrier.release()
+        XCTAssertTrue(barrier.waitUntilFinished())
+        XCTAssertFalse(barrier.expired)
+        waitFor("The background preview should finish while the menu is open") {
+            row.label.contains(body)
+        }
+        XCTAssertTrue(visibleAction.exists, "A background notebook update must not dismiss the open menu")
+        XCTAssertTrue(visibleAction.isHittable)
+        // Let the final refresh publication and menu dismissal animation run,
+        // so observing the first preview update cannot produce a false pass.
+        let dismissed = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in !visibleAction.exists }, object: nil
+        )
+        dismissed.isInverted = true
+        XCTAssertEqual(XCTWaiter.wait(for: [dismissed], timeout: 1), .completed,
+                       "The menu must remain open after the background refresh finishes")
+        attachScreenshot(named: showLaunchChoices ? "launch-menu-after-hydration" : "notebook-menu-after-hydration")
+        visibleAction.tap()
+    }
+
+    func testNotebookMenuReopeningReflectsUndoAvailability() throws {
+        let title = "Restore from the menu"
+        let url = try seed(title: title, body: "This note can be deleted and restored.")
+        let app = launchApp(arguments: ["-drift.onLaunch", "notesList"])
+        defer { app.terminate() }
+        app.buttons["Notebook Options"].tap()
+        XCTAssertTrue(app.collectionViews.buttons["Refresh Notes"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.collectionViews.buttons["Undo Last Delete"].exists)
+        app.collectionViews.buttons["Refresh Notes"].tap()
+
+        let row = noteRow(title, in: app)
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        row.press(forDuration: 1)
+        app.buttons["Delete"].tap()
+        waitFor("Delete should move the note out of the notebook folder") {
+            !FileManager.default.fileExists(atPath: url.path)
+        }
+        // UIKit can retain the deleted context-menu preview in accessibility.
+        // Check the visible empty state and disk instead of the old row's AX existence.
+        XCTAssertTrue(app.staticTexts["No notes yet"].waitForExistence(timeout: 5))
+        attachScreenshot(named: "notebook-menu-after-delete")
+        app.buttons["Notebook Options"].tap()
+        let undo = app.collectionViews.buttons["Undo Last Delete"]
+        XCTAssertTrue(undo.waitForExistence(timeout: 3), "Reopening must build actions from current notebook state")
+        undo.tap()
+        let restoredRow = noteRow(title, in: app)
+        waitFor("Undo should restore a usable note row") { restoredRow.exists && restoredRow.isHittable }
+        waitForText(title + "\n\nThis note can be deleted and restored.", at: url)
+
+        app.buttons["Notebook Options"].tap()
+        XCTAssertTrue(app.collectionViews.buttons["Refresh Notes"].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.collectionViews.buttons["Undo Last Delete"].exists,
+                       "The completed undo must disappear the next time the menu opens")
     }
 
     func testLaunchChoicesRestoreLastAndCanStartNewWithoutLeavingBlankFiles() throws {
@@ -592,5 +679,74 @@ final class DriftUITests: XCTestCase {
         app.launch()
         XCTAssertTrue(app.buttons["new-note"].waitForExistence(timeout: 10))
         XCTAssertEqual(open("On the way home", in: app).value as? String, text)
+    }
+}
+
+/// A bounded file-provider barrier shared with the app through file coordination.
+/// UI automation can take longer than unit tests to launch and present a menu.
+private final class MenuHydrationBarrier: @unchecked Sendable {
+    private enum Failure: Error { case didNotStart, coordinationFailed }
+    private let entered = DispatchSemaphore(value: 0)
+    private let releaseSignal = DispatchSemaphore(value: 0)
+    private let finished = DispatchSemaphore(value: 0)
+    private let lock = NSLock()
+    private var holding = false
+    private var didExpire = false
+    private var failure: Error?
+
+    init(url: URL) {
+        DispatchQueue.global(qos: .userInitiated).async { [self] in
+            let coordinator = NSFileCoordinator()
+            var coordinationError: NSError?
+            var enteredAccessor = false
+            coordinator.coordinate(writingItemAt: url, options: .forReplacing, error: &coordinationError) { _ in
+                enteredAccessor = true
+                lock.lock()
+                holding = true
+                lock.unlock()
+                entered.signal()
+                let result = releaseSignal.wait(timeout: .now() + 60)
+                lock.lock()
+                holding = false
+                didExpire = result == .timedOut
+                lock.unlock()
+            }
+            if !enteredAccessor {
+                lock.lock()
+                if let coordinationError { failure = coordinationError }
+                else { failure = Failure.coordinationFailed }
+                lock.unlock()
+                entered.signal()
+            }
+            finished.signal()
+        }
+    }
+
+    var isHolding: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return holding
+    }
+
+    var expired: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return didExpire
+    }
+
+    func waitUntilHolding() throws {
+        guard entered.wait(timeout: .now() + 5) == .success else { throw Failure.didNotStart }
+        lock.lock()
+        let failure = self.failure
+        let holding = self.holding
+        lock.unlock()
+        if let failure { throw failure }
+        guard holding else { throw Failure.didNotStart }
+    }
+
+    func release() { releaseSignal.signal() }
+
+    func waitUntilFinished() -> Bool {
+        finished.wait(timeout: .now() + 5) == .success
     }
 }

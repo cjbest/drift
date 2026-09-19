@@ -271,8 +271,24 @@ Pinning retains the note's editing position and does not rewrite its contents.
 Double-tapping blank space below the unfiltered list opens an unsaved composer.
 Rows retain their immediate single-touch response. Notebook Options has an
 On Launch submenu: Notes List (default), Open Last, and New Note. The choice
-applies once per launch. Open Last restores cursor/scroll and reading/editing
-state; returning to the app while it remains running keeps the current page.
+applies on a cold launch and when returning after at least five minutes in the
+background. Shorter returns keep the current page, insertion point, and reading
+position. Inactive-only interruptions, such as Control Center, do not start the
+timer. This is a time-based session boundary: iOS does not distinguish an ordinary
+Home Screen icon tap from an app-switcher return. Open Last preserves an already
+open editor, or restores the remembered note from the list.
+
+Long-pressing the Home Screen icon offers New Note. Its explicit request takes
+priority over the launch preference, on both cold and warm launches, and is
+delivered only to the scene UIKit selected. Before leaving an editor, automatic
+navigation waits for its local recovery journal; it never waits for an iCloud
+write. A failed journal keeps the editor visible. An empty unsaved composer can
+be reused without creating a file.
+
+Notebook Options keeps its menu and active submenu in place while background
+catalogue updates arrive. Its actions resolve from current notebook state each
+time it opens, so launch checkmarks, folder access, and Undo stay current without
+replacing a menu the reader is using.
 
 The chooser remembers a selected folder. First-use copy asks the reader to
 choose the same iCloud Drive folder on iPhone and Mac, with that phrase in bold.
@@ -336,3 +352,15 @@ after the list appeared. The first notebook frame was recorded 130 ms after app
 initialization; this excludes OS launch time. The user confirmed that launch
 speed was much better. Only the timing/count/flag record was retrieved; no note
 content, filenames, or folder paths were collected for this check.
+
+## Session resume and Home Screen quick action (September 18, 2026)
+
+Build 10 passed all 87 unit/layout tests and nine distinct UI scenarios using
+synthetic notebooks. Coverage includes brief returns preserving the cursor and
+reading position, all three launch preferences after the background threshold,
+Control Center preserving the editor, and New Note from the Home Screen on both
+warm and cold launches. Draft contents survive automatic navigation, and repeated
+requests from an empty composer do not create blank files. The 1,000-note cached
+launch regression also passed. The signed normal Drift app was installed on the
+phone and its version verified without opening or inspecting the live notebook.
+Build 10 has not been uploaded to TestFlight; phone feedback is still pending.

@@ -26,6 +26,17 @@
     <false/>
     <key>LSSupportsOpeningDocumentsInPlace</key>
     <true/>
+    <key>UIApplicationShortcutItems</key>
+    <array>
+        <dict>
+            <key>UIApplicationShortcutItemType</key>
+            <string>best.christopher.drift.new-note</string>
+            <key>UIApplicationShortcutItemTitle</key>
+            <string>New Note</string>
+            <key>UIApplicationShortcutItemIconType</key>
+            <string>UIApplicationShortcutIconTypeCompose</string>
+        </dict>
+    </array>
     <key>UIApplicationSceneManifest</key>
     <dict>
         <key>UIApplicationSupportsMultipleScenes</key>

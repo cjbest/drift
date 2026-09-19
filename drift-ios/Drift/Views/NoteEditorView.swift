@@ -149,7 +149,7 @@ final class EditorDocumentSession {
         }
     }
 
-    private func journalLatest() async -> Bool {
+    func journalLatest() async -> Bool {
         while journalRevision != editRevision {
             startJournal()
             await journalTask?.value
@@ -180,6 +180,23 @@ final class EditorDocumentSession {
 final class NoteEditorViewController: UIViewController, UITextViewDelegate {
     var onNoteChange: (() -> Void)?
     var currentNote: Note { session.snapshot.note }
+
+    var isEmptyComposer: Bool {
+        session.snapshot.isUnsaved && session.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// Navigation waits only for local recovery, never a slow provider write.
+    /// If recovery cannot be saved, keep the current editor on screen.
+    func prepareForLaunchTransition() async -> Bool {
+        savePosition()
+        return await session.journalLatest()
+    }
+
+    func focusEmptyComposer() {
+        guard isEmptyComposer else { return }
+        if isReadMode { toggleReadMode() }
+        editor.becomeFirstResponder()
+    }
 
     private let store: NoteStore
     private let session: EditorDocumentSession
