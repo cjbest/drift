@@ -1,12 +1,13 @@
 # iPhone release copy
 
-Release copy for Drift 0.2 (8). The copy below is not evidence of an uploaded
-or approved build.
-
-The first public TestFlight beta is live. Build **0.2 (6)** was verified as
-**Approved** in App Store Connect on September 16, 2026. The Public Beta
-group's invitation was enabled and verified the same day:
+Build **0.2 (8)** is live in the **Public Beta** group. App Store Connect showed
+**Testing** on September 18, 2026 after submission, with automatic tester
+notification enabled. The existing public invitation remains active:
 <https://testflight.apple.com/join/YfEQ1TSH>.
+
+The matching Mac release is **0.2.2**. Build 7 was superseded before distribution
+to make folder selection appropriate for iPad; it was never added to a tester
+group. See [the release validation record](releases/2026-09-18-validation.md).
 
 ## App information
 
@@ -52,7 +53,8 @@ This build adds pins, opening preferences, and faster cached startup.
 - Double-tap the empty space below your notes to start a new one.
 - Returning launches show your locally cached list while the shared folder
   reconnects.
-- A visual guide helps you find Browse when choosing an iCloud Drive folder.
+- A visual guide helps you find Browse when choosing an iCloud Drive folder
+  on iPhone. On iPad, choose iCloud Drive directly in the picker sidebar.
 
 Try choosing the same disposable iCloud Drive folder on iPhone and Mac, then
 write, pin, rename, and reopen a test note on each. Try reopening the app with
