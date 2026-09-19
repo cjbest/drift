@@ -125,6 +125,10 @@ changes. Search engines and social crawlers need working HTTPS to fetch them.
 
 ## Enable downloads
 
+The iPhone button links to the public TestFlight beta at
+<https://testflight.apple.com/join/YfEQ1TSH>, enabled and verified on
+September 16, 2026. Keep this invitation current when managing beta access.
+
 Until the install links have been verified, each download is a disabled button
 with a visible “Coming soon” label. Do not send visitors to nonexistent release
 assets, the source repository, or a development-signed app under a download label.

@@ -29,6 +29,10 @@ Version 0.2.1 · Apple silicon · macOS 14 or later.
 
 Open the download and drag Drift to Applications.
 
+[Try on iPhone](https://testflight.apple.com/join/YfEQ1TSH)
+
+Public beta for iPhone and iPad through TestFlight. Requires iOS 17 or later.
+
 <details>
 <summary>Build from source</summary>
 
