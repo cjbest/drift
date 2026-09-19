@@ -1,8 +1,9 @@
 import Foundation
 import CryptoKit
 
-/// The UI owns this small in-memory model. All filesystem and provider operations are
-/// performed away from the main actor. Catalogue scans have their own worker so
+/// The UI owns this small in-memory model. Note-file and provider operations run
+/// away from the main actor; only the small local launch index loads synchronously.
+/// Catalogue scans have their own worker so
 /// an unrelated iCloud file cannot hold up opening or saving the selected note.
 @MainActor
 final class NoteStore {
@@ -12,6 +13,7 @@ final class NoteStore {
     private(set) var notes: [Note] = []
     private(set) var isLoading = false
     private(set) var hasLoadedCatalogue = false
+    private(set) var requiresFolderSelection = false
     var errorMessage: String?
     private(set) var canUndoTrash = false
 
@@ -21,6 +23,8 @@ final class NoteStore {
     private var bodies: [URL: String] = [:]
     private var revision = 0
     private var initialization: Task<Void, Never>?
+    private var catalogueRestoration: Task<Void, Never>?
+    private var folderIsReady = false
     private var refreshTask: Task<Void, Never>?
     private var refreshID: UUID?
     private var refreshingFolder: URL?
@@ -28,9 +32,9 @@ final class NoteStore {
     private var catalogueWriteTask: Task<Void, Never>?
     private var pendingCatalogue: (value: CachedCatalogue, sequence: UInt64)?
 
-    init(folderURL: URL? = nil) {
-        worker = FileWorker(drafts: drafts)
-        listingWorker = FileWorker(drafts: drafts)
+    init(folderURL: URL? = nil, defaults: UserDefaults = .standard) {
+        worker = FileWorker(drafts: drafts, defaults: defaults)
+        listingWorker = FileWorker(drafts: drafts, defaults: defaults)
         let environment = ProcessInfo.processInfo.environment
         let testPath = environment["DRIFT_TEST_FOLDER"]
         let explicitURL: URL?
@@ -43,20 +47,45 @@ final class NoteStore {
         } else {
             explicitURL = nil
         }
-        self.folderURL = explicitURL
         let resetTestFolder = folderURL == nil && testPath == "__APP_TEMP__"
             && environment["DRIFT_RESET_TEST_FOLDER"] == "1"
+        let cachedFolder = explicitURL ?? FolderBookmark.cachedFolder(in: defaults)
+        self.folderURL = cachedFolder
+        if let cachedFolder, !resetTestFolder {
+            if let index = CatalogueCache.loadIndex(folder: cachedFolder) {
+                notes = index.notes.sorted(by: Note.orderedForList)
+                canUndoTrash = index.canUndoTrash
+                hasLoadedCatalogue = true
+            }
+            catalogueRestoration = Task { [weak self] in
+                await self?.restoreCatalogue(folder: cachedFolder)
+                self?.changed()
+            }
+        }
         initialization = Task { [weak self, worker] in
             do {
+                // Restore local text and recovery before touching the provider.
+                // A cached note can open while bookmark resolution is pending.
+                await self?.catalogueRestoration?.value
                 let restored = try await worker.initialize(explicitURL: explicitURL,
                                                            prepareTestFolder: folderURL == nil && testPath != nil,
                                                            resetTestFolder: resetTestFolder)
                 guard let self else { return }
+                if restored != self.folderURL {
+                    self.notes = []
+                    self.bodies = [:]
+                    self.hasLoadedCatalogue = false
+                    self.canUndoTrash = false
+                }
                 self.folderURL = restored
-                if let restored { await self.restoreCatalogue(folder: restored) }
+                self.folderIsReady = restored != nil
+                if let restored, cachedFolder != restored {
+                    await self.restoreCatalogue(folder: restored)
+                }
                 self.changed()
             } catch {
-                self?.errorMessage = error.localizedDescription
+                self?.requiresFolderSelection = true
+                self?.errorMessage = StoreError.folderAccessRequired(self?.folderURL?.lastPathComponent).localizedDescription
                 self?.changed()
             }
         }
@@ -66,6 +95,8 @@ final class NoteStore {
         await initialized()
         do {
             let selected = try await worker.selectFolder(url)
+            folderIsReady = true
+            requiresFolderSelection = false
             revision += 1
             folderURL = selected
             notes = []
@@ -84,7 +115,7 @@ final class NoteStore {
 
     func refresh() async {
         await initialized()
-        guard let folderURL else { return }
+        guard folderIsReady, let folderURL else { return }
         // Appearance, activation, and pull-to-refresh can arrive together. Join
         // the scan already in progress instead of queuing another whole folder.
         if refreshingFolder == folderURL, let refreshTask {
@@ -119,7 +150,7 @@ final class NoteStore {
                 } catch {
                     guard refreshID == id, self.folderURL == folderURL else { return }
                     if scanRevision == revision {
-                        errorMessage = error.localizedDescription
+                        recordError(error)
                         break
                     }
                 }
@@ -146,7 +177,7 @@ final class NoteStore {
     /// check the provider after its opening animation. Local recovery still wins
     /// over the cache, and saves always compare the retained baseline with disk.
     func openForEditing(_ note: Note) async throws -> NoteSnapshot {
-        await initialized()
+        await catalogueRestoration?.value
         guard let text = bodies[note.url], let cachedNote = notes.first(where: { $0.url == note.url }) else {
             return try await open(note)
         }
@@ -167,7 +198,7 @@ final class NoteStore {
     }
 
     func open(_ note: Note) async throws -> NoteSnapshot {
-        await initialized()
+        try await requireFolderAccess()
         do {
             let snapshot = try await worker.open(note)
             apply(snapshot)
@@ -181,7 +212,7 @@ final class NoteStore {
     }
 
     func createNote() async throws -> NoteSnapshot {
-        await initialized()
+        try await requireFolderAccess()
         guard let folderURL else { throw StoreError.noFolder }
         do {
             let snapshot = try await worker.create(folder: folderURL)
@@ -198,7 +229,7 @@ final class NoteStore {
     /// A blank page is only an editing session. Its unique identity is used for
     /// local recovery; no file or catalogue row is created until meaningful text.
     func makeUnsavedNote() async throws -> NoteSnapshot {
-        await initialized()
+        if folderURL == nil { await initialized() }
         guard let folderURL else { throw StoreError.noFolder }
         let documentID = UUID()
         let identity = folderURL.appendingPathComponent(".drift-unsaved-\(documentID.uuidString).md")
@@ -208,7 +239,6 @@ final class NoteStore {
 
     /// Durably journals an edit in Application Support, without touching the shared file.
     func persistDraft(_ text: String, snapshot: NoteSnapshot) async throws {
-        await initialized()
         do {
             let sequence = drafts.reserveSequence()
             try await Task.detached(priority: .userInitiated) { [drafts] in
@@ -222,7 +252,6 @@ final class NoteStore {
 
     /// Clears a reverted edit without changing the document or its saved baseline.
     func discardDraft(snapshot: NoteSnapshot) async throws {
-        await initialized()
         do {
             let sequence = drafts.reserveSequence()
             try await Task.detached(priority: .userInitiated) { [drafts] in
@@ -235,8 +264,9 @@ final class NoteStore {
     }
 
     func save(_ text: String, snapshot: NoteSnapshot) async throws -> NoteSaveResult {
-        await initialized()
-        let alreadyMaterialized = snapshot.isUnsaved && drafts.materializedSnapshot(for: snapshot) != nil
+        let resolved = drafts.materializedSnapshot(for: snapshot)
+        let sourceURL = resolved?.note.url ?? snapshot.note.url
+        let alreadyMaterialized = snapshot.isUnsaved && resolved != nil
         if snapshot.isUnsaved, !alreadyMaterialized, text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             try await discardDraft(snapshot: snapshot)
             return NoteSaveResult(snapshot: NoteSnapshot(note: snapshot.note, text: text, baselineText: "",
@@ -246,10 +276,13 @@ final class NoteStore {
             try await Task.detached(priority: .userInitiated) { [drafts] in
                 try drafts.ensure(text, snapshot: snapshot)
             }.value
+            try await requireFolderAccess()
             let result = try await worker.save(text, snapshot: snapshot)
             if !result.preservedConflict {
-                notes.removeAll { $0.url == snapshot.note.url }
+                let savedSourceURL = result.sourceURL ?? sourceURL
+                notes.removeAll { $0.url == snapshot.note.url || $0.url == savedSourceURL }
                 bodies.removeValue(forKey: snapshot.note.url)
+                bodies.removeValue(forKey: savedSourceURL)
             }
             apply(result.snapshot)
             errorMessage = nil
@@ -264,8 +297,44 @@ final class NoteStore {
         }
     }
 
+    /// Pins are a filename property, so the provider syncs them with the note.
+    /// No body download or shared index is needed to change a saved note's pin.
+    @discardableResult
+    func setPinned(_ pinned: Bool, for note: Note) async throws -> Note {
+        try await requireFolderAccess()
+        do {
+            guard note.url.deletingLastPathComponent().standardizedFileURL == folderURL?.standardizedFileURL,
+                  notes.contains(where: { $0.url == note.url }) else { throw StoreError.changedNote }
+            var target = note
+            if note.isUnsaved {
+                let recovered = try await worker.open(note)
+                guard !recovered.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                    throw StoreError.changedNote
+                }
+                target = try await save(recovered.text, snapshot: recovered).snapshot.note
+            }
+            let updated = try await worker.setPinned(pinned, for: target)
+            guard target.url.deletingLastPathComponent().standardizedFileURL == folderURL?.standardizedFileURL else {
+                return updated
+            }
+            revision += 1
+            let body = bodies.removeValue(forKey: target.url)
+            notes.removeAll { $0.url == note.url || $0.url == target.url }
+            notes.append(updated)
+            notes.sort(by: Note.orderedForList)
+            if let body { bodies[updated.url] = body }
+            errorMessage = nil
+            changed()
+            await flushCatalogueCache()
+            return updated
+        } catch {
+            report(error)
+            throw error
+        }
+    }
+
     func trash(_ note: Note) async throws {
-        await initialized()
+        try await requireFolderAccess()
         do {
             var target = note
             if note.isUnsaved {
@@ -304,7 +373,7 @@ final class NoteStore {
     }
 
     func undoTrash() async throws {
-        await initialized()
+        try await requireFolderAccess()
         guard let folderURL else { throw StoreError.noFolder }
         do {
             try await worker.undoTrash(folder: folderURL)
@@ -322,7 +391,7 @@ final class NoteStore {
         let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return notes.map { NoteSearchHit(note: $0, snippet: nil) } }
         let options: String.CompareOptions = [.caseInsensitive, .diacriticInsensitive]
-        return notes.compactMap { note in
+        return notes.sorted(by: Note.orderedByRecency).compactMap { note in
             let body = bodies[note.url] ?? note.preview
             let match = body.range(of: query, options: options)
             guard note.title.range(of: query, options: options) != nil || match != nil else { return nil }
@@ -340,6 +409,14 @@ final class NoteStore {
         initialization = nil
     }
 
+    private func requireFolderAccess() async throws {
+        await initialized()
+        guard folderIsReady else {
+            throw folderURL == nil && !requiresFolderSelection
+                ? StoreError.noFolder : StoreError.folderAccessRequired(folderURL?.lastPathComponent)
+        }
+    }
+
     private func restoreCatalogue(folder: URL) async {
         let cached = await CatalogueCache.shared.load(folder: folder)
         let pending = (try? await Task.detached(priority: .userInitiated) { [drafts] in
@@ -353,8 +430,14 @@ final class NoteStore {
             hasLoadedCatalogue = true
         }
         var known = Set(notes.map(\.url))
-        for draft in pending where !(draft.isUnsaved == true && draft.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            && known.insert(draft.sourceURL).inserted {
+        for draft in pending where !(draft.isUnsaved == true && draft.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) {
+            guard known.insert(draft.sourceURL).inserted else {
+                // The launch index can survive a purged body cache. Retain a
+                // saved baseline so openForEditing can recover this journal
+                // locally even when the folder bookmark no longer resolves.
+                if bodies[draft.sourceURL] == nil { bodies[draft.sourceURL] = draft.baseline }
+                continue
+            }
             let derived = Note.derive(from: draft.text)
             notes.append(Note(url: draft.sourceURL, modified: draft.savedAt, title: derived.title,
                               preview: derived.preview, isUnsaved: draft.isUnsaved == true))
@@ -375,6 +458,7 @@ final class NoteStore {
         bodies = listing.bodies
         canUndoTrash = listing.canUndoTrash
         errorMessage = listing.warning
+        requiresFolderSelection = false
         hasLoadedCatalogue = true
         changed()
     }
@@ -413,19 +497,75 @@ final class NoteStore {
     }
 
     private static func sortNotes(_ lhs: Note, _ rhs: Note) -> Bool {
-        lhs.modified == rhs.modified
-            ? lhs.url.lastPathComponent.localizedStandardCompare(rhs.url.lastPathComponent) == .orderedAscending
-            : lhs.modified > rhs.modified
+        Note.orderedForList(lhs, rhs)
     }
 
     private func report(_ error: Error) {
-        errorMessage = error.localizedDescription
+        recordError(error)
         changed()
+    }
+
+    private func recordError(_ error: Error) {
+        if FolderBookmark.isPermissionError(error) {
+            requiresFolderSelection = true
+            errorMessage = StoreError.folderAccessRequired(folderURL?.lastPathComponent).localizedDescription
+        } else {
+            errorMessage = error.localizedDescription
+        }
     }
 
     private func changed() {
         queueCataloguePersistence()
         NotificationCenter.default.post(name: Self.didChange, object: self)
+    }
+}
+
+/// A remembered path is only a cache lookup key, never an access grant. Pair it
+/// with the exact bookmark so a replaced/stale preference cannot show another
+/// notebook's cached rows before bookmark resolution finishes.
+enum FolderBookmark {
+    static let key = "drift.folderBookmark"
+    private static let cacheIdentityKey = "drift.folderCacheIdentity"
+
+    private struct CacheIdentity: Codable {
+        let folder: URL
+        let bookmarkDigest: String
+    }
+
+    static func cachedFolder(in defaults: UserDefaults) -> URL? {
+        guard let bookmark = defaults.data(forKey: key),
+              let data = defaults.data(forKey: cacheIdentityKey),
+              let identity = try? JSONDecoder().decode(CacheIdentity.self, from: data),
+              identity.folder.isFileURL,
+              identity.bookmarkDigest == digest(bookmark) else { return nil }
+        return identity.folder.standardizedFileURL
+    }
+
+    static func save(_ bookmark: Data, folder: URL, in defaults: UserDefaults) {
+        defaults.set(bookmark, forKey: key)
+        saveCacheIdentity(bookmark, folder: folder, in: defaults)
+    }
+
+    static func saveCacheIdentity(_ bookmark: Data, folder: URL, in defaults: UserDefaults) {
+        let identity = CacheIdentity(folder: folder.standardizedFileURL, bookmarkDigest: digest(bookmark))
+        if let data = try? JSONEncoder().encode(identity) { defaults.set(data, forKey: cacheIdentityKey) }
+    }
+
+    static func isPermissionError(_ error: Error) -> Bool {
+        var current = error as NSError
+        // File providers frequently wrap the actual sandbox/permission failure.
+        for _ in 0..<8 {
+            if current.domain == NSCocoaErrorDomain,
+               [NSFileReadNoPermissionError, NSFileWriteNoPermissionError].contains(current.code) { return true }
+            if current.domain == NSPOSIXErrorDomain, [Int(EACCES), Int(EPERM)].contains(current.code) { return true }
+            guard let underlying = current.userInfo[NSUnderlyingErrorKey] as? NSError else { return false }
+            current = underlying
+        }
+        return false
+    }
+
+    private static func digest(_ data: Data) -> String {
+        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 }
 
@@ -436,6 +576,8 @@ private enum StoreError: LocalizedError {
     case unavailable(String)
     case nothingToUndo
     case coordinationFailed
+    case folderAccessRequired(String?)
+    case changedNote
 
     var errorDescription: String? {
         switch self {
@@ -445,6 +587,10 @@ private enum StoreError: LocalizedError {
         case .unavailable(let name): return "“\(name)” is downloading from iCloud. Try opening it again shortly."
         case .nothingToUndo: return "There are no recently deleted notes to restore."
         case .coordinationFailed: return "The file provider did not allow access. Please try again."
+        case .folderAccessRequired(let name):
+            let folder = name.map { "“\($0)”" } ?? "your notes folder"
+            return "Choose \(folder) again to restore access. In Files, browse to iCloud Drive and select the folder used on your Mac. If access is disabled, allow Drift in Settings → Privacy & Security → Files and Folders. Your notes and local recovery drafts have not been removed."
+        case .changedNote: return "That note has moved or is no longer available. Refresh your notes and try again."
         }
     }
 }
@@ -460,7 +606,7 @@ private struct FolderListing: Sendable {
 /// bookmark access and mutations; a separate instance handles catalogue scans.
 /// Compare-and-write never suspends, so conflict checks and saves remain atomic.
 private actor FileWorker {
-    private let bookmarkKey = "drift.folderBookmark"
+    private let defaults: UserDefaults
     private let fm = FileManager.default
     private let coordinator = NSFileCoordinator()
     private var scopedURL: URL?
@@ -473,7 +619,10 @@ private actor FileWorker {
     }
     private var cache: [URL: CachedRead] = [:]
 
-    init(drafts: DraftJournal) { self.drafts = drafts }
+    init(drafts: DraftJournal, defaults: UserDefaults) {
+        self.drafts = drafts
+        self.defaults = defaults
+    }
 
     private struct TrashRecord: Codable {
         let originalName: String
@@ -489,7 +638,7 @@ private actor FileWorker {
             if prepareTestFolder { try fm.createDirectory(at: explicitURL, withIntermediateDirectories: true) }
             return explicitURL
         }
-        guard let bookmark = UserDefaults.standard.data(forKey: bookmarkKey) else { return nil }
+        guard let bookmark = defaults.data(forKey: FolderBookmark.key) else { return nil }
         var stale = false
         let url = try URL(resolvingBookmarkData: bookmark, options: [], relativeTo: nil, bookmarkDataIsStale: &stale)
         if url.startAccessingSecurityScopedResource() { scopedURL = url }
@@ -498,8 +647,10 @@ private actor FileWorker {
         // access and reports any actual provider error.
         // A stale bookmark may still resolve and grant access. Renewal is
         // housekeeping; a provider refusing it must not hide the notebook.
-        if stale, let renewed = try? url.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil) {
-            UserDefaults.standard.set(renewed, forKey: bookmarkKey)
+        if stale, let renewed = try? url.bookmarkData(options: [.minimalBookmark], includingResourceValuesForKeys: nil, relativeTo: nil) {
+            FolderBookmark.save(renewed, folder: url, in: defaults)
+        } else {
+            FolderBookmark.saveCacheIdentity(bookmark, folder: url, in: defaults)
         }
         return url.standardizedFileURL
     }
@@ -508,8 +659,8 @@ private actor FileWorker {
         let hasScope = url.startAccessingSecurityScopedResource()
         do {
             try validateFolder(url)
-            let bookmark = try url.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil)
-            UserDefaults.standard.set(bookmark, forKey: bookmarkKey)
+            let bookmark = try url.bookmarkData(options: [.minimalBookmark], includingResourceValuesForKeys: nil, relativeTo: nil)
+            FolderBookmark.save(bookmark, folder: url, in: defaults)
             scopedURL?.stopAccessingSecurityScopedResource()
             scopedURL = hasScope ? url : nil
             return url.standardizedFileURL
@@ -576,11 +727,7 @@ private actor FileWorker {
             bodies[draft.sourceURL] = draft.text
         }
         func listing(canUndo: Bool) -> FolderListing {
-            let sorted = notes.values.sorted {
-                $0.modified == $1.modified
-                    ? $0.url.lastPathComponent.localizedStandardCompare($1.url.lastPathComponent) == .orderedAscending
-                    : $0.modified > $1.modified
-            }
+            let sorted = notes.values.sorted(by: Note.orderedForList)
             return FolderListing(notes: sorted, bodies: bodies, canUndoTrash: canUndo,
                                  warning: unreadable > 0 ? "\(unreadable) note\(unreadable == 1 ? "" : "s") could not be read. Pull to refresh to try again." : nil)
         }
@@ -589,6 +736,7 @@ private actor FileWorker {
         // Enrich the most recent, visible notes first. Slow individual bodies
         // can no longer hold the initial rows hostage.
         entries.sort {
+            if Note.isPinned($0.url) != Note.isPinned($1.url) { return Note.isPinned($0.url) }
             let lhsDate = notes[$0.url]?.modified ?? .distantPast
             let rhsDate = notes[$1.url]?.modified ?? .distantPast
             return lhsDate == rhsDate
@@ -668,15 +816,26 @@ private actor FileWorker {
     }
 
     func save(_ text: String, snapshot submitted: NoteSnapshot) throws -> NoteSaveResult {
-        // A first save may already have materialized this session while another
-        // caller waited. Follow its alias instead of creating a second file.
-        let baseline = submitted.isUnsaved ? (drafts.materializedSnapshot(for: submitted) ?? submitted) : submitted
+        // A first save or pin rename may already have moved this session while
+        // another caller waited. Follow its alias instead of creating a second file.
+        let resolved = drafts.materializedSnapshot(for: submitted)
+        let baseline: NoteSnapshot
+        if submitted.isUnsaved {
+            baseline = resolved ?? submitted
+        } else if let resolved, resolved.note.url != submitted.note.url {
+            // A rename changes location, never the text this caller last saw.
+            // Retain that baseline so a delayed save cannot overwrite newer writing.
+            baseline = NoteSnapshot(note: resolved.note, text: submitted.text, baselineText: submitted.baselineText,
+                                    recoveredDraft: submitted.recoveredDraft, documentID: submitted.documentID)
+        } else {
+            baseline = submitted
+        }
         if baseline.isUnsaved {
             let created = try createFile(text: text, base: Note.derive(from: text).title,
                                          folder: baseline.note.url.deletingLastPathComponent(),
                                          documentID: baseline.documentID)
             try? drafts.completeSave(from: baseline, snapshot: created)
-            return NoteSaveResult(snapshot: created, preservedConflict: false)
+            return NoteSaveResult(snapshot: created, preservedConflict: false, sourceURL: baseline.note.url)
         }
         // The main model journals before enqueuing provider work. Do not replace
         // it here: a newer edit may have reached the journal while this save waited.
@@ -700,13 +859,15 @@ private actor FileWorker {
             // Leave the external version untouched. Coordinate the new file itself,
             // because a directory coordination alone does not protect its children.
             let stamp = Date.now.formatted(.iso8601.year().month().day().dateSeparator(.dash))
-            let recovered = try createFile(text: text, base: "\(derived.title) (Recovered \(stamp))", folder: folder, documentID: baseline.documentID)
-            result = NoteSaveResult(snapshot: recovered, preservedConflict: true)
+            let recovered = try createFile(text: text, base: "\(derived.title) (Recovered \(stamp))", folder: folder,
+                                           pinned: baseline.note.isPinned, documentID: baseline.documentID)
+            result = NoteSaveResult(snapshot: recovered, preservedConflict: true, sourceURL: sourceURL)
         } else {
             var destination = sourceURL
             // Compare titles, not filenames: a collision suffix stays stable on body edits.
             if derived.title != Note.derive(from: baseline.baselineText).title {
-                let target = uniqueURL(base: derived.title, folder: folder, excluding: sourceURL)
+                let target = uniqueURL(base: derived.title, folder: folder, pinned: baseline.note.isPinned,
+                                       excluding: sourceURL)
                 if target != sourceURL {
                     do {
                         destination = try coordinatedMove(from: sourceURL, to: target, expectedText: text)
@@ -716,7 +877,8 @@ private actor FileWorker {
                     }
                 }
             }
-            result = NoteSaveResult(snapshot: snapshot(url: destination, text: text, documentID: baseline.documentID), preservedConflict: false)
+            result = NoteSaveResult(snapshot: snapshot(url: destination, text: text, documentID: baseline.documentID),
+                                    preservedConflict: false, sourceURL: sourceURL)
         }
         // A newer edit can be journaled while a file provider is saving this one.
         // Rebase it onto the just-saved version and carry it across any rename.
@@ -724,6 +886,34 @@ private actor FileWorker {
         cache.removeValue(forKey: sourceURL)
         cache.removeValue(forKey: result.snapshot.note.url)
         return result
+    }
+
+    func setPinned(_ pinned: Bool, for note: Note) throws -> Note {
+        let source = note.url
+        if note.isPinned == pinned {
+            // An old menu action must not resurrect a deleted catalogue row.
+            try coordinatedRead(source, options: [.withoutChanges, .immediatelyAvailableMetadataOnly]) {
+                guard try $0.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true else {
+                    throw StoreError.changedNote
+                }
+            }
+            return note
+        }
+        for _ in 0..<10 {
+            let target = uniqueURL(base: Note.filenameTitle(source), folder: source.deletingLastPathComponent(),
+                                   pinned: pinned, excluding: source)
+            do {
+                let destination = try coordinatedMove(from: source, to: target, relocateDrafts: true)
+                cache.removeValue(forKey: source)
+                cache.removeValue(forKey: destination)
+                return Note(url: destination, modified: note.modified, title: note.title, preview: note.preview)
+            } catch let error as NSError where error.domain == NSCocoaErrorDomain && error.code == NSFileWriteFileExistsError {
+                continue
+            } catch where isMissing(error) {
+                throw StoreError.changedNote
+            }
+        }
+        throw StoreError.coordinationFailed
     }
 
     func trash(_ note: Note) throws {
@@ -750,7 +940,8 @@ private actor FileWorker {
     func undoTrash(folder: URL) throws {
         guard let entry = try trashRecords(in: folder).first else { throw StoreError.nothingToUndo }
         let originalURL = folder.appendingPathComponent(entry.record.originalName)
-        let targetURL = uniqueURL(base: originalURL.deletingPathExtension().lastPathComponent, folder: folder)
+        let targetURL = uniqueURL(base: Note.filenameTitle(originalURL), folder: folder,
+                                  pinned: Note.isPinned(originalURL))
         // Relocate recovery first. If journaling fails, the file and Undo record
         // remain together in trash; if moving the file then fails, the draft is
         // already discoverable at its visible destination.
@@ -759,11 +950,12 @@ private actor FileWorker {
         try? fm.removeItem(at: entry.metadataURL)
     }
 
-    private func createFile(text: String, base: String, folder: URL, documentID: UUID = UUID()) throws -> NoteSnapshot {
+    private func createFile(text: String, base: String, folder: URL, pinned: Bool = false,
+                            documentID: UUID = UUID()) throws -> NoteSnapshot {
         // Another device may claim the chosen filename between listing and coordination.
         // An exclusive create protects it; retry the next available name in that case.
         for _ in 0..<10 {
-            let url = uniqueURL(base: base, folder: folder)
+            let url = uniqueURL(base: base, folder: folder, pinned: pinned)
             do {
                 return try coordinatedWrite(url) { coordinated in
                     try Data(text.utf8).write(to: coordinated, options: [.withoutOverwriting])
@@ -776,7 +968,8 @@ private actor FileWorker {
         throw StoreError.coordinationFailed
     }
 
-    private func coordinatedMove(from source: URL, to destination: URL, expectedText: String? = nil) throws -> URL {
+    private func coordinatedMove(from source: URL, to destination: URL, expectedText: String? = nil,
+                                  relocateDrafts: Bool = false) throws -> URL {
         var coordinationError: NSError?
         var result: Result<URL, Error>?
         coordinator.coordinate(writingItemAt: source, options: .forMoving,
@@ -784,8 +977,27 @@ private actor FileWorker {
             result = Result {
                 // A device may edit between the content save and its optional title rename.
                 if let expectedText, try readUTF8(from) != expectedText { return source }
-                coordinator.item(at: from, willMoveTo: to)
-                try fm.moveItem(at: from, to: to)
+                var movedDraftIDs: Set<UUID> = []
+                if relocateDrafts {
+                    guard try from.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true else {
+                        throw StoreError.changedNote
+                    }
+                    guard !fm.fileExists(atPath: to.path) else {
+                        throw CocoaError(.fileWriteFileExists)
+                    }
+                    // Never move a file away from a recovery journal we could not relocate.
+                    movedDraftIDs = Set(try drafts.readAll(for: source).map(\.documentID))
+                }
+                do {
+                    if relocateDrafts { try drafts.move(from: source, to: destination) }
+                    coordinator.item(at: from, willMoveTo: to)
+                    try fm.moveItem(at: from, to: to)
+                } catch {
+                    if relocateDrafts {
+                        try? drafts.move(from: destination, to: source, documentIDs: movedDraftIDs)
+                    }
+                    throw error
+                }
                 coordinator.item(at: from, didMoveTo: to)
                 return destination
             }
@@ -796,7 +1008,9 @@ private actor FileWorker {
     }
 
     private func validateFolder(_ url: URL) throws {
-        try coordinatedRead(url) { coordinated in
+        // Selection only needs to validate the directory. A normal coordinated
+        // read can wait for every child to download before the notebook opens.
+        try coordinatedRead(url, options: [.withoutChanges, .immediatelyAvailableMetadataOnly]) { coordinated in
             let values = try coordinated.resourceValues(forKeys: [.isDirectoryKey])
             guard values.isDirectory == true else { throw StoreError.invalidFolder }
             _ = try fm.contentsOfDirectory(at: coordinated, includingPropertiesForKeys: nil)
@@ -830,17 +1044,19 @@ private actor FileWorker {
 
     private func fallbackNote(_ url: URL, modified: Date?) -> Note {
         Note(url: url, modified: modified ?? .distantPast,
-             title: url.deletingPathExtension().lastPathComponent, preview: "")
+             title: Note.filenameTitle(url), preview: "")
     }
 
-    private func uniqueURL(base: String, folder: URL, excluding: URL? = nil) -> URL {
+    private func uniqueURL(base: String, folder: URL, pinned: Bool = false, excluding: URL? = nil) -> URL {
         // A leading dot would hide an otherwise ordinary note from both apps.
         let visibleBase = base.hasPrefix(".") ? String(base.drop(while: { $0 == "." })) : base
         let safeBase = visibleBase.isEmpty ? Note.untitled : visibleBase
+        let reservedEnding = !pinned && safeBase.lowercased().hasSuffix(".pinned")
         var index = 1
         while true {
-            let name = index == 1 ? safeBase : "\(safeBase) \(index)"
-            let url = folder.appendingPathComponent("\(name).md").standardizedFileURL
+            let name = index == 1 && !reservedEnding ? safeBase : "\(safeBase) \(index)"
+            let suffix = pinned ? ".pinned.md" : ".md"
+            let url = folder.appendingPathComponent("\(name)\(suffix)").standardizedFileURL
             if url == excluding?.standardizedFileURL || !fm.fileExists(atPath: url.path) { return url }
             index += 1
         }
@@ -1010,11 +1226,13 @@ private final class DraftJournal: @unchecked Sendable {
         }
     }
 
-    func move(from sourceURL: URL, to targetURL: URL) throws {
+    func move(from sourceURL: URL, to targetURL: URL, documentIDs: Set<UUID>? = nil) throws {
         lock.lock()
         defer { lock.unlock() }
         guard sourceURL != targetURL else { return }
-        let affected = try allUnlocked().filter { $0.sourceURL == sourceURL }
+        let affected = try allUnlocked().filter {
+            $0.sourceURL == sourceURL && (documentIDs?.contains($0.documentID) ?? true)
+        }
         for draft in affected {
             try write(StoredDraft(sourceURL: targetURL, documentID: draft.documentID, text: draft.text,
                                   baseline: draft.baseline, savedAt: draft.savedAt, isUnsaved: draft.isUnsaved))
@@ -1022,7 +1240,8 @@ private final class DraftJournal: @unchecked Sendable {
             aliases[origin] = Identity(url: targetURL, baseline: draft.baseline, documentID: draft.documentID, isUnsaved: draft.isUnsaved == true)
             try fm.removeItem(at: url(for: sourceURL, documentID: draft.documentID))
         }
-        for (origin, target) in aliases where target.url == sourceURL {
+        for (origin, target) in aliases where target.url == sourceURL
+            && (documentIDs?.contains(target.documentID) ?? true) {
             aliases[origin] = Identity(url: targetURL, baseline: target.baseline, documentID: target.documentID, isUnsaved: target.isUnsaved)
         }
     }

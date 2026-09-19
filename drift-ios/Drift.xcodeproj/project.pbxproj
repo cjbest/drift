@@ -7,8 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		04C9BA26C205372562659658 /* FolderAccessTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02BB219096CE2F3FDAB46CBC /* FolderAccessTests.swift */; };
 		0B236A849636CFEB331A01C3 /* EditorTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84E15134154EEDC11DF745B9 /* EditorTextView.swift */; };
 		1401A3159FA7CB15243C25B0 /* NoteStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 491C90765DC795E8C0C15837 /* NoteStore.swift */; };
+		1CDB38CF87A8D172DD10915A /* FolderPickerGuideViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 671B28155C5586F5068CB9A9 /* FolderPickerGuideViewController.swift */; };
+		24DB3D865F380BA3954E82FD /* FolderPickerIllustrationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A24B48224BC17ED5FA97E90 /* FolderPickerIllustrationView.swift */; };
 		26B28A7F9775D3DF1181C835 /* FontLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69934B6DAA3C268DBCD8EAA6 /* FontLoader.swift */; };
 		2B3413F96CCC026C3ED8CEEE /* Newsreader.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 44F45D81848A98F8F261C806 /* Newsreader.ttf */; };
 		2D0C72E8D352DAB69544C4C4 /* Newsreader-OFL.txt in Resources */ = {isa = PBXBuildFile; fileRef = F7BAE52E533D3C4B676C8C2C /* Newsreader-OFL.txt */; };
@@ -16,10 +19,13 @@
 		4C31E5F32057829ABAA0840A /* DriftApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC6712FB46945A6FE1AAB0E0 /* DriftApp.swift */; };
 		4D9B87565DABC8E10E38E749 /* JetBrainsMono.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 3780ED0456030B3950A20B3E /* JetBrainsMono.ttf */; };
 		4F4B62250E53E5D2B993B779 /* JetBrainsMono-Italic.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 418AFD312D471ECC149A5D17 /* JetBrainsMono-Italic.ttf */; };
+		5F20E07558B64BADED010EF4 /* LaunchPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3863FC334F9AC477AD1213E9 /* LaunchPreferences.swift */; };
 		6A410C51A504D7E9B92C4D54 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = FDB2E4A5E82240310114CA67 /* PrivacyInfo.xcprivacy */; };
 		70B8978C87D567FF1E15C458 /* JetBrainsMono-OFL.txt in Resources */ = {isa = PBXBuildFile; fileRef = D7EB0721F7C65C700611ED8D /* JetBrainsMono-OFL.txt */; };
 		7371B021000134AEC703DFA5 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 700E71AD936866504EB358D8 /* Assets.xcassets */; };
 		7C50C70689D09384C1EBAF65 /* DriftUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7752D6432DE02B67907C5B8B /* DriftUITests.swift */; };
+		8375E94B77132E574D9285C9 /* PinTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD491CC9D652630135A899D4 /* PinTests.swift */; };
+		899EF2190193B6E86C9BC999 /* LaunchPreferencesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26D77369DFA9D7D6739801B9 /* LaunchPreferencesTests.swift */; };
 		988563B226383EAA4DECDF85 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67F7F2782E0E89288BF90445 /* ContentView.swift */; };
 		B0D7E454B97D7E2380865F7E /* CatalogueCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65488A12ED6D4691C75FA859 /* CatalogueCache.swift */; };
 		B6B1640AEB6154CAEE950E20 /* Note.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FE374511B001A93F6053A96 /* Note.swift */; };
@@ -48,17 +54,22 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		02BB219096CE2F3FDAB46CBC /* FolderAccessTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderAccessTests.swift; sourceTree = "<group>"; };
 		0A1374012173C4F87954F93B /* DriftUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = DriftUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		0FE374511B001A93F6053A96 /* Note.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Note.swift; sourceTree = "<group>"; };
 		17888EFDD81C66E20CC3C84D /* NotebookEmptyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotebookEmptyView.swift; sourceTree = "<group>"; };
 		19EE46162AD95E4072FABE5C /* NoteStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteStoreTests.swift; sourceTree = "<group>"; };
+		26D77369DFA9D7D6739801B9 /* LaunchPreferencesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchPreferencesTests.swift; sourceTree = "<group>"; };
+		2A24B48224BC17ED5FA97E90 /* FolderPickerIllustrationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderPickerIllustrationView.swift; sourceTree = "<group>"; };
 		3780ED0456030B3950A20B3E /* JetBrainsMono.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = JetBrainsMono.ttf; sourceTree = "<group>"; };
+		3863FC334F9AC477AD1213E9 /* LaunchPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchPreferences.swift; sourceTree = "<group>"; };
 		418AFD312D471ECC149A5D17 /* JetBrainsMono-Italic.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "JetBrainsMono-Italic.ttf"; sourceTree = "<group>"; };
 		44F45D81848A98F8F261C806 /* Newsreader.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = Newsreader.ttf; sourceTree = "<group>"; };
 		491C90765DC795E8C0C15837 /* NoteStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteStore.swift; sourceTree = "<group>"; };
 		552F5AE6789DA294DDB91E8B /* Drift.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Drift.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		65488A12ED6D4691C75FA859 /* CatalogueCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CatalogueCache.swift; sourceTree = "<group>"; };
 		668D8D5951EB119A1624DDB2 /* DriftTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = DriftTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		671B28155C5586F5068CB9A9 /* FolderPickerGuideViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderPickerGuideViewController.swift; sourceTree = "<group>"; };
 		67F7F2782E0E89288BF90445 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		69934B6DAA3C268DBCD8EAA6 /* FontLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FontLoader.swift; sourceTree = "<group>"; };
 		700E71AD936866504EB358D8 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -70,6 +81,7 @@
 		C6FE0E4FFF4957670556EB3E /* PaperChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaperChrome.swift; sourceTree = "<group>"; };
 		D7EB0721F7C65C700611ED8D /* JetBrainsMono-OFL.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "JetBrainsMono-OFL.txt"; sourceTree = "<group>"; };
 		DC6712FB46945A6FE1AAB0E0 /* DriftApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriftApp.swift; sourceTree = "<group>"; };
+		DD491CC9D652630135A899D4 /* PinTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinTests.swift; sourceTree = "<group>"; };
 		F7BAE52E533D3C4B676C8C2C /* Newsreader-OFL.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Newsreader-OFL.txt"; sourceTree = "<group>"; };
 		FDB2E4A5E82240310114CA67 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -98,7 +110,10 @@
 		230C4300561292D969C89B4E /* DriftTests */ = {
 			isa = PBXGroup;
 			children = (
+				02BB219096CE2F3FDAB46CBC /* FolderAccessTests.swift */,
+				26D77369DFA9D7D6739801B9 /* LaunchPreferencesTests.swift */,
 				19EE46162AD95E4072FABE5C /* NoteStoreTests.swift */,
+				DD491CC9D652630135A899D4 /* PinTests.swift */,
 			);
 			path = DriftTests;
 			sourceTree = "<group>";
@@ -108,6 +123,8 @@
 			children = (
 				67F7F2782E0E89288BF90445 /* ContentView.swift */,
 				84E15134154EEDC11DF745B9 /* EditorTextView.swift */,
+				671B28155C5586F5068CB9A9 /* FolderPickerGuideViewController.swift */,
+				2A24B48224BC17ED5FA97E90 /* FolderPickerIllustrationView.swift */,
 				17888EFDD81C66E20CC3C84D /* NotebookEmptyView.swift */,
 				8DF71CBD2827ED789FBFBC18 /* NoteEditorView.swift */,
 			);
@@ -141,6 +158,7 @@
 			isa = PBXGroup;
 			children = (
 				65488A12ED6D4691C75FA859 /* CatalogueCache.swift */,
+				3863FC334F9AC477AD1213E9 /* LaunchPreferences.swift */,
 				0FE374511B001A93F6053A96 /* Note.swift */,
 				491C90765DC795E8C0C15837 /* NoteStore.swift */,
 			);
@@ -295,7 +313,10 @@
 				988563B226383EAA4DECDF85 /* ContentView.swift in Sources */,
 				4C31E5F32057829ABAA0840A /* DriftApp.swift in Sources */,
 				0B236A849636CFEB331A01C3 /* EditorTextView.swift in Sources */,
+				1CDB38CF87A8D172DD10915A /* FolderPickerGuideViewController.swift in Sources */,
+				24DB3D865F380BA3954E82FD /* FolderPickerIllustrationView.swift in Sources */,
 				26B28A7F9775D3DF1181C835 /* FontLoader.swift in Sources */,
+				5F20E07558B64BADED010EF4 /* LaunchPreferences.swift in Sources */,
 				B6B1640AEB6154CAEE950E20 /* Note.swift in Sources */,
 				C91F7E14E090253EA3B30681 /* NoteEditorView.swift in Sources */,
 				1401A3159FA7CB15243C25B0 /* NoteStore.swift in Sources */,
@@ -309,7 +330,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				04C9BA26C205372562659658 /* FolderAccessTests.swift in Sources */,
+				899EF2190193B6E86C9BC999 /* LaunchPreferencesTests.swift in Sources */,
 				E1F383205220EF41037C935E /* NoteStoreTests.swift in Sources */,
+				8375E94B77132E574D9285C9 /* PinTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -409,7 +433,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_PREVIEWS = YES;
@@ -508,7 +532,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;

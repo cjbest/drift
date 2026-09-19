@@ -59,11 +59,24 @@
   flex-direction: column;
   gap: 5px;
 }
-.quick-open-title {
+.quick-open-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 15px;
+}
+.quick-open-title {
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.quick-open-pin {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  color: var(--muted);
+  transform: rotate(35deg);
 }
 .quick-open-preview {
   display: block;

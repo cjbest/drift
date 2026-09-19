@@ -10,7 +10,28 @@ struct Note: Identifiable, Hashable, Codable, Sendable {
     var isUnsaved: Bool = false
 
     var id: URL { url }
+    /// The marker travels with the Markdown file through any file provider.
+    var isPinned: Bool { Self.isPinned(url) }
     static let untitled = "Untitled"
+
+    static func isPinned(_ url: URL) -> Bool {
+        url.lastPathComponent.lowercased().hasSuffix(".pinned.md")
+    }
+
+    static func filenameTitle(_ url: URL) -> String {
+        let stem = url.deletingPathExtension().lastPathComponent
+        return isPinned(url) ? String(stem.dropLast(".pinned".count)) : stem
+    }
+
+    static func orderedByRecency(_ lhs: Note, _ rhs: Note) -> Bool {
+        lhs.modified == rhs.modified
+            ? lhs.url.lastPathComponent.localizedStandardCompare(rhs.url.lastPathComponent) == .orderedAscending
+            : lhs.modified > rhs.modified
+    }
+
+    static func orderedForList(_ lhs: Note, _ rhs: Note) -> Bool {
+        lhs.isPinned == rhs.isPinned ? orderedByRecency(lhs, rhs) : lhs.isPinned
+    }
 
     static func derive(from body: String) -> (title: String, preview: String) {
         // Only inspect the first two nonempty lines, even in a very large document.
@@ -53,6 +74,8 @@ struct NoteSnapshot: Sendable {
 struct NoteSaveResult: Sendable {
     let snapshot: NoteSnapshot
     let preservedConflict: Bool
+    /// The resolved source can move while a save waits for its worker.
+    var sourceURL: URL? = nil
 }
 
 struct NoteSearchHit: Identifiable, Sendable {

@@ -1,3 +1,5 @@
+import { isPinnedPath } from "./filename";
+
 export interface Note {
   path: string;
   title: string;
@@ -65,6 +67,10 @@ export function searchNotes(
             : 0;
       const delta = score(b) - score(a);
       if (delta) return delta;
+    } else {
+      const pinned =
+        Number(isPinnedPath(b.note.path)) - Number(isPinnedPath(a.note.path));
+      if (pinned) return pinned;
     }
     return (
       b.lastUsed - a.lastUsed ||

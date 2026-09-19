@@ -52,3 +52,39 @@ test("opening an older note promotes it and displays the same last-used date", a
   await expect(dates).toHaveText(["12:00 PM", "11:55 AM", "11:50 AM"]);
   expect(await page.evaluate(() => (window as any).__writes)).toEqual([]);
 });
+
+test("synced pins appear first with clean titles before note bodies have loaded", async ({ page }) => {
+  await page.addInitScript(`
+    ${previewMocks({
+      "Older.pinned.md": "Older\n\nA pinned note",
+      "Recent.md": "Recent\n\nRecent writing",
+    })}
+    window.__readDelay = 10000;
+    const originalInvoke = window.__TAURI_INTERNALS__.invoke;
+    window.__TAURI_INTERNALS__.invoke = async (command, args) => {
+      const result = await originalInvoke(command, args);
+      return command === 'list_notes'
+        ? result.map(note => ({ ...note, modified: note.path === 'Recent.md' ? 2000000 : 1000000 }))
+        : result;
+    };
+  `);
+  await page.goto("/");
+  await expect(page.locator(".cm-editor")).toBeVisible();
+  await page.keyboard.press("Meta+p");
+  const titles = page.locator(".quick-open-title");
+  await expect(titles).toHaveText(["Older", "Recent"]);
+  const pinned = page.locator('[data-path="Older.pinned.md"]');
+  const ordinary = page.locator('[data-path="Recent.md"]');
+  await expect(pinned.getByRole("img", { name: "Pinned" })).toBeVisible();
+  await expect(ordinary.locator(".quick-open-pin")).toHaveCount(0);
+  const pinnedTitle = await pinned.locator(".quick-open-title").boundingBox();
+  const ordinaryTitle = await ordinary.locator(".quick-open-title").boundingBox();
+  expect(pinnedTitle!.x).toBe(ordinaryTitle!.x);
+  expect((await pinned.boundingBox())!.height).toBe(61);
+  expect((await ordinary.boundingBox())!.height).toBe(61);
+  await page.getByRole("combobox").fill("e");
+  await expect(titles).toHaveText(["Recent", "Older"]);
+  await page.getByRole("combobox").fill("");
+  await expect(titles).toHaveText(["Older", "Recent"]);
+  expect(await page.evaluate(() => (window as any).__writes)).toEqual([]);
+});

@@ -8,6 +8,7 @@ import {
   Show,
 } from "solid-js";
 import { searchNotes } from "../notebook/search";
+import { isPinnedPath } from "../notebook/filename";
 import type { Note, Hit } from "../notebook/search";
 import "./QuickOpen.css";
 
@@ -156,7 +157,24 @@ export function QuickOpen(props: Props) {
                   }}
                 >
                   <div class="quick-open-copy">
-                    <span class="quick-open-title">{hit.note.title}</span>
+                    <div class="quick-open-title-row">
+                      <span class="quick-open-title">{hit.note.title}</span>
+                      <Show when={isPinnedPath(hit.note.path)}>
+                        <svg
+                          class="quick-open-pin"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="1.7"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          role="img"
+                          aria-label="Pinned"
+                        >
+                          <path d="M8 3v6l-3 3v2h14v-2l-3-3V3M7 3h10M12 14v7" />
+                        </svg>
+                      </Show>
+                    </div>
                     <span class="quick-open-preview">
                       <Show when={hit.match} fallback={hit.excerpt}>
                         {hit.before}

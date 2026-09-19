@@ -1,7 +1,7 @@
 # iPhone release copy
 
-Prepared for the first public TestFlight beta. The app record is registered;
-the copy below is not evidence of an uploaded or approved build.
+Release copy for Drift 0.2 (7). The copy below is not evidence of an uploaded
+or approved build.
 
 ## App information
 
@@ -39,11 +39,19 @@ No Drift account. No ads. Nothing you don't want.
 
 ## TestFlight: what to test
 
-Welcome to Drift's first public beta.
+This build adds pins, opening preferences, and faster cached startup.
 
-Try choosing a notes folder, writing and reopening a note, making a checklist,
-and searching your notebook. If you also use Drift on Mac, choose the same
-iCloud Drive folder on both devices and try editing a note on each.
+- Long-press a note to pin or unpin it. Pins travel with the Markdown filename;
+  use Drift 0.2.2 or later on Mac to preserve them when editing there.
+- In Notebook Options → On Launch, choose Notes List, Open Last, or New Note.
+- Double-tap the empty space below your notes to start a new one.
+- Returning launches show your locally cached list while the shared folder
+  reconnects.
+- A visual guide helps you find Browse when choosing an iCloud Drive folder.
+
+Try choosing the same disposable iCloud Drive folder on iPhone and Mac, then
+write, pin, rename, and reopen a test note on each. Try reopening the app with
+a previously used folder while offline, then reconnect and check your changes.
 
 Please report anything that feels slow, moves unexpectedly, or does not save
 as you expect. Include your device and the steps that led to the problem.
@@ -53,8 +61,9 @@ Feedback screenshots may contain note text; check them before sending.
 
 Drift does not require a login or a paid account.
 
-1. On first launch, tap **Choose Folder**.
-2. In the system Files picker, choose or create an empty folder in **On My
+1. On first launch, tap **Choose Shared Folder**, then **Continue** in the
+   illustrated guide.
+2. In the system Files picker, tap **Browse**, then choose or create an empty folder in **On My
    iPhone/iPad** or **iCloud Drive**. A local folder is sufficient to review the
    app; iCloud is optional.
 3. Tap **+** to create a note. The first nonempty line becomes its title. Type some text,

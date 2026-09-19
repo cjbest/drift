@@ -19,18 +19,18 @@ export function previewMocks(seed: Record<string, string> = {}) {
         if(cmd==='notebook_info'){if(window.__bootDelay)await new Promise(r=>setTimeout(r,window.__bootDelay));return {directory:'/isolated/Notebook',initializeNotebook:window.__initializeNotebook ?? false,drafts:window.__recoveryDrafts,restoreDrafts:window.__restoreDrafts ?? (window.__TAURI_INTERNALS__.metadata.currentWindow.label==='main')};}
         if(cmd==='initialize_notebook'){if(window.__initializeDelay)await new Promise(r=>setTimeout(r,window.__initializeDelay));if(window.__failInitialize)throw 'Drift does not have permission to open the notebook.';window.__initializeCompletions=(window.__initializeCompletions??0)+1;return window.__initialNote ?? null;}
         if(cmd==='initial_note_opened'){window.__initialNoteAcknowledged=true;return;}
-        if(cmd==='list_notes'){if(window.__failList)throw 'Drift does not have permission to open the notebook. Allow access in Files and Folders, then try again.';return Array.from(window.__mockFS,([path,text])=>({path,title:path.replace(/\\.md$/,''),modified:1000000,size:text.length}));}
+        if(cmd==='list_notes'){if(window.__failList)throw 'Drift does not have permission to open the notebook. Allow access in Files and Folders, then try again.';return Array.from(window.__mockFS,([path,text])=>({path,title:path.replace(/(?:\\.pinned)?\\.md$/i,''),modified:1000000,size:text.length}));}
         if(cmd==='read_note'){if(window.__readDelay)await new Promise(r=>setTimeout(r,window.__readDelay));if(window.__failRead)throw 'Drift does not have permission to open the notebook. Allow access in Files and Folders, then try again.';if(!window.__mockFS.has(args.path))throw 'Missing file';return window.__mockFS.get(args.path)}
         if(cmd==='save_note'){
           const d=args.draft;window.__writes.push({...d});
           if(window.__delay)await new Promise(r=>setTimeout(r,window.__delay));
           if(window.__failSave)throw 'Disk unavailable';
           const disk=d.path?window.__mockFS.get(d.path):undefined;
-          let path=d.path,conflict=false;
+          let path=d.path,conflict=false;const pinned=path?.toLowerCase().endsWith('.pinned.md');
           if(!path&&!d.text.trim())return {path:null,text:d.text,conflict:false};
           if(path&&disk!==d.baseline&&disk!==d.text){path=null;conflict=true;}
           const renamed=path&&disk!==undefined&&d.text.trim()&&stem(d.text)!==stem(disk);
-          if(!path||renamed){const old=path;const name=stem(d.text)+(conflict?' (conflict)':'');path=name+'.md';let i=1;while(window.__mockFS.has(path))path=name+' '+i+++'.md';if(renamed)window.__mockFS.delete(old);}
+          if(!path||renamed){const old=path;const name=stem(d.text)+(conflict?' (conflict)':'');const suffix=pinned?'.pinned.md':'.md';path=name+suffix;let i=1;while(window.__mockFS.has(path)||(!pinned&&path.toLowerCase().endsWith('.pinned.md')))path=name+' '+i+++suffix;if(renamed)window.__mockFS.delete(old);}
           window.__mockFS.set(path,d.text);persist();return {path,text:d.text,conflict};
         }
         if(cmd==='plugin:event|listen'){window.__events.set(args.event,window.__callbacks[args.handler]);return args.handler}

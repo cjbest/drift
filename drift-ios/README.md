@@ -16,6 +16,9 @@ above the list, and almost nothing but the text inside a note.
 - Indexed notes open from their cached text and check for updates after the
   opening animation. Folder scans run separately from document reads and saves.
 - Startup restores a local catalogue, then checks the folder in the background.
+  Returning launches show a small local list snapshot before restoring folder
+  access; the list never waits for iCloud. Cached notes open from their saved
+  text while the provider reconnects, with recovery drafts taking precedence.
   A first scan shows filenames and dates before reading every note's contents.
   Previews appear in place without changing row heights or scroll position.
 - The composer stays temporary until there is meaningful writing. Opening a
@@ -26,6 +29,12 @@ above the list, and almost nothing but the text inside a note.
   enter or leave Read Mode. Drag down to dismiss the keyboard.
 - Floating home controls, immediate row feedback, remembered editing positions,
   and native sharing from a note's context menu.
+- Long-press a note to pin or unpin it. Pins stay at the top without extra row
+  controls, and sync through the filename on both iPhone and Mac.
+- Double-tap empty space below the list to start a note.
+- **Notebook Options > On Launch** selects **Notes List** (default), **Open Last**,
+  or **New Note**. Open Last restores the note's cursor, scroll position, and
+  reading/editing state; New Note stays unsaved until you write something.
 - Serialized autosave, local recovery drafts, explicit save failures, and
   preservation of both versions when another app changes an open note.
 - Reversible deletion. Use **Notebook Options > Undo Last Delete** to recover
@@ -86,6 +95,12 @@ launches. `__APP_TEMP__` uses an app-local temporary folder; combine it with
 
 ## How the files work
 
+In the folder chooser, navigate back to **Locations**, then **iCloud Drive →
+Documents → Drift** if the Mac uses its default notebook and syncs Desktop &
+Documents. **On My iPhone → Drift** is a separate local folder. Another iCloud
+Drive folder works too: select that same folder in the Mac's File → Change Folder
+menu. The iOS folder picker grants access; no app-owned iCloud container is used.
+
 Every note remains a UTF-8 `.md` file. The first nonempty line supplies its title.
 Title edits rename a file; body edits retain collision suffixes. Reads and writes
 use file coordination away from the main actor. Unchanged notes reuse a metadata
@@ -101,6 +116,14 @@ a separate `Recovered` copy, preserving the external file. Deleted files and the
 restore metadata live in a hidden `.drift-trash` subfolder of the selected folder.
 Meaningful writing in a new composer is recoverable even before its first shared
 file exists; blank and whitespace-only composers do not create recovery entries.
+
+Pinned files end in `.pinned.md`, for example `Shopping.pinned.md`. Pinning changes
+the filename without rewriting the Markdown. Title changes, conflict copies, and
+Undo retain the marker. Both apps hide it in fallback titles and use it to order
+the unfiltered list. A literal title ending in `.pinned` gets a numeric suffix when
+unpinned so it cannot accidentally become a pin. As with other external renames,
+pinning on one device while editing the old filename on another can produce a
+recovered copy; the existing conflict safeguards preserve both versions.
 
 iCloud transport is provided by the folder. Changes to file-provider behavior
 need real-device validation as well as simulator tests.

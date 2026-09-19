@@ -11,7 +11,7 @@ struct ContentView: UIViewControllerRepresentable {
 }
 
 @MainActor
-final class NotebookViewController: UIViewController, UITableViewDelegate, UITextFieldDelegate, UIDocumentPickerDelegate {
+final class NotebookViewController: UIViewController, UITableViewDelegate, UITextFieldDelegate, UIDocumentPickerDelegate, UIGestureRecognizerDelegate {
     private enum Section: Int { case notes }
     private let store: NoteStore
     private let table = UITableView(frame: .zero, style: .plain)
@@ -36,6 +36,8 @@ final class NotebookViewController: UIViewController, UITableViewDelegate, UITex
     private var folderSelection: (id: UUID, url: URL)?
     private var needsRender = false
     private var hasLoaded = false
+    private let launchPreferences = LaunchPreferences()
+    private var launchPending = true
     private var messageView: UIView?
     private var messageTask: Task<Void, Never>?
     private lazy var newNoteCommand = UIKeyCommand(title: "New Note", action: #selector(createNote), input: "n", modifierFlags: .command)
@@ -91,6 +93,10 @@ final class NotebookViewController: UIViewController, UITableViewDelegate, UITex
         table.rowHeight = NotebookCell.rowHeight(for: traitCollection)
         table.keyboardDismissMode = .interactive
         table.delegate = self
+        let blankDoubleTap = UITapGestureRecognizer(target: self, action: #selector(createNoteFromBlankSpace))
+        blankDoubleTap.numberOfTapsRequired = 2
+        blankDoubleTap.delegate = self
+        table.addGestureRecognizer(blankDoubleTap)
         table.accessibilityIdentifier = "notes-list"
         table.register(NotebookCell.self, forCellReuseIdentifier: "note")
         table.translatesAutoresizingMaskIntoConstraints = false
@@ -140,6 +146,11 @@ final class NotebookViewController: UIViewController, UITableViewDelegate, UITex
         if let selected = table.indexPathForSelectedRow { table.deselectRow(at: selected, animated: animated) }
         if needsRender { render() }
         if hasLoaded || store.hasLoadedCatalogue { Task { await refresh() } }
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        applyLaunchDestinationIfReady()
     }
 
     override func viewDidLayoutSubviews() {
@@ -239,6 +250,7 @@ final class NotebookViewController: UIViewController, UITableViewDelegate, UITex
         refreshControl.endRefreshing()
         hasLoaded = true
         render()
+        applyLaunchDestinationIfReady()
         if let message = store.errorMessage {
             showMessage(message)
         }
@@ -263,6 +275,32 @@ final class NotebookViewController: UIViewController, UITableViewDelegate, UITex
         }
         guard !opening, navigationController?.topViewController === self else { needsRender = true; return }
         render()
+        applyLaunchDestinationIfReady()
+    }
+
+    private func applyLaunchDestinationIfReady() {
+        guard launchPending, isViewLoaded, view.window != nil,
+              navigationController?.topViewController === self, !opening, !switchingFolder else { return }
+        guard let folder = store.folderURL else {
+            if hasLoaded { launchPending = false }
+            return
+        }
+        switch launchPreferences.destination {
+        case .notesList:
+            launchPending = false
+        case .newNote:
+            launchPending = false
+            createNote()
+        case .openLast:
+            guard let url = launchPreferences.lastNote(in: folder) else { launchPending = false; return }
+            if let note = store.notes.first(where: { $0.url == url }) {
+                launchPending = false
+                open(note, resuming: true)
+            } else if hasLoaded && !store.isLoading {
+                // Deleted or unavailable notes leave the notebook usable.
+                launchPending = false
+            }
+        }
     }
 
     private func render() {
@@ -305,18 +343,24 @@ final class NotebookViewController: UIViewController, UITableViewDelegate, UITex
             // Until then, avoid presenting a false onboarding or empty state.
             table.backgroundView = nil
         } else if !hasFolder {
-            emptyView.configure(symbol: "book.closed", title: "Drift", detail: "Choose a folder for your Markdown notes.\nTo use the same notes on your Mac, choose the same folder in iCloud Drive.", action: "Choose Folder")
+            let detail = store.errorMessage ?? "Choose the same iCloud Drive folder on iPhone and Mac."
+            emptyView.configure(artwork: .none, title: "Drift", detail: detail,
+                                emphasizedDetail: store.errorMessage == nil ? "same iCloud Drive folder" : nil,
+                                action: "Choose Shared Folder")
             emptyView.onAction = { [weak self] in self?.chooseFolder() }
             table.backgroundView = emptyView
         } else if hits.isEmpty {
             if let error = store.errorMessage, query.isEmpty {
-                emptyView.configure(symbol: "arrow.clockwise", title: "Let's try that again.", detail: error, action: "Retry")
-                emptyView.onAction = { [weak self] in self?.refreshRequested() }
+                emptyView.configure(artwork: .symbol("arrow.clockwise"), title: "Let's try that again.", detail: error, action: store.requiresFolderSelection ? "Choose Folder" : "Retry")
+                emptyView.onAction = { [weak self] in
+                    guard let self else { return }
+                    if self.store.requiresFolderSelection { self.chooseFolder() } else { self.refreshRequested() }
+                }
             } else if query.isEmpty {
-                emptyView.configure(symbol: "square.and.pencil", title: "No notes yet", detail: "Tap + to start one.", action: nil)
+                emptyView.configure(artwork: .symbol("square.and.pencil"), title: "No notes yet", detail: "Tap + or double-tap this page to start one.", action: nil)
                 emptyView.onAction = { [weak self] in self?.createNote() }
             } else {
-                emptyView.configure(symbol: "magnifyingglass", title: "No matching notes", detail: "Try another word or a shorter phrase.", action: nil)
+                emptyView.configure(artwork: .symbol("magnifyingglass"), title: "No matching notes", detail: "Try another word or a shorter phrase.", action: nil)
             }
             table.backgroundView = emptyView
         } else {
@@ -324,7 +368,7 @@ final class NotebookViewController: UIViewController, UITableViewDelegate, UITex
         }
     }
 
-    @objc private func searchChanged() { render() }
+    @objc private func searchChanged() { launchPending = false; render() }
     func textFieldDidBeginEditing(_ textField: UITextField) { updateSearchChrome() }
     func textFieldDidEndEditing(_ textField: UITextField) { updateSearchChrome() }
     func textFieldShouldReturn(_ textField: UITextField) -> Bool { textField.resignFirstResponder(); return true }
@@ -364,8 +408,9 @@ final class NotebookViewController: UIViewController, UITableViewDelegate, UITex
         open(hit.note)
     }
 
-    private func open(_ note: Note) {
+    private func open(_ note: Note, resuming: Bool = false) {
         guard !opening, !switchingFolder else { return }
+        launchPending = false
         opening = true
         composeButton.isEnabled = false
         cancelButton.isEnabled = false
@@ -374,13 +419,14 @@ final class NotebookViewController: UIViewController, UITableViewDelegate, UITex
             defer { finishOpening() }
             do {
                 let document = try await store.openForEditing(note)
-                showEditor(document, isNew: false)
+                showEditor(document, isNew: false, resuming: resuming)
             } catch { showError(error) }
         }
     }
 
     @objc private func createNote() {
         guard !opening, !switchingFolder, store.folderURL != nil else { return }
+        launchPending = false
         opening = true
         composeButton.isEnabled = false
         cancelButton.isEnabled = false
@@ -395,18 +441,30 @@ final class NotebookViewController: UIViewController, UITableViewDelegate, UITex
         }
     }
 
-    private func showEditor(_ document: NoteSnapshot, isNew: Bool) {
+    @objc private func createNoteFromBlankSpace() { createNote() }
+
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        guard !opening, !switchingFolder, store.folderURL != nil,
+              query.isEmpty, !search.isFirstResponder, store.errorMessage == nil else { return false }
+        let point = touch.location(in: table)
+        guard point.y >= 0, table.indexPathForRow(at: point) == nil else { return false }
+        let rows = table.numberOfRows(inSection: 0)
+        return rows == 0 || point.y > table.rectForRow(at: IndexPath(row: rows - 1, section: 0)).maxY
+    }
+
+    private func showEditor(_ document: NoteSnapshot, isNew: Bool, resuming: Bool = false) {
         guard navigationController?.topViewController === self,
               document.note.url.deletingLastPathComponent().standardizedFileURL == store.folderURL?.standardizedFileURL else { return }
         let searchQuery = query
-        let editor = NoteEditorViewController(store: store, snapshot: document, isNew: isNew)
+        let editor = NoteEditorViewController(store: store, snapshot: document, isNew: isNew, resuming: resuming)
+        if let folder = store.folderURL { launchPreferences.remember(document.note, in: folder) }
         if !searchQuery.isEmpty { editor.revealMatch(searchQuery) }
         editor.onNoteChange = { [weak self] in self?.storeChanged() }
         search.text = ""
         search.resignFirstResponder()
         needsRender = true
         editor.loadViewIfNeeded()
-        navigationController?.pushViewController(editor, animated: true)
+        navigationController?.pushViewController(editor, animated: !resuming)
     }
 
     private func finishOpening() {
@@ -422,10 +480,25 @@ final class NotebookViewController: UIViewController, UITableViewDelegate, UITex
     }
 
     func tableView(_ tableView: UITableView, contextMenuConfigurationForRowAt indexPath: IndexPath, point: CGPoint) -> UIContextMenuConfiguration? {
-        guard let url = source.itemIdentifier(for: indexPath), let note = hitsByURL[url]?.note else { return nil }
+        guard !opening, !switchingFolder, let url = source.itemIdentifier(for: indexPath), let note = hitsByURL[url]?.note else { return nil }
         return UIContextMenuConfiguration(identifier: url as NSURL, previewProvider: nil) { [weak self] _ in
             guard let self else { return UIMenu() }
             return UIMenu(children: [
+                UIAction(title: note.isPinned ? "Unpin Note" : "Pin Note", image: UIImage(systemName: note.isPinned ? "pin.slash" : "pin")) { [weak self] _ in
+                    guard let self, !self.opening, !self.switchingFolder else { return }
+                    self.opening = true
+                    self.composeButton.isEnabled = false
+                    self.cancelButton.isEnabled = false
+                    self.folderButton.isEnabled = false
+                    Task {
+                        defer { self.finishOpening() }
+                        do {
+                            let updated = try await self.store.setPinned(!note.isPinned, for: note)
+                            if let folder = self.store.folderURL { self.launchPreferences.relocate(from: note.url, to: updated, in: folder) }
+                            self.render()
+                        } catch { self.showError(error) }
+                    }
+                },
                 UIAction(title: "Copy Note", image: UIImage(systemName: "doc.on.doc")) { [weak self] _ in self?.copy(note) },
                 UIAction(title: "Share Note", image: UIImage(systemName: "square.and.arrow.up")) { [weak self] _ in self?.share(note) },
                 UIAction(title: "Delete", image: UIImage(systemName: "trash"), attributes: .destructive) { [weak self] _ in
@@ -466,7 +539,16 @@ final class NotebookViewController: UIViewController, UITableViewDelegate, UITex
                 actions.append(UIAction(title: "Undo Last Delete", image: UIImage(systemName: "arrow.uturn.backward")) { [weak self] _ in self?.undoDelete() })
             }
         }
-        actions.append(UIAction(title: store.folderURL == nil ? "Choose Folder" : "Change Folder…", image: UIImage(systemName: "folder.badge.plus")) { [weak self] _ in self?.chooseFolder() })
+        let folderAction = store.requiresFolderSelection ? "Reconnect Folder…" : (store.folderURL == nil ? "Choose Folder" : "Change Folder…")
+        actions.append(UIAction(title: folderAction, image: UIImage(systemName: "folder.badge.plus")) { [weak self] _ in self?.chooseFolder() })
+        let destinations = LaunchDestination.allCases.map { destination in
+            UIAction(title: destination.title, state: launchPreferences.destination == destination ? .on : .off) { [weak self] _ in
+                guard let self else { return }
+                self.launchPreferences.destination = destination
+                self.folderButton.menu = self.folderMenu()
+            }
+        }
+        actions.append(UIMenu(title: "On Launch", image: UIImage(systemName: "arrow.up.forward.app"), children: destinations))
         actions.append(UIMenu(options: .displayInline, children: [
             UIAction(title: "Privacy Policy", image: UIImage(systemName: "hand.raised")) { _ in
                 UIApplication.shared.open(URL(string: "https://github.com/cjbest/drift/blob/main/docs/PRIVACY.md")!)
@@ -480,6 +562,19 @@ final class NotebookViewController: UIViewController, UITableViewDelegate, UITex
 
     private func chooseFolder() {
         guard !opening, !switchingFolder else { return }
+        launchPending = false
+        let guide = FolderPickerGuideViewController()
+        guide.modalPresentationStyle = .formSheet
+        if let sheet = guide.sheetPresentationController {
+            sheet.detents = [.custom { min(430, $0.maximumDetentValue) }, .large()]
+            sheet.prefersGrabberVisible = true
+            sheet.preferredCornerRadius = 28
+        }
+        guide.onContinue = { [weak self] in self?.presentFolderPicker() }
+        present(guide, animated: true)
+    }
+
+    private func presentFolderPicker() {
         let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.folder], asCopy: false)
         picker.delegate = self
         picker.allowsMultipleSelection = false
@@ -616,6 +711,7 @@ final class NotebookViewController: UIViewController, UITableViewDelegate, UITex
 
 private final class NotebookCell: UITableViewCell {
     private let titleLabel = UILabel()
+    private let pinIndicator = UIImageView()
     private let previewLabel = UILabel()
     private let dateLabel = UILabel()
     private var metadataHeightConstraint: NSLayoutConstraint!
@@ -641,6 +737,17 @@ private final class NotebookCell: UITableViewCell {
         titleLabel.textColor = Theme.inkUIColor
         titleLabel.numberOfLines = 1
         titleLabel.adjustsFontForContentSizeCategory = true
+        pinIndicator.tintColor = Theme.secondaryInkUIColor
+        pinIndicator.contentMode = .center
+        pinIndicator.isHidden = true
+        pinIndicator.isAccessibilityElement = false
+        pinIndicator.accessibilityIdentifier = "note-pin-indicator"
+        pinIndicator.setContentHuggingPriority(.required, for: .horizontal)
+        pinIndicator.setContentCompressionResistancePriority(.required, for: .horizontal)
+        let titleRow = UIStackView(arrangedSubviews: [titleLabel, pinIndicator])
+        titleRow.axis = .horizontal
+        titleRow.alignment = .center
+        titleRow.spacing = 8
         previewLabel.textColor = Theme.secondaryInkUIColor
         previewLabel.numberOfLines = 1
         previewLabel.adjustsFontForContentSizeCategory = true
@@ -654,7 +761,7 @@ private final class NotebookCell: UITableViewCell {
         dateLabel.setContentHuggingPriority(.required, for: .horizontal)
         dateLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
         previewLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        let stack = UIStackView(arrangedSubviews: [titleLabel, meta])
+        let stack = UIStackView(arrangedSubviews: [titleRow, meta])
         stack.axis = .vertical; stack.spacing = 4
         stack.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(stack)
@@ -674,6 +781,8 @@ private final class NotebookCell: UITableViewCell {
     override func prepareForReuse() {
         super.prepareForReuse()
         representedURL = nil
+        pinIndicator.isHidden = true
+        accessibilityLabel = nil
         previewLabel.layer.removeAllAnimations()
         previewLabel.alpha = 1
     }
@@ -684,6 +793,9 @@ private final class NotebookCell: UITableViewCell {
         dateLabel.font = .preferredFont(forTextStyle: .caption1, compatibleWith: traits)
         metadataHeightConstraint.constant = Self.metadataHeight(for: traits)
         titleLabel.text = hit.note.title
+        pinIndicator.image = UIImage(systemName: "pin.fill", withConfiguration: UIImage.SymbolConfiguration(
+            font: .preferredFont(forTextStyle: .caption1, compatibleWith: traits), scale: .small))
+        pinIndicator.isHidden = !hit.note.isPinned
         let bodyPreview = hit.snippet ?? hit.note.preview
         let preview = bodyPreview.isEmpty ? "" : "· " + bodyPreview
         let revealsPreview = representedURL == hit.note.url && previewLabel.isHidden && !preview.isEmpty
@@ -706,6 +818,9 @@ private final class NotebookCell: UITableViewCell {
             }
         }
         dateLabel.text = Self.dateLabel(hit.note.modified)
+        accessibilityLabel = [hit.note.title, hit.note.isPinned ? "Pinned" : nil,
+                              dateLabel.text, bodyPreview.isEmpty ? nil : bodyPreview]
+            .compactMap { $0 }.joined(separator: ", ")
         accessibilityIdentifier = "note-row-\(hit.note.url.lastPathComponent)"
     }
     private static func dateLabel(_ date: Date) -> String {

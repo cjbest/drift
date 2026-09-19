@@ -18,19 +18,31 @@ actor CatalogueCache {
 
     nonisolated static func reserveSequence() -> UInt64 { sequences.reserve() }
 
-    private let fileManager = FileManager.default
     private var latestSequence: [URL: UInt64] = [:]
 
     private init() {}
+
+    /// A small local index is safe to read before the first frame. Note bodies
+    /// stay in the separate catalogue so a large notebook does not make launch
+    /// decode every document on the main actor.
+    nonisolated static func loadIndex(folder: URL) -> CachedCatalogue? {
+        guard folder.isFileURL else { return nil }
+        let folder = folder.standardizedFileURL
+        guard let file = try? cacheFile(for: folder, creatingDirectory: false, indexOnly: true),
+              let data = try? Data(contentsOf: file),
+              let catalogue = try? JSONDecoder().decode(CachedCatalogue.self, from: data),
+              catalogue.bodies.isEmpty, isValid(catalogue, for: folder) else { return nil }
+        return catalogue
+    }
 
     func load(folder: URL) -> CachedCatalogue? {
         guard folder.isFileURL else { return nil }
         let canonicalFolder = folder.standardizedFileURL
         do {
-            let file = try cacheFile(for: canonicalFolder, creatingDirectory: false)
+            let file = try Self.cacheFile(for: canonicalFolder, creatingDirectory: false)
             let data = try Data(contentsOf: file)
             let catalogue = try JSONDecoder().decode(CachedCatalogue.self, from: data)
-            guard isValid(catalogue, for: canonicalFolder) else { return nil }
+            guard Self.isValid(catalogue, for: canonicalFolder) else { return nil }
             return catalogue
         } catch {
             // A missing, purged, older, or damaged cache never blocks the folder.
@@ -51,12 +63,16 @@ actor CatalogueCache {
         let cached = CachedCatalogue(folderURL: folder, notes: notes,
                                      bodies: catalogue.bodies.filter { noteURLs.contains($0.key) },
                                      canUndoTrash: catalogue.canUndoTrash)
-        guard isValid(cached, for: folder) else { throw CacheError.invalidCatalogue }
-        let file = try cacheFile(for: folder, creatingDirectory: true)
+        guard Self.isValid(cached, for: folder) else { throw CacheError.invalidCatalogue }
+        let file = try Self.cacheFile(for: folder, creatingDirectory: true)
         try JSONEncoder().encode(cached).write(to: file, options: [.atomic])
+        let index = CachedCatalogue(folderURL: folder, notes: notes, bodies: [:],
+                                    canUndoTrash: cached.canUndoTrash)
+        let indexFile = try Self.cacheFile(for: folder, creatingDirectory: true, indexOnly: true)
+        try JSONEncoder().encode(index).write(to: indexFile, options: [.atomic])
     }
 
-    private func isValid(_ catalogue: CachedCatalogue, for folder: URL) -> Bool {
+    nonisolated private static func isValid(_ catalogue: CachedCatalogue, for folder: URL) -> Bool {
         guard catalogue.folderURL.isFileURL,
               catalogue.folderURL.standardizedFileURL == folder else { return false }
         let noteURLs = Set(catalogue.notes.map(\.url))
@@ -67,14 +83,16 @@ actor CatalogueCache {
         return true
     }
 
-    private func isChild(_ url: URL, of folder: URL) -> Bool {
+    nonisolated private static func isChild(_ url: URL, of folder: URL) -> Bool {
         // Standardization is lexical. Do not resolve symlinks or request any
         // resource values here; that would put provider I/O back in opening.
         url.isFileURL && url == url.standardizedFileURL
             && url.deletingLastPathComponent().standardizedFileURL == folder
     }
 
-    private func cacheFile(for folder: URL, creatingDirectory: Bool) throws -> URL {
+    nonisolated private static func cacheFile(for folder: URL, creatingDirectory: Bool,
+                                             indexOnly: Bool = false) throws -> URL {
+        let fileManager = FileManager.default
         let caches = try fileManager.url(for: .cachesDirectory, in: .userDomainMask,
                                          appropriateFor: nil, create: creatingDirectory)
         let directory = caches.appendingPathComponent("Drift", isDirectory: true)
@@ -84,7 +102,7 @@ actor CatalogueCache {
         }
         let key = SHA256.hash(data: Data(folder.absoluteString.utf8))
             .map { String(format: "%02x", $0) }.joined()
-        return directory.appendingPathComponent("\(key).json")
+        return directory.appendingPathComponent("\(key)\(indexOnly ? ".index" : "").json")
     }
 
     private enum CacheError: Error { case invalidCatalogue }

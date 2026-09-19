@@ -23,6 +23,10 @@ With no search query, quick-open follows when notes were last opened or edited,
 newest first. Its displayed dates use that same time, so opening an older note
 moves it up with a matching date. Search prioritizes exact titles, then partial
 titles, then body matches, with last-used dates ordering ties.
+Files pinned from iOS use a `.pinned.md` suffix and appear before unpinned files
+in unfiltered quick-open, retaining last-used order within each group. The marker
+stays out of displayed titles and survives title edits, conflicts, and collision
+suffixes. It requires no shared preference file or separate sync service.
 The title receives a restrained Newsreader italic treatment; paper, ink, and
 selection use the warm sepia palette. Both light and dark appearances work.
 

@@ -2,6 +2,7 @@ import UIKit
 
 /// The same calm empty state is used for first launch, empty folders and search.
 final class NotebookEmptyView: UIView {
+    enum Artwork { case symbol(String), none }
     private let symbolView = UIImageView()
     private let titleLabel = UILabel()
     private let detailLabel = UILabel()
@@ -46,6 +47,8 @@ final class NotebookEmptyView: UIView {
         content.addSubview(stack)
         let center = stack.centerYAnchor.constraint(equalTo: content.centerYAnchor, constant: -16)
         center.priority = .defaultLow
+        let symbolHeight = symbolView.heightAnchor.constraint(equalToConstant: 48)
+        symbolHeight.priority = .defaultHigh
         NSLayoutConstraint.activate([
             scroll.leadingAnchor.constraint(equalTo: leadingAnchor), scroll.trailingAnchor.constraint(equalTo: trailingAnchor),
             scroll.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor), scroll.bottomAnchor.constraint(equalTo: safeAreaLayoutGuide.bottomAnchor),
@@ -58,17 +61,32 @@ final class NotebookEmptyView: UIView {
             stack.topAnchor.constraint(greaterThanOrEqualTo: content.topAnchor, constant: 24),
             stack.bottomAnchor.constraint(lessThanOrEqualTo: content.bottomAnchor, constant: -24),
             center,
-            symbolView.widthAnchor.constraint(equalToConstant: 44),
-            symbolView.heightAnchor.constraint(equalToConstant: 48),
+            symbolView.widthAnchor.constraint(equalToConstant: 44), symbolHeight,
             detailLabel.widthAnchor.constraint(lessThanOrEqualToConstant: 330),
         ])
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
-    func configure(symbol: String, title: String, detail: String, action: String?) {
-        symbolView.image = UIImage(systemName: symbol, withConfiguration: UIImage.SymbolConfiguration(pointSize: 40, weight: .ultraLight))
+    func configure(artwork: Artwork, title: String, detail: String, emphasizedDetail: String? = nil, action: String?) {
+        switch artwork {
+        case .symbol(let name):
+            symbolView.image = UIImage(systemName: name, withConfiguration: UIImage.SymbolConfiguration(pointSize: 40, weight: .ultraLight))
+            symbolView.isHidden = false
+            titleLabel.font = Theme.serif(34, style: .largeTitle, italic: true)
+        case .none:
+            symbolView.image = nil
+            symbolView.isHidden = true
+            titleLabel.font = Theme.serif(42, style: .largeTitle, italic: true)
+        }
         titleLabel.text = title
-        detailLabel.text = detail
+        let font = UIFont.preferredFont(forTextStyle: .body, compatibleWith: traitCollection)
+        let attributedDetail = NSMutableAttributedString(string: detail, attributes: [.font: font])
+        if let emphasizedDetail, let range = detail.range(of: emphasizedDetail),
+           let boldDescriptor = font.fontDescriptor.withSymbolicTraits(.traitBold) {
+            attributedDetail.addAttribute(.font, value: UIFont(descriptor: boldDescriptor, size: 0),
+                                          range: NSRange(range, in: detail))
+        }
+        detailLabel.attributedText = attributedDetail
         actionButton.configuration?.title = action
         actionButton.accessibilityLabel = action
         actionButton.isHidden = action == nil

@@ -184,6 +184,7 @@ final class NoteEditorViewController: UIViewController, UITextViewDelegate {
     private let store: NoteStore
     private let session: EditorDocumentSession
     private let isNew: Bool
+    private let resuming: Bool
     private let editor = EditorTextView()
     private let messageButton = UIButton(type: .system)
     private let backChrome = EditorBackChrome()
@@ -205,10 +206,11 @@ final class NoteEditorViewController: UIViewController, UITextViewDelegate {
     private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
     private var refreshTask: Task<Void, Never>?
 
-    init(store: NoteStore, snapshot: NoteSnapshot, isNew: Bool = false) {
+    init(store: NoteStore, snapshot: NoteSnapshot, isNew: Bool = false, resuming: Bool = false) {
         self.store = store
         self.session = EditorDocumentSession(store: store, snapshot: snapshot)
         self.isNew = isNew
+        self.resuming = resuming
         self.lastSavedURL = snapshot.note.url
         super.init(nibName: nil, bundle: nil)
         session.onUpdate = { [weak self] in self?.sessionChanged() }
@@ -332,7 +334,8 @@ final class NoteEditorViewController: UIViewController, UITextViewDelegate {
         super.viewIsAppearing(animated)
         guard !didRequestInitialFocus else { return }
         didRequestInitialFocus = true
-        if isNew || session.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        let wasEditing = resuming && UserDefaults.standard.dictionary(forKey: positionKey(session.snapshot.note.url))?["editing"] as? Bool == true
+        if !isReadMode && (isNew || wasEditing || session.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) {
             editor.becomeFirstResponder()
         }
     }
@@ -452,6 +455,10 @@ final class NoteEditorViewController: UIViewController, UITextViewDelegate {
         guard isViewLoaded else { return }
         defer { view.setNeedsLayout() }
         if lastSavedURL != session.snapshot.note.url {
+            let folder = session.snapshot.note.url.deletingLastPathComponent()
+            if lastSavedURL.deletingLastPathComponent().standardizedFileURL == folder.standardizedFileURL {
+                LaunchPreferences().relocate(from: lastSavedURL, to: session.snapshot.note, in: folder)
+            }
             UserDefaults.standard.removeObject(forKey: positionKey(lastSavedURL))
             lastSavedURL = session.snapshot.note.url
             savePosition()
@@ -656,11 +663,17 @@ final class NoteEditorViewController: UIViewController, UITextViewDelegate {
     private func positionKey(_ url: URL) -> String { "drift.editor.position." + url.absoluteString }
 
     private func savePosition() {
-        guard isViewLoaded, !session.snapshot.isUnsaved else { return }
+        guard isViewLoaded else { return }
+        if session.snapshot.isUnsaved, session.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            UserDefaults.standard.removeObject(forKey: positionKey(session.snapshot.note.url))
+            return
+        }
         UserDefaults.standard.set([
             "location": editor.selectedRange.location,
             "length": editor.selectedRange.length,
             "offset": max(0, editor.contentOffset.y),
+            "editing": editor.isFirstResponder,
+            "readMode": isReadMode,
         ], forKey: positionKey(session.snapshot.note.url))
     }
 
@@ -669,6 +682,9 @@ final class NoteEditorViewController: UIViewController, UITextViewDelegate {
               let location = values["location"] as? Int else { return }
         let length = values["length"] as? Int ?? 0
         editor.restoreSelection(NSRange(location: max(0, location), length: max(0, length)))
+        if resuming, values["readMode"] as? Bool == true {
+            if !isReadMode { toggleReadMode() }
+        }
         editor.layoutIfNeeded()
         let maximum = max(0, editor.contentSize.height - editor.bounds.height)
         let offset = min(maximum, max(0, values["offset"] as? Double ?? 0))

@@ -257,3 +257,49 @@ document identity survive.
 
 Release preparation passed 45 store/editor tests, one hosted layout test, and
 all 15 UI scenarios. The signed Release build also passed signature validation.
+
+## Shared folders, pins, and opening preferences
+
+September 18, 2026. Pins are now an explicit request: the long-press menu offers
+Pin Note / Unpin Note. Only pinned rows show a subdued pin indicator; unpinned
+rows keep their existing layout, and no new section is added. A reserved
+`.pinned.md` filename suffix carries the state through ordinary folder sync.
+Pinned notes come first; search retains its existing recency ordering. Both apps
+preserve the marker through title changes, collisions, and conflict recovery.
+Pinning retains the note's editing position and does not rewrite its contents.
+
+Double-tapping blank space below the unfiltered list opens an unsaved composer.
+Rows retain their immediate single-touch response. Notebook Options has an
+On Launch submenu: Notes List (default), Open Last, and New Note. The choice
+applies once per launch. Open Last restores cursor/scroll and reading/editing
+state; returning to the app while it remains running keeps the current page.
+
+The chooser remembers a selected folder. First-use copy asks the reader to
+choose the same iCloud Drive folder on iPhone and Mac, with that phrase in bold.
+Choosing a folder first presents a brief guide with the system tab bar pictured
+and Browse circled brightly. Continue dismisses the guide and opens the native
+folder chooser; closing the guide leaves the current notebook alone. The
+illustration follows light and dark appearance.
+The standard Help & Support link remains the menu's help entry. Documents
+requires the Mac's Desktop & Documents sync setting. No private
+iCloud paths or separate app-owned iCloud notebook are introduced.
+
+Returning launches load a small local list index synchronously, before bookmark
+restoration or provider access. Cached text and local drafts remain available
+while the folder reconnects; actual provider operations still require access.
+Background reconciliation retains the fixed row geometry. A 1,000-note fixture
+on the iPhone 16e simulator loaded the index in 25 ms and laid out the notebook
+in 64 ms with no spinner or asynchronous yield. This measures the cached-list
+path, not total process-launch time or physical-device iCloud behavior.
+
+Storage regressions also cover an invalid bookmark, a purged body cache with a
+surviving list index, and pending recovery drafts. Cached paths never stand in
+for a folder access grant, and a rejected folder choice retains the notebook.
+
+Validation: all 66 storage/editor tests passed on an iPhone 16e simulator. All
+18 UI scenarios passed across the broad run and the focused rerun after fixing
+an ambiguous test selector for New Note. The focused run also verified restoring
+Read Mode, and the hosted hydration/layout test passed after adding the pin
+indicator. The first-use guidance and pinned-row screenshot were visually checked.
+These changes have not been uploaded to TestFlight or validated with a real
+device's iCloud provider.

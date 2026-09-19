@@ -56,6 +56,20 @@ pub struct NotebookInfo {
 
 const WELCOME: &str = "Drift\n\nStart writing. Your notes save automatically.\n\n⌘ N — New note\n⌘ P — Find a note\n⌘ / — All shortcuts\n";
 
+// The filename carries the pin between devices without a separate sync database.
+const PINNED_SUFFIX: &str = ".pinned.md";
+fn is_pinned(name: &str) -> bool {
+    name.to_ascii_lowercase().ends_with(PINNED_SUFFIX)
+}
+fn filename_title(name: &str) -> &str {
+    let suffix_len = if is_pinned(name) {
+        PINNED_SUFFIX.len()
+    } else {
+        3
+    };
+    &name[..name.len() - suffix_len]
+}
+
 fn err(e: impl std::fmt::Display) -> String {
     e.to_string()
 }
@@ -222,12 +236,17 @@ impl Notebook {
             &serde_json::to_vec(draft).map_err(err)?,
         )
     }
-    fn unique(&self, stem: &str, text: &str) -> Result<String, String> {
+    fn unique(&self, stem: &str, text: &str, pinned: bool) -> Result<String, String> {
+        let suffix = if pinned { PINNED_SUFFIX } else { ".md" };
         for n in 0..10000 {
+            // A literal title ending in .pinned must not pin an ordinary note.
+            if n == 0 && !pinned && stem.to_ascii_lowercase().ends_with(".pinned") {
+                continue;
+            }
             let name = if n == 0 {
-                format!("{stem}.md")
+                format!("{stem}{suffix}")
             } else {
-                format!("{stem} {n}.md")
+                format!("{stem} {n}{suffix}")
             };
             let path = self.path(&name)?;
             // Link a fully flushed temporary file into a never-overwritten destination.
@@ -301,8 +320,12 @@ impl Notebook {
             if draft.text.trim().is_empty() {
                 return finish(None, false);
             }
-            return finish(Some(self.unique(&title(&draft.text), &draft.text)?), false);
+            return finish(
+                Some(self.unique(&title(&draft.text), &draft.text, false)?),
+                false,
+            );
         };
+        let pinned = is_pinned(name);
         let path = self.path(name)?;
         let disk = match fs::read_to_string(&path) {
             Ok(s) => Some(s),
@@ -314,7 +337,11 @@ impl Notebook {
         }
         if draft.baseline.as_deref() != disk.as_deref() || disk.is_none() {
             // Keep external content (or deletion) intact; materialize our writing separately.
-            let name = self.unique(&format!("{} (conflict)", title(&draft.text)), &draft.text)?;
+            let name = self.unique(
+                &format!("{} (conflict)", title(&draft.text)),
+                &draft.text,
+                pinned,
+            )?;
             return finish(Some(name), true);
         }
         let old = disk.unwrap();
@@ -322,13 +349,17 @@ impl Notebook {
         // Recheck after history I/O. We never knowingly replace a newer version.
         if fs::read_to_string(&path).map_err(err)? != old {
             return finish(
-                Some(self.unique(&format!("{} (conflict)", title(&draft.text)), &draft.text)?),
+                Some(self.unique(
+                    &format!("{} (conflict)", title(&draft.text)),
+                    &draft.text,
+                    pinned,
+                )?),
                 true,
             );
         }
         let renamed = !draft.text.trim().is_empty() && title(&draft.text) != title(&old);
         if renamed {
-            let next = self.unique(&title(&draft.text), &draft.text)?;
+            let next = self.unique(&title(&draft.text), &draft.text, pinned)?;
             // Retain both files if something changed during the new-file write.
             if fs::read_to_string(&path).map_err(err)? == old {
                 fs::remove_file(&path).map_err(err)?;
@@ -461,13 +492,18 @@ fn list(store: &Notebook) -> Result<Vec<Entry>, String> {
             .map(|d| d.as_millis() as u64)
             .unwrap_or(0);
         entries.push(Entry {
-            title: name[..name.len() - 3].into(),
+            title: filename_title(&name).into(),
             path: name,
             modified,
             size: meta.len(),
         });
     }
-    entries.sort_by(|a, b| b.modified.cmp(&a.modified).then(a.path.cmp(&b.path)));
+    entries.sort_by(|a, b| {
+        is_pinned(&b.path)
+            .cmp(&is_pinned(&a.path))
+            .then(b.modified.cmp(&a.modified))
+            .then(a.path.cmp(&b.path))
+    });
     if std::env::var_os("DRIFT_PROFILE").is_some() {
         eprintln!(
             "drift-notebook list root={} seen={seen} files={files} symlinks={links} markdown={markdown} hidden={hidden} notes={}",
@@ -595,6 +631,70 @@ mod tests {
         assert_eq!(r.path.as_deref(), Some("B 1.md"));
         assert_eq!(fs::read_to_string(s.root.join("B.md")).unwrap(), "other B");
         assert!(!s.root.join("A.md").exists());
+    }
+    #[test]
+    fn pinned_notes_keep_the_marker_through_body_edits_and_rename_collisions() {
+        let s = store();
+        fs::write(s.root.join("A.PINNED.MD"), "A").unwrap();
+        let edited = s
+            .save(draft(Some("A.PINNED.MD"), Some("A"), "A\nbody"))
+            .unwrap();
+        assert_eq!(edited.path.as_deref(), Some("A.PINNED.MD"));
+        fs::write(s.root.join("B.pinned.md"), "other B").unwrap();
+        let renamed = s
+            .save(draft(edited.path.as_deref(), Some("A\nbody"), "B\nbody"))
+            .unwrap();
+        assert_eq!(renamed.path.as_deref(), Some("B 1.pinned.md"));
+        assert_eq!(read(&s, "B 1.pinned.md").unwrap(), "B\nbody");
+        assert_eq!(read(&s, "B.pinned.md").unwrap(), "other B");
+        assert!(!s.root.join("A.PINNED.MD").exists());
+        fs::remove_dir_all(s.data).unwrap();
+    }
+    #[test]
+    fn pinned_conflict_preserves_both_versions_and_the_pin() {
+        let s = store();
+        fs::write(s.root.join("A.pinned.md"), "A\nphone").unwrap();
+        let saved = s
+            .save(draft(Some("A.pinned.md"), Some("A"), "A\ndesktop"))
+            .unwrap();
+        assert!(saved.conflict);
+        assert_eq!(saved.path.as_deref(), Some("A (conflict).pinned.md"));
+        assert_eq!(read(&s, "A.pinned.md").unwrap(), "A\nphone");
+        assert_eq!(read(&s, "A (conflict).pinned.md").unwrap(), "A\ndesktop");
+        fs::remove_dir_all(s.data).unwrap();
+    }
+    #[test]
+    fn a_literal_pinned_title_does_not_pin_new_or_renamed_notes() {
+        let s = store();
+        let created = s.save(draft(None, None, "Title.pinned")).unwrap();
+        assert_eq!(created.path.as_deref(), Some("Title.pinned 1.md"));
+        fs::write(s.root.join("A.md"), "A").unwrap();
+        let renamed = s
+            .save(draft(Some("A.md"), Some("A"), "Title.pinned\nbody"))
+            .unwrap();
+        assert_eq!(renamed.path.as_deref(), Some("Title.pinned 2.md"));
+        assert!(!list(&s).unwrap().iter().any(|entry| is_pinned(&entry.path)));
+        fs::remove_dir_all(s.data).unwrap();
+    }
+    #[test]
+    fn catalogue_hides_pin_metadata_and_lists_pins_before_newer_notes() {
+        let s = store();
+        fs::write(s.root.join("Old.PINNED.MD"), "Old\nbody").unwrap();
+        let old = fs::File::open(s.root.join("Old.PINNED.MD")).unwrap();
+        old.set_times(
+            fs::FileTimes::new().set_modified(UNIX_EPOCH + std::time::Duration::from_secs(1)),
+        )
+        .unwrap();
+        fs::write(s.root.join("New.md"), "New").unwrap();
+        fs::write(s.root.join("Literal.pinned 1.md"), "Literal.pinned").unwrap();
+        let entries = list(&s).unwrap();
+        assert_eq!(entries[0].path, "Old.PINNED.MD");
+        assert_eq!(entries[0].title, "Old");
+        assert!(entries
+            .iter()
+            .any(|entry| entry.title == "Literal.pinned 1"));
+        assert_eq!(read(&s, "Old.PINNED.MD").unwrap(), "Old\nbody");
+        fs::remove_dir_all(s.data).unwrap();
     }
     #[test]
     fn duplicate_title_does_not_churn() {

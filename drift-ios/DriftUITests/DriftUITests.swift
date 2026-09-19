@@ -102,6 +102,36 @@ final class DriftUITests: XCTestCase {
         add(attachment)
     }
 
+    func testFolderGuideExplainsBrowseBeforeOpeningTheSystemPicker() throws {
+        let app = XCUIApplication()
+        // Override only this process's preferences, without selecting a folder
+        // or changing any existing notebook bookmark.
+        app.launchArguments = ["-drift.folderBookmark", "", "-drift.folderCacheIdentity", "",
+                               "-drift.onLaunch", "notesList"]
+        XCUIDevice.shared.orientation = .portrait
+        app.launch()
+        let choose = app.buttons["Choose Shared Folder"]
+        XCTAssertTrue(choose.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Choose the same iCloud Drive folder on iPhone and Mac."].exists)
+        attachScreenshot(named: "release-wordmark-onboarding")
+        choose.tap()
+        let guide = app.otherElements["folder-picker-guide"]
+        XCTAssertTrue(guide.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["On the next screen, tap Browse and choose a folder on your iCloud Drive."].exists)
+        XCTAssertTrue(app.images["Tap Browse at the bottom right of the next screen."].exists)
+        attachScreenshot(named: "release-folder-guide")
+        app.buttons["Close"].tap()
+        XCTAssertTrue(choose.waitForExistence(timeout: 3))
+        choose.tap()
+        let next = app.buttons["folder-guide-continue"]
+        XCTAssertTrue(next.waitForExistence(timeout: 3))
+        next.tap()
+        XCTAssertTrue(app.buttons["Browse"].waitForExistence(timeout: 10))
+        XCTAssertFalse(guide.exists)
+        // Verify the handoff, but never select or inspect a provider folder.
+        app.terminate()
+    }
+
     func testListShowsNotesAndPopulatedNotesOpenWithoutTheKeyboard() throws {
         try seed(title: "Morning pages", body: "A quiet place to put a thought.")
         try seed(title: "Things to make", body: "A small table. A better cup of coffee.")
@@ -114,6 +144,83 @@ final class DriftUITests: XCTestCase {
         XCTAssertTrue(app.buttons["editor-back"].isHittable)
         XCTAssertFalse(app.keyboards.firstMatch.exists)
         attachScreenshot(named: "note-at-top")
+    }
+
+    func testLongPressPinSurvivesRelaunchWithoutChangingText() throws {
+        let older = try seed(title: "Keep at hand", body: "The same plain Markdown.")
+        try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSinceNow: -3600)], ofItemAtPath: older.path)
+        try seed(title: "More recent", body: "An ordinary note.")
+        let app = launchApp()
+        noteRow("Keep at hand", in: app).press(forDuration: 1)
+        app.buttons["Pin Note"].tap()
+        let pinned = tempFolder.appendingPathComponent("Keep at hand.pinned.md")
+        waitForText("Keep at hand\n\nThe same plain Markdown.", at: pinned)
+        XCTAssertEqual(app.tables["notes-list"].cells.firstMatch.identifier, "note-row-Keep at hand.pinned.md")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: older.path))
+        attachScreenshot(named: "pinned-note-quiet-list")
+        app.terminate()
+        let restarted = launchApp()
+        let row = restarted.tables["notes-list"].cells["note-row-Keep at hand.pinned.md"]
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        row.press(forDuration: 1)
+        restarted.buttons["Unpin Note"].tap()
+        waitForText("Keep at hand\n\nThe same plain Markdown.", at: older)
+    }
+
+    func testDoubleTapBlankSpaceStartsUnsavedComposer() throws {
+        try seed(title: "A thought", body: "A little room below.")
+        let app = launchApp()
+        let table = app.tables["notes-list"]
+        table.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.65)).doubleTap()
+        _ = editor(in: app)
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
+        back(in: app)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: tempFolder.path).filter { $0.hasSuffix(".md") }, ["A thought.md"])
+    }
+
+    func testLaunchChoicesRestoreLastAndCanStartNewWithoutLeavingBlankFiles() throws {
+        try seed(title: "Return here", body: "Keep the place where I was writing.")
+        let app = launchApp()
+        func choose(_ title: String) {
+            app.buttons["Notebook Options"].tap()
+            app.buttons["On Launch"].tap()
+            app.collectionViews.buttons[title].tap()
+        }
+        defer {
+            // Keep independent UI scenarios on the default launch behavior,
+            // even if an assertion above interrupts this test.
+            app.terminate()
+            app.launchArguments = ["-drift.onLaunch", "notesList"]
+            app.launch()
+            if app.buttons["Notebook Options"].waitForExistence(timeout: 5) { choose("Notes List") }
+            app.terminate()
+        }
+        choose("Open Last")
+        _ = open("Return here", in: app)
+        app.terminate()
+        app.launch()
+        XCTAssertEqual(editor(in: app).value as? String, "Return here\n\nKeep the place where I was writing.")
+        pullFromTop(editor(in: app))
+        XCTAssertTrue(readIndicator(in: app).waitForExistence(timeout: 3))
+        XCUIDevice.shared.press(.home)
+        app.terminate()
+        app.launch()
+        _ = editor(in: app)
+        XCTAssertTrue(readIndicator(in: app).waitForExistence(timeout: 3), "Open Last should restore Read Mode")
+        XCTAssertFalse(app.keyboards.firstMatch.exists)
+        back(in: app)
+        choose("New Note")
+        app.terminate()
+        app.launch()
+        XCTAssertEqual(editor(in: app).value as? String, "")
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
+        back(in: app)
+        choose("Notes List")
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.tables["notes-list"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.textViews["note-editor"].exists)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: tempFolder.path).filter { $0.hasSuffix(".md") }, ["Return here.md"])
     }
 
     func testLargeNotebookOpensAndReopensNotes() throws {

@@ -8,6 +8,7 @@ import type { EditorHandle, Position } from "./components/Editor";
 import { Shortcuts } from "./components/Shortcuts";
 import { cascadeWindow } from "./notebook/window-placement";
 import { QuickOpen } from "./components/QuickOpen";
+import { filenameTitle } from "./notebook/filename";
 import { SaveQueue, fresh, dirty, snapshot } from "./notebook/session";
 import type { Session, Draft, Saved } from "./notebook/session";
 import type { Note, Hit } from "./notebook/search";
@@ -212,7 +213,7 @@ function App() {
         if (s.path)
           next.unshift({
             path: s.path,
-            title: s.path.slice(0, -3),
+            title: filenameTitle(s.path),
             text: s.baseline ?? "",
             modified: Date.now(),
             size: s.text.length,
