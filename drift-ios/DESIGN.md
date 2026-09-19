@@ -363,4 +363,7 @@ warm and cold launches. Draft contents survive automatic navigation, and repeate
 requests from an empty composer do not create blank files. The 1,000-note cached
 launch regression also passed. The signed normal Drift app was installed on the
 phone and its version verified without opening or inspecting the live notebook.
-Build 10 has not been uploaded to TestFlight; phone feedback is still pending.
+Build 10 was uploaded and verified as Testing in the Public Beta group on
+September 18, 2026. See the [release record](../docs/releases/2026-09-18-build10-validation.md)
+for artifact checks and the distinction between build 9 phone feedback and
+build 10 simulator coverage.

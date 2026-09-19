@@ -1,13 +1,14 @@
 # iPhone release copy
 
-Build **0.2 (8)** is live in the **Public Beta** group. App Store Connect showed
+Build **0.2 (10)** is live in the **Public Beta** group. App Store Connect showed
 **Testing** on September 18, 2026 after submission, with automatic tester
 notification enabled. The existing public invitation remains active:
 <https://testflight.apple.com/join/YfEQ1TSH>.
 
-The matching Mac release is **0.2.2**. Build 7 was superseded before distribution
-to make folder selection appropriate for iPad; it was never added to a tester
-group. See [the release validation record](releases/2026-09-18-validation.md).
+The matching Mac release is **0.2.2**. Build 9 was a development sideload;
+build 10 includes the tested launch and menu fixes. See [the build 10 validation
+record](releases/2026-09-18-build10-validation.md) and [the preceding release
+record](releases/2026-09-18-validation.md).
 
 ## App information
 
@@ -45,20 +46,20 @@ No Drift account. No ads. Nothing you don't want.
 
 ## TestFlight: what to test
 
-This build adds pins, opening preferences, and faster cached startup.
+This update makes opening Drift faster and starting a new note easier.
 
-- Long-press a note to pin or unpin it. Pins travel with the Markdown filename;
-  use Drift 0.2.2 or later on Mac to preserve them when editing there.
-- In Notebook Options → On Launch, choose Notes List, Open Last, or New Note.
-- Double-tap the empty space below your notes to start a new one.
-- Returning launches show your locally cached list while the shared folder
+- Cold launches show your cached notebook immediately while the shared folder
   reconnects.
-- A visual guide helps you find Browse when choosing an iCloud Drive folder
-  on iPhone. On iPad, choose iCloud Drive directly in the picker sidebar.
+- Your On Launch choice now also applies after five minutes in the background.
+  Quicker returns keep your current note and place.
+- Long-press the Drift icon on the Home Screen and choose New Note, whether
+  Drift is already running or closed.
+- The notebook's options menu and submenus stay open while note previews load.
 
-Try choosing the same disposable iCloud Drive folder on iPhone and Mac, then
-write, pin, rename, and reopen a test note on each. Try reopening the app with
-a previously used folder while offline, then reconnect and check your changes.
+Try your preferred On Launch setting, a quick app switch, and returning after
+five minutes away. Try the Home Screen New Note action while another note is
+open, and check that your previous writing is saved. Try reopening a previously
+used notebook while offline, then reconnect and check your changes.
 
 Please report anything that feels slow, moves unexpectedly, or does not save
 as you expect. Include your device and the steps that led to the problem.
