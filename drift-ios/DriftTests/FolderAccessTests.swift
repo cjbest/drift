@@ -189,8 +189,7 @@ struct FolderAccessTests {
         // iOS may purge individual cache files while retaining the launch index.
         let caches = try fm.url(for: .cachesDirectory, in: .userDomainMask,
                                  appropriateFor: nil, create: false)
-        let key = SHA256.hash(data: Data(folder.absoluteString.utf8))
-            .map { String(format: "%02x", $0) }.joined()
+        let key = FolderIdentity.cacheKey(for: folder)
         let bodyCache = caches.appendingPathComponent("Drift/Catalogues", isDirectory: true)
             .appendingPathComponent("\(key).json")
         try fm.removeItem(at: bodyCache)

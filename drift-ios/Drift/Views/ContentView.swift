@@ -150,6 +150,9 @@ final class NotebookViewController: UIViewController, UITableViewDelegate, UITex
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+        LaunchDiagnostics.record("first_notebook_frame", counts: ["rows": store.notes.count],
+                                 flags: ["spinner": activity.isAnimating,
+                                         "catalogue_loaded": store.hasLoadedCatalogue], once: true)
         applyLaunchDestinationIfReady()
     }
 
@@ -336,7 +339,13 @@ final class NotebookViewController: UIViewController, UITableViewDelegate, UITex
             source.apply(snapshot, animatingDifferences: hasLoaded && !store.isLoading && !switchingFolder && !search.isFirstResponder)
         }
         let cataloguePending = !hasLoaded && !store.hasLoadedCatalogue && store.notes.isEmpty
-        if cataloguePending && store.isLoading { activity.startAnimating() }
+        if cataloguePending && store.isLoading {
+            if !activity.isAnimating {
+                LaunchDiagnostics.record("spinner_started", counts: ["rows": store.notes.count],
+                                         flags: ["catalogue_loaded": store.hasLoadedCatalogue])
+            }
+            activity.startAnimating()
+        }
         else { activity.stopAnimating() }
         if cataloguePending {
             // Metadata is enough to show the notebook; body indexing may continue.

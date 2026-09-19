@@ -15,6 +15,8 @@
 		26B28A7F9775D3DF1181C835 /* FontLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69934B6DAA3C268DBCD8EAA6 /* FontLoader.swift */; };
 		2B3413F96CCC026C3ED8CEEE /* Newsreader.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 44F45D81848A98F8F261C806 /* Newsreader.ttf */; };
 		2D0C72E8D352DAB69544C4C4 /* Newsreader-OFL.txt in Resources */ = {isa = PBXBuildFile; fileRef = F7BAE52E533D3C4B676C8C2C /* Newsreader-OFL.txt */; };
+		2DD62179607BBEB92572EE36 /* CacheURLRegressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D83F183FE55ECEB7431660AA /* CacheURLRegressionTests.swift */; };
+		39BA2AF28C16CCA8023AC209 /* LaunchCacheRegressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D314651D6DA8A935CAC50CF7 /* LaunchCacheRegressionTests.swift */; };
 		412D94EDB3C6AB6EF79D7A3E /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = B35664720340419D225635E0 /* Theme.swift */; };
 		4C31E5F32057829ABAA0840A /* DriftApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC6712FB46945A6FE1AAB0E0 /* DriftApp.swift */; };
 		4D9B87565DABC8E10E38E749 /* JetBrainsMono.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 3780ED0456030B3950A20B3E /* JetBrainsMono.ttf */; };
@@ -31,6 +33,7 @@
 		B6B1640AEB6154CAEE950E20 /* Note.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FE374511B001A93F6053A96 /* Note.swift */; };
 		BF25904944C524BCE8F07FD6 /* NotebookEmptyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17888EFDD81C66E20CC3C84D /* NotebookEmptyView.swift */; };
 		C09A9B08EFA50BB5FBA0918B /* PaperChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6FE0E4FFF4957670556EB3E /* PaperChrome.swift */; };
+		C1EC7A7AF474246EC2B18E46 /* LaunchDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F8FE0754C2ECDD0605EC0FE /* LaunchDiagnostics.swift */; };
 		C91F7E14E090253EA3B30681 /* NoteEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DF71CBD2827ED789FBFBC18 /* NoteEditorView.swift */; };
 		D0A1A1F16F495F9603FBC5DB /* Newsreader-Italic.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 7DD170EBE92026F64D490E2A /* Newsreader-Italic.ttf */; };
 		E1F383205220EF41037C935E /* NoteStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19EE46162AD95E4072FABE5C /* NoteStoreTests.swift */; };
@@ -77,9 +80,12 @@
 		7DD170EBE92026F64D490E2A /* Newsreader-Italic.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Newsreader-Italic.ttf"; sourceTree = "<group>"; };
 		84E15134154EEDC11DF745B9 /* EditorTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorTextView.swift; sourceTree = "<group>"; };
 		8DF71CBD2827ED789FBFBC18 /* NoteEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteEditorView.swift; sourceTree = "<group>"; };
+		9F8FE0754C2ECDD0605EC0FE /* LaunchDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchDiagnostics.swift; sourceTree = "<group>"; };
 		B35664720340419D225635E0 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		C6FE0E4FFF4957670556EB3E /* PaperChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaperChrome.swift; sourceTree = "<group>"; };
+		D314651D6DA8A935CAC50CF7 /* LaunchCacheRegressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchCacheRegressionTests.swift; sourceTree = "<group>"; };
 		D7EB0721F7C65C700611ED8D /* JetBrainsMono-OFL.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "JetBrainsMono-OFL.txt"; sourceTree = "<group>"; };
+		D83F183FE55ECEB7431660AA /* CacheURLRegressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CacheURLRegressionTests.swift; sourceTree = "<group>"; };
 		DC6712FB46945A6FE1AAB0E0 /* DriftApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriftApp.swift; sourceTree = "<group>"; };
 		DD491CC9D652630135A899D4 /* PinTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinTests.swift; sourceTree = "<group>"; };
 		F7BAE52E533D3C4B676C8C2C /* Newsreader-OFL.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "Newsreader-OFL.txt"; sourceTree = "<group>"; };
@@ -110,7 +116,9 @@
 		230C4300561292D969C89B4E /* DriftTests */ = {
 			isa = PBXGroup;
 			children = (
+				D83F183FE55ECEB7431660AA /* CacheURLRegressionTests.swift */,
 				02BB219096CE2F3FDAB46CBC /* FolderAccessTests.swift */,
+				D314651D6DA8A935CAC50CF7 /* LaunchCacheRegressionTests.swift */,
 				26D77369DFA9D7D6739801B9 /* LaunchPreferencesTests.swift */,
 				19EE46162AD95E4072FABE5C /* NoteStoreTests.swift */,
 				DD491CC9D652630135A899D4 /* PinTests.swift */,
@@ -158,6 +166,7 @@
 			isa = PBXGroup;
 			children = (
 				65488A12ED6D4691C75FA859 /* CatalogueCache.swift */,
+				9F8FE0754C2ECDD0605EC0FE /* LaunchDiagnostics.swift */,
 				3863FC334F9AC477AD1213E9 /* LaunchPreferences.swift */,
 				0FE374511B001A93F6053A96 /* Note.swift */,
 				491C90765DC795E8C0C15837 /* NoteStore.swift */,
@@ -316,6 +325,7 @@
 				1CDB38CF87A8D172DD10915A /* FolderPickerGuideViewController.swift in Sources */,
 				24DB3D865F380BA3954E82FD /* FolderPickerIllustrationView.swift in Sources */,
 				26B28A7F9775D3DF1181C835 /* FontLoader.swift in Sources */,
+				C1EC7A7AF474246EC2B18E46 /* LaunchDiagnostics.swift in Sources */,
 				5F20E07558B64BADED010EF4 /* LaunchPreferences.swift in Sources */,
 				B6B1640AEB6154CAEE950E20 /* Note.swift in Sources */,
 				C91F7E14E090253EA3B30681 /* NoteEditorView.swift in Sources */,
@@ -330,7 +340,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				2DD62179607BBEB92572EE36 /* CacheURLRegressionTests.swift in Sources */,
 				04C9BA26C205372562659658 /* FolderAccessTests.swift in Sources */,
+				39BA2AF28C16CCA8023AC209 /* LaunchCacheRegressionTests.swift in Sources */,
 				899EF2190193B6E86C9BC999 /* LaunchPreferencesTests.swift in Sources */,
 				E1F383205220EF41037C935E /* NoteStoreTests.swift in Sources */,
 				8375E94B77132E574D9285C9 /* PinTests.swift in Sources */,
@@ -433,7 +445,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_PREVIEWS = YES;
@@ -532,7 +544,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;

@@ -2,7 +2,10 @@ import SwiftUI
 
 @main
 struct DriftApp: App {
-    init() { FontLoader.registerAll() }
+    init() {
+        LaunchDiagnostics.record("app_init", once: true)
+        FontLoader.registerAll()
+    }
 
     var body: some Scene {
         WindowGroup {

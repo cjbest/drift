@@ -104,9 +104,12 @@ menu. The iOS folder picker grants access; no app-owned iCloud container is used
 Every note remains a UTF-8 `.md` file. The first nonempty line supplies its title.
 Title edits rename a file; body edits retain collision suffixes. Reads and writes
 use file coordination away from the main actor. Unchanged notes reuse a metadata
-cache during refresh. A purgeable local catalogue keeps known titles, previews,
-and text available between launches; saves still compare the retained baseline
-with the provider's current text before replacing anything. The folder refreshes
+cache during refresh. A small local list index in Application Support keeps known
+rows available before folder access; it is excluded from backup and survives
+purges of Caches. The separate text snapshot remains purgeable. The index is
+checkpointed first, so a failed text-cache write cannot prevent the next launch
+from showing the list. Saves still compare the retained baseline with the
+provider's current text before replacing anything. The folder refreshes
 when the app becomes active and on pull-to-refresh; an open, unedited note also
 checks for external updates on resume.
 

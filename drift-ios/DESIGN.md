@@ -303,3 +303,29 @@ Read Mode, and the hosted hydration/layout test passed after adding the pin
 indicator. The first-use guidance and pinned-row screenshot were visually checked.
 These changes have not been uploaded to TestFlight or validated with a real
 device's iCloud provider.
+
+## Returning-launch cache reliability (September 18, 2026)
+
+The opening index now lives in Application Support, excluded from backup, while
+full text remains in Caches. Checkpoint the index before the optional text
+snapshot: a failed or interrupted text-cache write must not make every subsequent
+launch wait for the provider. When the two snapshots differ, the newer index owns
+row membership and metadata; only matching rows may take text from the older
+snapshot. Recovery drafts remain independent.
+
+Cache identities tolerate directory-slash differences and the system's `/var`
+and `/private/var` aliases. Validation still rejects notes from sibling folders.
+Keep the original bookmark URL for its security scope and use a stable directory
+spelling for rows and local caches. Reading an index never grants folder access.
+Legacy cache filenames remain readable on upgrade.
+
+All 77 unit/layout tests pass, including failed text writes, purged caches, legacy
+index migration, bookmark restarts, interrupted snapshots, and URL normalization.
+The 1,000-note simulator fixture loaded the index in 41 ms and laid out visible
+rows in 75 ms before any asynchronous yield, with no activity indicator. These
+figures measure store/layout work, not total process launch or physical iCloud
+performance. The focused UI scenario also passed opening, reopening, terminating,
+and relaunching the app with a 1,000-note fixture. Build 9 is a development
+sideload for phone verification; it has not
+been uploaded to TestFlight. Debug launch diagnostics contain only timings,
+counts, and flags, never note text, titles, paths, or bookmarks.

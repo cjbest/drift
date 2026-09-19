@@ -39,11 +39,11 @@ final class NoteStore {
         let testPath = environment["DRIFT_TEST_FOLDER"]
         let explicitURL: URL?
         if let folderURL {
-            explicitURL = folderURL.standardizedFileURL
+            explicitURL = FolderIdentity.directoryURL(folderURL)
         } else if let testPath {
             explicitURL = testPath == "__APP_TEMP__"
                 ? FileManager.default.temporaryDirectory.appendingPathComponent("drift-ui-tests", isDirectory: true)
-                : URL(fileURLWithPath: testPath, isDirectory: true).standardizedFileURL
+                : FolderIdentity.directoryURL(URL(fileURLWithPath: testPath, isDirectory: true))
         } else {
             explicitURL = nil
         }
@@ -62,15 +62,21 @@ final class NoteStore {
                 self?.changed()
             }
         }
+        LaunchDiagnostics.record("initial_index", counts: ["rows": notes.count],
+                                 flags: ["folder_known": cachedFolder != nil,
+                                         "index_loaded": hasLoadedCatalogue])
         initialization = Task { [weak self, worker] in
             do {
                 // Restore local text and recovery before touching the provider.
                 // A cached note can open while bookmark resolution is pending.
                 await self?.catalogueRestoration?.value
                 let restored = try await worker.initialize(explicitURL: explicitURL,
+                                                           preferredFolder: cachedFolder,
                                                            prepareTestFolder: folderURL == nil && testPath != nil,
                                                            resetTestFolder: resetTestFolder)
                 guard let self else { return }
+                LaunchDiagnostics.record("bookmark_restored", counts: ["rows": self.notes.count],
+                                         flags: ["same_cached_folder": restored == self.folderURL])
                 if restored != self.folderURL {
                     self.notes = []
                     self.bodies = [:]
@@ -418,15 +424,26 @@ final class NoteStore {
     }
 
     private func restoreCatalogue(folder: URL) async {
+        LaunchDiagnostics.record("body_cache_start", once: true)
         let cached = await CatalogueCache.shared.load(folder: folder)
         let pending = (try? await Task.detached(priority: .userInitiated) { [drafts] in
             try drafts.pending(in: folder)
         }.value) ?? []
         guard folderURL == folder else { return }
         if let cached {
-            notes = cached.notes
-            bodies = cached.bodies
-            canUndoTrash = cached.canUndoTrash
+            if hasLoadedCatalogue {
+                // The index checkpoints first and can be newer than the body
+                // snapshot after an interrupted/failed write. Never replace its
+                // rows with older metadata or resurrect a removed note.
+                let cachedNotes = Dictionary(uniqueKeysWithValues: cached.notes.map { ($0.url, $0) })
+                for note in notes where cachedNotes[note.url] == note {
+                    bodies[note.url] = cached.bodies[note.url]
+                }
+            } else {
+                notes = cached.notes
+                bodies = cached.bodies
+                canUndoTrash = cached.canUndoTrash
+            }
             hasLoadedCatalogue = true
         }
         var known = Set(notes.map(\.url))
@@ -445,6 +462,8 @@ final class NoteStore {
         }
         notes.sort(by: Self.sortNotes)
         if !notes.isEmpty { hasLoadedCatalogue = true }
+        LaunchDiagnostics.record("body_cache_restored", counts: ["rows": notes.count, "bodies": bodies.count],
+                                 flags: ["body_cache_loaded": cached != nil], once: true)
     }
 
     private func acceptCatalogue(_ listing: FolderListing, refreshID: UUID, folder: URL, revision: Int) -> Bool {
@@ -478,7 +497,12 @@ final class NoteStore {
                 pendingCatalogue = nil
                 // This cache is disposable. A failed cache write must not turn
                 // an otherwise successful note save into an error.
-                try? await CatalogueCache.shared.store(pending.value, sequence: pending.sequence)
+                do {
+                    try await CatalogueCache.shared.store(pending.value, sequence: pending.sequence)
+                    LaunchDiagnostics.record("catalogue_persisted", counts: ["rows": pending.value.notes.count], once: true)
+                } catch {
+                    LaunchDiagnostics.record("catalogue_write_failed", counts: ["error_code": (error as NSError).code], once: true)
+                }
             }
             catalogueWriteTask = nil
         }
@@ -538,7 +562,7 @@ enum FolderBookmark {
               let identity = try? JSONDecoder().decode(CacheIdentity.self, from: data),
               identity.folder.isFileURL,
               identity.bookmarkDigest == digest(bookmark) else { return nil }
-        return identity.folder.standardizedFileURL
+        return FolderIdentity.directoryURL(identity.folder)
     }
 
     static func save(_ bookmark: Data, folder: URL, in defaults: UserDefaults) {
@@ -547,7 +571,7 @@ enum FolderBookmark {
     }
 
     static func saveCacheIdentity(_ bookmark: Data, folder: URL, in defaults: UserDefaults) {
-        let identity = CacheIdentity(folder: folder.standardizedFileURL, bookmarkDigest: digest(bookmark))
+        let identity = CacheIdentity(folder: FolderIdentity.directoryURL(folder), bookmarkDigest: digest(bookmark))
         if let data = try? JSONEncoder().encode(identity) { defaults.set(data, forKey: cacheIdentityKey) }
     }
 
@@ -632,7 +656,7 @@ private actor FileWorker {
 
     deinit { scopedURL?.stopAccessingSecurityScopedResource() }
 
-    func initialize(explicitURL: URL?, prepareTestFolder: Bool, resetTestFolder: Bool) throws -> URL? {
+    func initialize(explicitURL: URL?, preferredFolder: URL?, prepareTestFolder: Bool, resetTestFolder: Bool) throws -> URL? {
         if let explicitURL {
             if resetTestFolder, fm.fileExists(atPath: explicitURL.path) { try fm.removeItem(at: explicitURL) }
             if prepareTestFolder { try fm.createDirectory(at: explicitURL, withIntermediateDirectories: true) }
@@ -642,17 +666,23 @@ private actor FileWorker {
         var stale = false
         let url = try URL(resolvingBookmarkData: bookmark, options: [], relativeTo: nil, bookmarkDataIsStale: &stale)
         if url.startAccessingSecurityScopedResource() { scopedURL = url }
+        // Keep stable note/draft identities when bookmark resolution returns
+        // another lexical spelling of the same directory. The original URL
+        // above still owns the security-scoped grant.
+        let stableFolder = preferredFolder.flatMap {
+            FolderIdentity.sameFolder($0, url) ? FolderIdentity.directoryURL($0) : nil
+        } ?? FolderIdentity.directoryURL(url)
         // Restoring the bookmark must not enumerate/download the provider before
         // the local catalogue is visible. The subsequent metadata scan validates
         // access and reports any actual provider error.
         // A stale bookmark may still resolve and grant access. Renewal is
         // housekeeping; a provider refusing it must not hide the notebook.
         if stale, let renewed = try? url.bookmarkData(options: [.minimalBookmark], includingResourceValuesForKeys: nil, relativeTo: nil) {
-            FolderBookmark.save(renewed, folder: url, in: defaults)
+            FolderBookmark.save(renewed, folder: stableFolder, in: defaults)
         } else {
-            FolderBookmark.saveCacheIdentity(bookmark, folder: url, in: defaults)
+            FolderBookmark.saveCacheIdentity(bookmark, folder: stableFolder, in: defaults)
         }
-        return url.standardizedFileURL
+        return stableFolder
     }
 
     func selectFolder(_ url: URL) throws -> URL {
@@ -663,7 +693,7 @@ private actor FileWorker {
             FolderBookmark.save(bookmark, folder: url, in: defaults)
             scopedURL?.stopAccessingSecurityScopedResource()
             scopedURL = hasScope ? url : nil
-            return url.standardizedFileURL
+            return FolderIdentity.directoryURL(url)
         } catch {
             if hasScope { url.stopAccessingSecurityScopedResource() }
             throw error
@@ -692,7 +722,8 @@ private actor FileWorker {
         let previousNotes = Dictionary(uniqueKeysWithValues: previous.notes.map { ($0.url, $0) })
         var unreadable = 0
         for rawURL in urls where rawURL.pathExtension.lowercased() == "md" {
-            let url = rawURL.standardizedFileURL
+            guard FolderIdentity.sameFolder(rawURL.deletingLastPathComponent(), folder) else { continue }
+            let url = folder.appendingPathComponent(rawURL.lastPathComponent).standardizedFileURL
             // Use the enumerated URL to retain prefetched provider metadata.
             let values = try? rawURL.resourceValues(forKeys: [.isRegularFileKey, .contentModificationDateKey, .fileSizeKey,
                                                          .ubiquitousItemDownloadingStatusKey])
