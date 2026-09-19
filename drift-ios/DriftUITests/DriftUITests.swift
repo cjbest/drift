@@ -1,4 +1,5 @@
 import XCTest
+import UIKit
 
 @MainActor
 final class DriftUITests: XCTestCase {
@@ -116,6 +117,17 @@ final class DriftUITests: XCTestCase {
         attachScreenshot(named: "release-wordmark-onboarding")
         choose.tap()
         let guide = app.otherElements["folder-picker-guide"]
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            // iPad already exposes Locations in its sidebar, so it should not
+            // receive the iPhone instruction to tap a nonexistent Browse tab.
+            let iCloud = app.cells["DOC.sidebar.item.iCloud Drive"]
+            XCTAssertTrue(iCloud.waitForExistence(timeout: 10))
+            XCTAssertTrue(iCloud.isHittable)
+            XCTAssertFalse(guide.exists)
+            attachScreenshot(named: "release-ipad-folder-picker")
+            app.terminate()
+            return
+        }
         XCTAssertTrue(guide.waitForExistence(timeout: 3))
         XCTAssertTrue(app.staticTexts["On the next screen, tap Browse and choose a folder on your iCloud Drive."].exists)
         XCTAssertTrue(app.images["Tap Browse at the bottom right of the next screen."].exists)

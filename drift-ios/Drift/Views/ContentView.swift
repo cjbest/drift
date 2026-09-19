@@ -563,6 +563,12 @@ final class NotebookViewController: UIViewController, UITableViewDelegate, UITex
     private func chooseFolder() {
         guard !opening, !switchingFolder else { return }
         launchPending = false
+        // iPad exposes Locations directly in the picker's sidebar; the Browse
+        // tab and its illustration are specific to the phone picker.
+        if traitCollection.userInterfaceIdiom == .pad {
+            presentFolderPicker()
+            return
+        }
         let guide = FolderPickerGuideViewController()
         guide.modalPresentationStyle = .formSheet
         if let sheet = guide.sheetPresentationController {

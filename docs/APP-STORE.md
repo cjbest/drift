@@ -1,6 +1,6 @@
 # iPhone release copy
 
-Release copy for Drift 0.2 (7). The copy below is not evidence of an uploaded
+Release copy for Drift 0.2 (8). The copy below is not evidence of an uploaded
 or approved build.
 
 The first public TestFlight beta is live. Build **0.2 (6)** was verified as
@@ -66,9 +66,10 @@ Feedback screenshots may contain note text; check them before sending.
 
 Drift does not require a login or a paid account.
 
-1. On first launch, tap **Choose Shared Folder**, then **Continue** in the
-   illustrated guide.
-2. In the system Files picker, tap **Browse**, then choose or create an empty folder in **On My
+1. On first launch, tap **Choose Shared Folder**. On iPhone, tap **Continue** in
+   the illustrated guide.
+2. In the system Files picker, use **Browse** on iPhone or the **Locations**
+   sidebar on iPad, then choose or create an empty folder in **On My
    iPhone/iPad** or **iCloud Drive**. A local folder is sufficient to review the
    app; iCloud is optional.
 3. Tap **+** to create a note. The first nonempty line becomes its title. Type some text,
