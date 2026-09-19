@@ -329,3 +329,10 @@ and relaunching the app with a 1,000-note fixture. Build 9 is a development
 sideload for phone verification; it has not
 been uploaded to TestFlight. Debug launch diagnostics contain only timings,
 counts, and flags, never note text, titles, paths, or bookmarks.
+
+On the physical iPhone, the build 9 diagnostic record showed the local index
+loaded before the first notebook frame, no spinner, and bookmark restoration
+after the list appeared. The first notebook frame was recorded 130 ms after app
+initialization; this excludes OS launch time. The user confirmed that launch
+speed was much better. Only the timing/count/flag record was retrieved; no note
+content, filenames, or folder paths were collected for this check.
