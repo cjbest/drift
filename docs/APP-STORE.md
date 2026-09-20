@@ -52,6 +52,8 @@ This update makes writing and moving around your notebook feel smoother.
 - Returning to the notebook keeps rows steady, including after Search.
 - Editing a long note keeps your place as the keyboard opens and closes.
 - Deleting all the text and returning avoids a temporary empty row.
+- Empty notebook and search messages use readable spacing instead of wrapping
+  into a narrow column.
 
 Try creating a note, typing immediately, and going back. Open a long note and
 edit near the middle and end; dismiss the keyboard and resume writing. Try

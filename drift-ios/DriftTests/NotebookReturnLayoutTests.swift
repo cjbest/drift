@@ -128,3 +128,123 @@ private final class NotebookFrameSampler: NSObject {
 
     @objc private func tick() { sample() }
 }
+
+@MainActor
+final class NotebookEmptyLayoutTests: XCTestCase {
+    func testEmptyNotebookAndNoSearchResultsKeepReadableTextWidth() async throws {
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("drift-empty-layout-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let store = NoteStore(folderURL: folder)
+        await store.refresh()
+        let notebook = NotebookViewController(store: store)
+        let navigation = PaperNavigationController(rootViewController: notebook)
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            .first(where: { $0.activationState == .foregroundActive }))
+        let window = try XCTUnwrap(scene.windows.first(where: \.isKeyWindow))
+        let originalRoot = window.rootViewController
+        window.endEditing(true)
+        window.rootViewController = navigation
+        navigation.overrideUserInterfaceStyle = .dark
+        defer {
+            window.endEditing(true)
+            window.rootViewController = originalRoot
+            window.layoutIfNeeded()
+        }
+        window.layoutIfNeeded()
+        notebook.view.layoutIfNeeded()
+        let table = try XCTUnwrap(notebook.view.subviews.compactMap { $0 as? UITableView }.first)
+        let search = try XCTUnwrap(descendants(of: notebook.view).compactMap { $0 as? UITextField }
+            .first(where: { $0.accessibilityIdentifier == "note-search" }))
+
+        for cycle in 1...3 {
+            for (query, expectedTitle) in [("", "No notes yet"), ("unmatched", "No matching notes")] {
+                search.text = query
+                search.sendActions(for: .editingChanged)
+                await Task.yield()
+                window.layoutIfNeeded()
+                table.layoutIfNeeded()
+                let empty = try XCTUnwrap(table.backgroundView as? NotebookEmptyView)
+                empty.layoutIfNeeded()
+                attach(empty, name: "\(expectedTitle)-cycle-\(cycle)")
+                let labels = try textLabels(in: empty)
+                XCTAssertTrue(labels.contains { $0.text == expectedTitle })
+                for label in labels {
+                    XCTAssertGreaterThan(label.bounds.width, min(280, empty.bounds.width - 64),
+                                         "Empty-state text must use a readable line measure, not the symbol's narrow column")
+                    XCTAssertLessThan(label.bounds.height, 140,
+                                      "Ordinary empty-state copy should not become a tall column of broken words")
+                }
+            }
+        }
+        await store.flushCatalogueCache()
+    }
+
+    func testEmptyStatesFitNarrowPhoneAndIPadAtAccessibilityTextSize() async throws {
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            .first(where: { $0.activationState == .foregroundActive }))
+        let window = try XCTUnwrap(scene.windows.first(where: \.isKeyWindow))
+        let originalRoot = window.rootViewController
+        let host = UIViewController()
+        host.view.backgroundColor = Theme.paperUIColor
+        window.rootViewController = host
+        defer { window.rootViewController = originalRoot; window.layoutIfNeeded() }
+        let empty = NotebookEmptyView()
+        host.view.addSubview(empty)
+        for category in [UIContentSizeCategory.large, .accessibilityExtraExtraExtraLarge] {
+            host.traitOverrides.preferredContentSizeCategory = category
+            for width: CGFloat in [320, 430, 768] {
+                empty.frame = CGRect(x: 0, y: 0, width: width, height: 650)
+                for (title, detail, artwork, action) in [
+                    ("No notes yet", "Tap + or double-tap this page to start one.", NotebookEmptyView.Artwork.symbol("square.and.pencil"), nil),
+                    ("No matching notes", "Try another word or a shorter phrase.", .symbol("magnifyingglass"), nil),
+                    ("Drift", "Choose the same iCloud Drive folder on iPhone and Mac.", .none, "Choose Shared Folder"),
+                ] {
+                    empty.configure(artwork: artwork, title: title, detail: detail, action: action)
+                    await Task.yield()
+                    window.layoutIfNeeded()
+                    empty.layoutIfNeeded()
+                    let labels = try textLabels(in: empty)
+                    for label in labels {
+                        XCTAssertGreaterThanOrEqual(label.bounds.width, min(256, width - 64),
+                                                    "Readable text width at \(width)pt / \(category.rawValue)")
+                        XCTAssertLessThanOrEqual(label.bounds.width, width - 64 + 0.5)
+                        let needed = label.sizeThatFits(CGSize(width: label.bounds.width, height: .greatestFiniteMagnitude))
+                        XCTAssertGreaterThanOrEqual(label.bounds.height + 1, needed.height,
+                                                    "Large text must remain complete and scrollable")
+                    }
+                    let scroll = try XCTUnwrap(empty.subviews.first as? UIScrollView)
+                    let stack = try XCTUnwrap(descendants(of: scroll).first { $0 is UIStackView })
+                    let contentFrame = stack.convert(stack.bounds, to: scroll)
+                    XCTAssertGreaterThanOrEqual(contentFrame.minY, 0)
+                    XCTAssertLessThanOrEqual(contentFrame.maxY, scroll.contentSize.height + 0.5)
+                    if width == 430 { attach(empty, name: "\(title)-\(category.rawValue)") }
+                }
+            }
+        }
+    }
+
+    private func descendants(of view: UIView) -> [UIView] {
+        view.subviews.flatMap { [$0] + descendants(of: $0) }
+    }
+
+    private func textLabels(in view: NotebookEmptyView) throws -> [UILabel] {
+        let stack = try XCTUnwrap(descendants(of: view).compactMap { $0 as? UIStackView }.first)
+        let labels = stack.arrangedSubviews.compactMap { $0 as? UILabel }
+        XCTAssertEqual(labels.count, 2)
+        return labels
+    }
+
+    private func attach(_ view: UIView, name: String) {
+        let image = UIGraphicsImageRenderer(bounds: view.bounds).image { context in
+            Theme.paperUIColor.resolvedColor(with: view.traitCollection).setFill()
+            context.fill(view.bounds)
+            view.drawHierarchy(in: view.bounds, afterScreenUpdates: true)
+        }
+        let attachment = XCTAttachment(image: image)
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+}

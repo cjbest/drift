@@ -49,6 +49,10 @@ final class NotebookEmptyView: UIView {
         center.priority = .defaultLow
         let symbolHeight = symbolView.heightAnchor.constraint(equalToConstant: 48)
         symbolHeight.priority = .defaultHigh
+        // Center alignment does not give multiline labels a wrapping width.
+        // Use the page's available width, keeping body copy comfortably narrow.
+        let detailWidth = detailLabel.widthAnchor.constraint(equalTo: stack.widthAnchor)
+        detailWidth.priority = UILayoutPriority(999)
         NSLayoutConstraint.activate([
             scroll.leadingAnchor.constraint(equalTo: leadingAnchor), scroll.trailingAnchor.constraint(equalTo: trailingAnchor),
             scroll.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor), scroll.bottomAnchor.constraint(equalTo: safeAreaLayoutGuide.bottomAnchor),
@@ -62,6 +66,7 @@ final class NotebookEmptyView: UIView {
             stack.bottomAnchor.constraint(lessThanOrEqualTo: content.bottomAnchor, constant: -24),
             center,
             symbolView.widthAnchor.constraint(equalToConstant: 44), symbolHeight,
+            titleLabel.widthAnchor.constraint(equalTo: stack.widthAnchor), detailWidth,
             detailLabel.widthAnchor.constraint(lessThanOrEqualToConstant: 330),
         ])
     }
