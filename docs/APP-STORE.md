@@ -1,14 +1,16 @@
 # iPhone release copy
 
-Build **0.2 (10)** is live in the **Public Beta** group. App Store Connect showed
-**Testing** on September 18, 2026 after submission, with automatic tester
-notification enabled. The existing public invitation remains active:
+Build **0.2 (11)** is live in the **Public Beta** group. Apple's API confirmed
+**IN_BETA_TESTING** and **APPROVED** on September 20, 2026 at **10:09 PDT**, with
+automatic tester notification enabled. Group membership and the saved testing
+notes were verified separately. The public invitation remains active:
 <https://testflight.apple.com/join/YfEQ1TSH>.
 
-The matching Mac release is **0.2.2**. Build 9 was a development sideload;
-build 10 includes the tested launch and menu fixes. See [the build 10 validation
-record](releases/2026-09-18-build10-validation.md) and [the preceding release
-record](releases/2026-09-18-validation.md).
+The Mac release remains **0.2.2**. Build 11 improves keyboard, editor, and
+notebook transitions and fixes the narrow empty-state text reported in build 10.
+See [the build 11 validation record](releases/2026-09-20-build11-validation.md)
+for exact coverage and limitations; [build 10's record](releases/2026-09-18-build10-validation.md)
+contains the preceding launch and menu work.
 
 ## App information
 
