@@ -92,6 +92,12 @@ list editing, and native undo. UI tests exercise actual typing, immediate back
 navigation, pull-to-read, disappearing controls, search/cancel, keyboard layout,
 and background/relaunch persistence.
 
+For a small recorded smoke run with inexpensive automatic video review, use
+`SIMULATOR_ID=<dedicated-simulator-UUID> ./scripts/smoke-ios.sh` from the repository
+root. It uses Drift Preview and disposable notes, retains passing recordings,
+and writes a report with playable findings. See the [video smoke review](../docs/JANK-AUDIT.md#cheap-video-smoke-review)
+for setup, cost, and coverage limits.
+
 `DRIFT_TEST_FOLDER=/path/to/disposable/notes` bypasses the folder picker in test
 launches. `__APP_TEMP__` uses an app-local temporary folder; combine it with
 `DRIFT_RESET_TEST_FOLDER=1` for a fresh folder. These overrides are for testing.

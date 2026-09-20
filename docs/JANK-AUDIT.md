@@ -96,6 +96,59 @@ Set `RESULT` to the recorded `.xcresult`; create a new local directory for
 `AUDIT` first. Attachments must have been retained during the run: export cannot
 recover uncaptured video. The manifest maps media to tests.
 
+### Cheap video smoke review
+
+Before an iOS release, run the small recorded smoke suite on a dedicated iPhone
+simulator and inspect its observer report:
+
+```sh
+SIMULATOR_ID=<dedicated-simulator-UUID> ./scripts/smoke-ios.sh
+```
+
+Requires Xcode, XcodeGen, Python 3.9+, `ffprobe` (from `brew install ffmpeg`), and
+`GEMINI_API_KEY` in the environment. The simulator needs a working software
+keyboard. This builds the separate **Drift Preview** identity with synthetic
+temporary notes, runs the existing compose/Back, writing/Returns/reopen, and
+search/interrupted-navigation routes, and retains videos of passing tests too.
+It does not change simulator preferences or use the normal app's notebook.
+
+The observer sends those recordings to Gemini 3.8 Flash, using low reasoning and
+one sampled frame per second, with at most three concurrent requests. This is a
+small additional check for obvious visible failures. Our initial experiment
+caught the escaped Return scroll bug at this setting, but missed a keyboard
+appearance change; it does not establish smoothness or approve a release. Keep
+the motion review and functional checks described above. Confirm findings before
+treating them as app defects, and add a regression test when practical.
+
+Evidence defaults to `output/jank-audits/smoke-<UTC time>/`: `smoke.xcresult`,
+build/test logs, and `observer/report.html` plus `report.json`. The HTML report
+plays each video and jumps to a finding's timestamp. It records model settings,
+coverage, reported token usage, elapsed review time, and estimated API cost.
+The initial short-clip pilot cost roughly four cents per minute of video at
+September 2026 rates; actual cost depends on recording length and responses.
+
+Use `--record-only` to capture without uploading, or review retained evidence:
+
+```sh
+python3 scripts/observe-ios.py --xcresult /path/to/smoke.xcresult \
+  --output output/jank-audits/observer-rerun
+```
+
+`--video recording.mp4 --context "intended actions"` also accepts an existing
+synthetic recording. `--dry-run` checks the files and writes a plan without model
+requests. Each run needs a new output directory. The observer refuses more than
+ten total minutes unless `--max-seconds` is increased, and refuses files over
+70 MB rather than silently omitting footage. `--fps 24` is available for a more
+expensive inspection; our pilot did not show consistently better judgment.
+
+Exit status: **0** means no findings observed in the sampled footage, **1** means
+findings to review, and **2** means incomplete coverage or a setup/API failure.
+The smoke wrapper checks all three expected recordings and preserves Xcode's
+failure status. Missing videos, exhausted responses, and malformed timestamps
+are never counted as clear. There are no automatic paid retries. Recordings and
+reports stay in the ignored local audit directory; never use personal notes as
+observer fixtures.
+
 Reuse built bundles for focused reruns. Diagnose setup failures separately; do
 not repeat an unchanged failed startup. Once behavior and motion pass, broaden
 coverage only for a new change, failure, or unresolved concern.

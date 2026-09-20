@@ -193,6 +193,11 @@ Use the normal **Drift** target and the same verified personal membership.
 `Drift Preview` remains a disposable local installation. The product and privacy
 details for App Store Connect are in [APP-STORE.md](APP-STORE.md).
 
+Run the [recorded video smoke review](JANK-AUDIT.md#cheap-video-smoke-review) before
+uploading an iOS candidate. Inspect findings and incomplete coverage alongside
+the functional test result; the observer is additional evidence within the
+existing Jank Audit, not a model-issued release approval.
+
 The public iOS bundle ID is `best.christopher.drift`, the reverse-domain form of
 the owner's `christopher.best` domain. It is registered under the personal team.
 It installs separately from the old `com.drift.notes` development app; see the
