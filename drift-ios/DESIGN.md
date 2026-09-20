@@ -51,9 +51,19 @@ does not establish that the interaction is right.
   (`eaf044e`). Existing empty notes also focus automatically.
 - The first nonblank line is the title inside the same editable document.
 - A newly created note abandoned while empty leaves no list debris.
+  Prepare that omission before Back reveals the notebook, including an immediate
+  return after deleting the last character. Cancelling Back restores the editor;
+  cleanup must preserve competing edits and recovery drafts.
 - Typing keeps the caret comfortably above the keyboard. Keyboard dismissal
   follows the drag interactively. The paper color continues through window,
   navigation, and keyboard transitions without a white flash.
+- The blank paper after the document stays available while editing. Showing
+  or hiding the keyboard changes the visible viewport, preserving a reading
+  position that still fits. Typing in the body must not reflow the distant title.
+  An empty composer keeps its caret and Back control at the top.
+  If first focus needs to clear the top fade, move text and caret together;
+  typing during that movement must remain steady. Reduce Motion keeps immediate
+  caret accommodation.
 - Native undo and selection should remain stable while heading styling changes.
 
 ### Home and search
@@ -73,6 +83,28 @@ does not establish that the interaction is right.
   Dates adapt from time to yesterday, weekday, month/day, and year as needed.
 - Copy and delete are secondary actions on a long-pressed row. They do not
   require permanent editor controls.
+
+## Implementation choices to revisit
+
+These are bounded responses to observed iOS behavior, not universal UI rules.
+
+- **Stable text engine.** `EditorTextView` selects TextKit 1 before loading.
+  Switching engines on first focus jumped the document; the tested TextKit 2
+  path hid lower lines ahead of the keyboard. Revisit this choice only with
+  middle/end focus and first-keystroke recordings that preserve position and text.
+- **Live opening.** `PaperPushAnimator` keeps immediate focus while animating
+  the page; native push still reproduced the keyboard color handoff with the
+  stable text engine. Native Back remains intact. Remove the custom push only
+  after repeated light/dark openings stay continuous; retain interruption,
+  Reduce Motion, and right-to-left behavior. A delayed keyboard is not equivalent.
+- **Presentation before cleanup.** The empty-composer return token prepares the
+  list before reveal and reverses on cancellation. Actual cleanup checks the
+  exact saved version and preserves recovery. Keep the immediate-return,
+  cancelled-Back, and concurrent-recovery regressions when changing this split.
+
+The relevant guardrails live in `EditorCaretLayoutTests`,
+`EditorFocusClearanceTests`, `EmptyComposerReturnTests`, and
+`EmptyComposerCleanupTests`; recordings establish the visual result separately.
 
 ## Refinement allowed by current feedback
 

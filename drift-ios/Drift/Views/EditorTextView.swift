@@ -11,7 +11,7 @@ final class EditorTextView: UITextView, @preconcurrency NSTextStorageDelegate {
     private var pageTopInset: CGFloat = 12
     private var pageHorizontalInset: CGFloat = 20
     private var pageBottomInset: CGFloat = 32
-    private var allowsPageOverscroll = true
+    private var pageHeight: CGFloat?
     private var pendingCaretUpdate = false
     private var pullIsPrimed = false
     private var pullCanToggle = true
@@ -26,7 +26,16 @@ final class EditorTextView: UITextView, @preconcurrency NSTextStorageDelegate {
     }
 
     init() {
-        super.init(frame: .zero, textContainer: nil)
+        // Select TextKit 1 before loading text. Switching engines on first
+        // focus resets the scroll position; TextKit 2 also blanks lower lines
+        // ahead of the rising keyboard on iOS 26.2.
+        let storage = NSTextStorage()
+        let layoutManager = NSLayoutManager()
+        let container = NSTextContainer(size: CGSize(width: 0, height: CGFloat.greatestFiniteMagnitude))
+        container.widthTracksTextView = true
+        storage.addLayoutManager(layoutManager)
+        layoutManager.addTextContainer(container)
+        super.init(frame: .zero, textContainer: container)
         backgroundColor = Theme.paperUIColor
         textColor = Theme.inkUIColor
         tintColor = Theme.accentUIColor
@@ -87,11 +96,11 @@ final class EditorTextView: UITextView, @preconcurrency NSTextStorageDelegate {
         pullLabel.frame = CGRect(x: (bounds.width - size.width) / 2, y: pageTopInset - 42, width: size.width, height: size.height)
     }
 
-    func configurePageInsets(top: CGFloat, horizontal: CGFloat, bottom: CGFloat, allowsOverscroll: Bool) {
+    func configurePageInsets(top: CGFloat, horizontal: CGFloat, bottom: CGFloat, pageHeight: CGFloat) {
         pageTopInset = top
         pageHorizontalInset = horizontal
         pageBottomInset = bottom
-        allowsPageOverscroll = allowsOverscroll
+        self.pageHeight = pageHeight
         applyPageInsets()
     }
 
@@ -100,8 +109,12 @@ final class EditorTextView: UITextView, @preconcurrency NSTextStorageDelegate {
         // move upward into a reading position. Never insert space into text.
         // Even a single-line note gets the complete 76-point retreat. The
         // compact type otherwise leaves a short note unable to hide Back.
-        let pageSpace = max(0, bounds.height - pageTopInset - Theme.editorTitleUIFont().lineHeight + 76)
-        let bottom = allowsPageOverscroll ? max(pageBottomInset, pageSpace) : pageBottomInset
+        // Keep document space tied to the full page while the keyboard changes
+        // only its visible viewport, preserving the chosen reading position.
+        let pageSpace = max(0, (pageHeight ?? bounds.height) - pageTopInset - Theme.editorTitleUIFont().lineHeight + 76)
+        // A blank composer has no reading position to preserve. Extra space
+        // lets UIKit scroll its empty insertion point out of view during focus.
+        let bottom = textStorage.length == 0 ? pageBottomInset : max(pageBottomInset, pageSpace)
         let inset = UIEdgeInsets(top: pageTopInset, left: pageHorizontalInset, bottom: bottom, right: pageHorizontalInset)
         if textContainerInset != inset { textContainerInset = inset }
     }
@@ -128,7 +141,7 @@ final class EditorTextView: UITextView, @preconcurrency NSTextStorageDelegate {
         onPullReadMode?()
     }
 
-    func keepCaretVisibleAfterLayout() {
+    func keepCaretVisibleAfterLayout(animated: Bool = false) {
         guard isFirstResponder, isEditable, !pendingCaretUpdate else { return }
         pendingCaretUpdate = true
         DispatchQueue.main.async { [weak self] in
@@ -147,7 +160,16 @@ final class EditorTextView: UITextView, @preconcurrency NSTextStorageDelegate {
             else { return }
             let maximum = max(0, self.contentSize.height - self.bounds.height)
             offset.y = min(maximum, max(0, offset.y))
-            if abs(offset.y - self.contentOffset.y) > 0.5 { self.setContentOffset(offset, animated: false) }
+            guard abs(offset.y - self.contentOffset.y) > 0.5 else { return }
+            if animated && !UIAccessibility.isReduceMotionEnabled {
+                // Commit the focus destination while animating its presentation,
+                // so immediate typing cannot snap the remaining caret clearance.
+                UIView.animate(withDuration: 0.25, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) {
+                    self.setContentOffset(offset, animated: false)
+                }
+            } else {
+                self.setContentOffset(offset, animated: false)
+            }
         }
     }
 
@@ -189,7 +211,7 @@ final class EditorTextView: UITextView, @preconcurrency NSTextStorageDelegate {
         // Restyling a composition can prematurely commit Chinese/Japanese input.
         guard !isApplyingStyle else { return }
         guard markedTextRange == nil else { return }
-        guard changedRange != nil else { updateTypingStyle(); return }
+        guard let editRange = changedRange else { updateTypingStyle(); return }
         let string = textStorage.string as NSString
         let length = string.length
         let newHeading = firstNonblankLine(in: string)
@@ -200,17 +222,16 @@ final class EditorTextView: UITextView, @preconcurrency NSTextStorageDelegate {
         textStorage.beginEditing()
 
         if length > 0 {
-            if let changedRange {
-                let location = min(changedRange.location, length)
-                let range = NSRange(location: location, length: min(changedRange.length, length - location))
-                applyBodyStyle(to: string.paragraphRange(for: range))
-            }
-            // Reset the prior heading too, including when return/backspace
-            // changes which paragraph is first. This work stays near the edit.
-            let prefixEnd = min(length, max(NSMaxRange(headingRange ?? NSRange()), NSMaxRange(newHeading ?? NSRange())))
-            if prefixEnd > 0 { applyBodyStyle(to: NSRange(location: 0, length: prefixEnd)) }
-            if let newHeading {
-                textStorage.addAttributes(headingAttributes, range: newHeading)
+            let location = min(editRange.location, length)
+            let range = NSRange(location: location, length: min(editRange.length, length - location))
+            let changedParagraph = string.paragraphRange(for: range)
+            applyBodyStyle(to: changedParagraph)
+            // Distant body edits must not invalidate layout back to the title.
+            // Restyle the heading only when it changed or its paragraph was edited.
+            if headingRange != newHeading || newHeading.map({ NSIntersectionRange(changedParagraph, $0).length > 0 }) == true {
+                let prefixEnd = min(length, max(NSMaxRange(headingRange ?? NSRange()), NSMaxRange(newHeading ?? NSRange())))
+                if prefixEnd > 0 { applyBodyStyle(to: NSRange(location: 0, length: prefixEnd)) }
+                if let newHeading { textStorage.addAttributes(headingAttributes, range: newHeading) }
             }
         }
         textStorage.endEditing()
@@ -218,6 +239,8 @@ final class EditorTextView: UITextView, @preconcurrency NSTextStorageDelegate {
         isApplyingStyle = false
         headingRange = newHeading
         changedRange = nil
+        // Refresh text-dependent spacing after styling, before caret scrolling.
+        applyPageInsets()
         updateTypingStyle()
     }
 

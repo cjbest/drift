@@ -216,6 +216,7 @@ final class NoteEditorViewController: UIViewController, UITextViewDelegate {
     private var didAppearOnce = false
     private var initialSearchQuery: String?
     private var deleting = false
+    private var emptyReturnToken: UUID?
     private var lastSavedURL: URL
     private var rememberedConflict = false
     private var renderedStatus: EditorDocumentSession.Status?
@@ -324,7 +325,7 @@ final class NoteEditorViewController: UIViewController, UITextViewDelegate {
         let top = view.safeAreaInsets.top
         let bottom = keyboardIsVisible ? 0 : view.safeAreaInsets.bottom
         editor.configurePageInsets(top: top + 70, horizontal: horizontalInset, bottom: bottom + 24,
-                                   allowsOverscroll: !keyboardIsVisible && !editor.isFirstResponder)
+                                   pageHeight: view.bounds.height)
         // The thumb follows the viewport edge, independently of the title
         // padding and retreating Back control. The viewport ends at the keyboard.
         editor.verticalScrollIndicatorInsets = editor.safeAreaInsets
@@ -359,6 +360,8 @@ final class NoteEditorViewController: UIViewController, UITextViewDelegate {
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+        // A cancelled interactive Back keeps this editor and its file alive.
+        cancelEmptyReturnPresentation()
         if !didAppearOnce {
             didAppearOnce = true
             let openingQuery = initialSearchQuery
@@ -375,6 +378,32 @@ final class NoteEditorViewController: UIViewController, UITextViewDelegate {
         }
     }
 
+    override func willMove(toParent parent: UIViewController?) {
+        // UIKit calls this before attaching the returning notebook, including
+        // an interactive pop. No provider work or irreversible deletion occurs.
+        if parent == nil, didAppearOnce, !deleting, isNew, emptyReturnToken == nil,
+           session.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           session.status != .conflict {
+            if case .failed = session.status {} else {
+                emptyReturnToken = store.beginEmptyComposerReturn(session.snapshot, currentText: session.text)
+            }
+        }
+        super.willMove(toParent: parent)
+    }
+
+    private var savedEmptyComposerSnapshot: NoteSnapshot? {
+        guard isNew, !session.isDirty, !session.isSaving, session.status == .saved,
+              !session.snapshot.isUnsaved, !session.snapshot.recoveredDraft,
+              session.text == session.snapshot.text,
+              session.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return session.snapshot
+    }
+
+    private func cancelEmptyReturnPresentation() {
+        if let token = emptyReturnToken { store.cancelEmptyComposerReturn(token) }
+        emptyReturnToken = nil
+    }
+
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
         refreshTask?.cancel()
@@ -389,16 +418,11 @@ final class NoteEditorViewController: UIViewController, UITextViewDelegate {
         savePosition()
         // A cancelled back swipe never removes this controller from its parent.
         Task { [self] in
+            defer { cancelEmptyReturnPresentation() }
             await session.flush()
-            if isNew, !session.snapshot.isUnsaved, session.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                do {
-                    let fresh = try await store.open(session.snapshot.note)
-                    if fresh.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        try await store.trash(fresh.note)
-                    }
-                } catch {
-                    // Keep the empty document if safe removal cannot be verified.
-                }
+            if let snapshot = savedEmptyComposerSnapshot {
+                do { try await store.trashUnchangedEmptyComposer(snapshot) }
+                catch { /* Preserve the file and restore its row if cleanup fails. */ }
             }
             onNoteChange?()
         }
@@ -406,7 +430,7 @@ final class NoteEditorViewController: UIViewController, UITextViewDelegate {
 
     func textViewDidBeginEditing(_ textView: UITextView) {
         view.setNeedsLayout()
-        editor.keepCaretVisibleAfterLayout()
+        editor.keepCaretVisibleAfterLayout(animated: true)
     }
 
     func textViewDidEndEditing(_ textView: UITextView) {
@@ -470,6 +494,16 @@ final class NoteEditorViewController: UIViewController, UITextViewDelegate {
 
     private func sessionChanged() {
         guard isViewLoaded else { return }
+        if emptyReturnToken != nil {
+            switch session.status {
+            case .failed, .conflict:
+                cancelEmptyReturnPresentation()
+            default:
+                if !session.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    cancelEmptyReturnPresentation()
+                }
+            }
+        }
         defer { view.setNeedsLayout() }
         if lastSavedURL != session.snapshot.note.url {
             let folder = session.snapshot.note.url.deletingLastPathComponent()

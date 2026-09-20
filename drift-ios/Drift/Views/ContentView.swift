@@ -18,6 +18,8 @@ final class NotebookViewController: UIViewController, UITableViewDelegate, UITex
     private let search = UITextField()
     private let chrome = UIStackView()
     private let searchGlass = UIVisualEffectView()
+    private var tableBottomConstraint: NSLayoutConstraint!
+    private var tableKeyboardBottomConstraint: NSLayoutConstraint!
     private var chromeHeightConstraint: NSLayoutConstraint!
     private var searchHeightConstraint: NSLayoutConstraint!
     private let composeButton = PaperIconButton(symbol: "plus", accessibilityLabel: "New Note")
@@ -36,6 +38,7 @@ final class NotebookViewController: UIViewController, UITableViewDelegate, UITex
     private var folderSelection: (id: UUID, url: URL)?
     private var needsRender = false
     private var hasLoaded = false
+    private var isNotebookVisible = false
     private let launchPreferences = LaunchPreferences()
     private var launchPending = true
     private var launchOverride: LaunchDestination?
@@ -114,9 +117,11 @@ final class NotebookViewController: UIViewController, UITableViewDelegate, UITex
         table.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(table)
         view.keyboardLayoutGuide.usesBottomSafeArea = false
+        tableBottomConstraint = table.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+        tableKeyboardBottomConstraint = table.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor)
         NSLayoutConstraint.activate([
             table.leadingAnchor.constraint(equalTo: view.leadingAnchor), table.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            table.topAnchor.constraint(equalTo: view.topAnchor), table.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor),
+            table.topAnchor.constraint(equalTo: view.topAnchor), tableBottomConstraint,
         ])
         configureChrome()
         refreshControl.tintColor = Theme.accentUIColor
@@ -172,17 +177,24 @@ final class NotebookViewController: UIViewController, UITableViewDelegate, UITex
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
+        isNotebookVisible = false
         if let selected = table.indexPathForSelectedRow { table.deselectRow(at: selected, animated: animated) }
-        if needsRender { render() }
+        if needsRender { render(appearing: true) }
         if hasLoaded || store.hasLoadedCatalogue { Task { await refresh() } }
     }
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+        isNotebookVisible = true
         LaunchDiagnostics.record("first_notebook_frame", counts: ["rows": store.notes.count],
                                  flags: ["spinner": activity.isAnimating,
                                          "catalogue_loaded": store.hasLoadedCatalogue], once: true)
         applyLaunchDestinationIfReady()
+    }
+
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        isNotebookVisible = false
     }
 
     override func viewDidLayoutSubviews() {
@@ -399,9 +411,11 @@ final class NotebookViewController: UIViewController, UITableViewDelegate, UITex
         applyLaunchDestinationIfReady()
     }
 
-    private func render() {
+    private func render(appearing: Bool = false) {
         guard isViewLoaded else { return }
-        guard !opening, navigationController?.topViewController === self else { needsRender = true; return }
+        // During viewWillAppear the outgoing editor can still be UIKit's top
+        // controller. Prepare this incoming page before the first pop frame.
+        guard !opening, appearing || navigationController?.topViewController === self else { needsRender = true; return }
         needsRender = false
         let hasFolder = store.folderURL != nil
         chrome.isHidden = !hasFolder
@@ -428,7 +442,10 @@ final class NotebookViewController: UIViewController, UITableViewDelegate, UITex
             snapshot.appendSections([.notes])
             snapshot.appendItems(ids, toSection: .notes)
             snapshot.reconfigureItems(changedIDs)
-            source.apply(snapshot, animatingDifferences: hasLoaded && !store.isLoading && !switchingFolder && !search.isFirstResponder)
+            // Apply changes accumulated behind an editor before the returning
+            // page is revealed. Inserting cleared search results during Back
+            // otherwise makes their rows expand on top of the page transition.
+            source.apply(snapshot, animatingDifferences: isNotebookVisible && hasLoaded && !store.isLoading && !switchingFolder && !search.isFirstResponder)
         }
         let cataloguePending = !hasLoaded && !store.hasLoadedCatalogue && store.notes.isEmpty
         if cataloguePending && store.isLoading {
@@ -470,9 +487,26 @@ final class NotebookViewController: UIViewController, UITableViewDelegate, UITex
     }
 
     @objc private func searchChanged() { clearLaunchRequest(); render() }
-    func textFieldDidBeginEditing(_ textField: UITextField) { updateSearchChrome() }
-    func textFieldDidEndEditing(_ textField: UITextField) { updateSearchChrome() }
+    func textFieldDidBeginEditing(_ textField: UITextField) {
+        updateTableKeyboardAvoidance()
+        updateSearchChrome()
+    }
+    func textFieldDidEndEditing(_ textField: UITextField) {
+        updateTableKeyboardAvoidance()
+        updateSearchChrome()
+    }
     func textFieldShouldReturn(_ textField: UITextField) -> Bool { textField.resignFirstResponder(); return true }
+
+    private func updateTableKeyboardAvoidance() {
+        let followsKeyboard = search.isFirstResponder
+        guard tableKeyboardBottomConstraint.isActive != followsKeyboard else { return }
+        // The editor's keyboard must not shorten the notebook behind it. Keep
+        // those rows laid out before Back uncovers them; only Search owns a
+        // keyboard-avoiding list viewport.
+        NSLayoutConstraint.deactivate([tableBottomConstraint, tableKeyboardBottomConstraint])
+        (followsKeyboard ? tableKeyboardBottomConstraint : tableBottomConstraint).isActive = true
+        view.layoutIfNeeded()
+    }
 
     @objc private func cancelSearch() {
         search.text = ""

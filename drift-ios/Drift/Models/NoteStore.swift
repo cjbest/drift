@@ -21,6 +21,10 @@ final class NoteStore {
     private let worker: FileWorker
     private let listingWorker: FileWorker
     private var bodies: [URL: String] = [:]
+    // Presentation only: retain the actual catalogue until conditional cleanup
+    // succeeds. A new composer with an empty current buffer can still be saving;
+    // its token follows only that session's own successful snapshot/rename.
+    private var emptyComposerReturns: [UUID: NoteSnapshot] = [:]
     private var revision = 0
     private var initialization: Task<Void, Never>?
     private var catalogueRestoration: Task<Void, Never>?
@@ -290,6 +294,12 @@ final class NoteStore {
                 bodies.removeValue(forKey: snapshot.note.url)
                 bodies.removeValue(forKey: savedSourceURL)
             }
+            for (token, returning) in emptyComposerReturns where returning.documentID == snapshot.documentID {
+                // A conflict belongs in the notebook. Never suppress its external
+                // version or keep an old URL hidden after a divergent save.
+                if result.preservedConflict { emptyComposerReturns.removeValue(forKey: token) }
+                else { emptyComposerReturns[token] = result.snapshot }
+            }
             apply(result.snapshot)
             errorMessage = nil
             changed()
@@ -336,6 +346,68 @@ final class NoteStore {
         } catch {
             report(error)
             throw error
+        }
+    }
+
+    /// Prepare the returning list synchronously, without waiting on a provider.
+    /// The caller owns a new composer whose current buffer is empty. Its last
+    /// saved snapshot may still contain the just-deleted character. Only that
+    /// exact version is omitted while its normal asynchronous save completes.
+    func beginEmptyComposerReturn(_ snapshot: NoteSnapshot, currentText: String) -> UUID? {
+        guard !snapshot.recoveredDraft,
+              currentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              snapshot.isUnsaved || (bodies[snapshot.note.url] == snapshot.text && notes.contains(snapshot.note)) else { return nil }
+        let token = UUID()
+        emptyComposerReturns[token] = snapshot
+        changed()
+        return token
+    }
+
+    func cancelEmptyComposerReturn(_ token: UUID) {
+        guard emptyComposerReturns.removeValue(forKey: token) != nil else { return }
+        changed()
+    }
+
+    /// Only an abandoned new composer uses this path. The worker compares disk
+    /// bytes under the move's coordination and leaves all recovery untouched.
+    @discardableResult
+    func trashUnchangedEmptyComposer(_ snapshot: NoteSnapshot) async throws -> Bool {
+        guard !snapshot.isUnsaved, !snapshot.recoveredDraft,
+              snapshot.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              snapshot.text == snapshot.baselineText else { return false }
+        try await requireFolderAccess()
+        do {
+            guard try await worker.trash(snapshot.note, ifUnchangedEmpty: snapshot.text) else {
+                // A concurrent edit must become visible instead of remaining
+                // hidden behind the abandoned composer's old empty snapshot.
+                await refresh()
+                return false
+            }
+            guard snapshot.note.url.deletingLastPathComponent().standardizedFileURL == folderURL?.standardizedFileURL else { return true }
+            revision += 1
+            // An open/refresh may have published a competing recovery while
+            // the worker moved the empty file. Do not remove that newer row.
+            if notes.contains(snapshot.note), bodies[snapshot.note.url] == snapshot.text {
+                notes.removeAll { $0.url == snapshot.note.url }
+                bodies.removeValue(forKey: snapshot.note.url)
+            }
+            canUndoTrash = true
+            errorMessage = nil
+            changed()
+            // Journals stay at their active URL. A recovery arriving during
+            // the move is still discoverable even when its empty file moved.
+            await refresh()
+            await flushCatalogueCache()
+            return true
+        } catch {
+            report(error)
+            throw error
+        }
+    }
+
+    private func isReturningEmptyComposer(_ note: Note) -> Bool {
+        emptyComposerReturns.values.contains {
+            $0.note == note && bodies[note.url] == $0.text
         }
     }
 
@@ -395,9 +467,10 @@ final class NoteStore {
 
     func search(_ query: String) -> [NoteSearchHit] {
         let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return notes.map { NoteSearchHit(note: $0, snippet: nil) } }
+        let visibleNotes = notes.filter { !isReturningEmptyComposer($0) }
+        guard !query.isEmpty else { return visibleNotes.map { NoteSearchHit(note: $0, snippet: nil) } }
         let options: String.CompareOptions = [.caseInsensitive, .diacriticInsensitive]
-        return notes.sorted(by: Note.orderedByRecency).compactMap { note in
+        return visibleNotes.sorted(by: Note.orderedByRecency).compactMap { note in
             let body = bodies[note.url] ?? note.preview
             let match = body.range(of: query, options: options)
             guard note.title.range(of: query, options: options) != nil || match != nil else { return nil }
@@ -947,7 +1020,9 @@ private actor FileWorker {
         throw StoreError.coordinationFailed
     }
 
-    func trash(_ note: Note) throws {
+    @discardableResult
+    func trash(_ note: Note, ifUnchangedEmpty expectedText: String? = nil) throws -> Bool {
+        if let expectedText, !expectedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return false }
         let folder = note.url.deletingLastPathComponent()
         let trashFolder = folder.appendingPathComponent(".drift-trash", isDirectory: true)
         try fm.createDirectory(at: trashFolder, withIntermediateDirectories: true)
@@ -959,9 +1034,16 @@ private actor FileWorker {
         // Record first: interruption can leave harmless metadata, never an untraceable deleted file.
         try coordinatedWrite(recordURL) { try JSONEncoder().encode(record).write(to: $0, options: [.atomic]) }
         do {
-            _ = try coordinatedMove(from: note.url, to: trashedURL)
-            try? drafts.move(from: note.url, to: trashedURL)
+            let moved = try coordinatedMove(from: note.url, to: trashedURL,
+                                            expectedText: expectedText, expectedModified: expectedText == nil ? nil : note.modified,
+                                            requireNoDrafts: expectedText != nil)
+            guard moved == trashedURL else {
+                try? fm.removeItem(at: recordURL)
+                return false
+            }
+            if expectedText == nil { try? drafts.move(from: note.url, to: trashedURL) }
             cache.removeValue(forKey: note.url)
+            return true
         } catch {
             try? fm.removeItem(at: recordURL)
             throw error
@@ -1000,7 +1082,8 @@ private actor FileWorker {
     }
 
     private func coordinatedMove(from source: URL, to destination: URL, expectedText: String? = nil,
-                                  relocateDrafts: Bool = false) throws -> URL {
+                                  expectedModified: Date? = nil,
+                                  relocateDrafts: Bool = false, requireNoDrafts: Bool = false) throws -> URL {
         var coordinationError: NSError?
         var result: Result<URL, Error>?
         coordinator.coordinate(writingItemAt: source, options: .forMoving,
@@ -1008,6 +1091,12 @@ private actor FileWorker {
             result = Result {
                 // A device may edit between the content save and its optional title rename.
                 if let expectedText, try readUTF8(from) != expectedText { return source }
+                if let expectedModified,
+                   try from.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate != expectedModified { return source }
+                // Check existing recovery here, but never hold its lock over
+                // provider I/O. A later journal stays at the active URL; this
+                // conditional path never moves, discards, or aliases it.
+                if requireNoDrafts, try !drafts.readAll(for: source).isEmpty { return source }
                 var movedDraftIDs: Set<UUID> = []
                 if relocateDrafts {
                     guard try from.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true else {

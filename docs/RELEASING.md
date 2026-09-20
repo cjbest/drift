@@ -151,6 +151,10 @@ installs use the checked-in resources and do not require `cargo-about`.
 
 ### Verify and publish
 
+Run the Mac [Jank Audit](JANK-AUDIT.md) on the candidate build. Keep timestamped
+motion evidence, report open findings, and state unavailable coverage. Functional
+tests alone do not establish smoothness.
+
 Before publication, test the finished DMG on a fresh user account or a separate
 Mac. Use a disposable notebook for writing tests. Check first launch, creating
 and reopening a note, choosing an existing notebook, search, keyboard shortcuts,

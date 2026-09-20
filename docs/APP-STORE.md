@@ -46,20 +46,17 @@ No Drift account. No ads. Nothing you don't want.
 
 ## TestFlight: what to test
 
-This update makes opening Drift faster and starting a new note easier.
+This update makes writing and moving around your notebook feel smoother.
 
-- Cold launches show your cached notebook immediately while the shared folder
-  reconnects.
-- Your On Launch choice now also applies after five minutes in the background.
-  Quicker returns keep your current note and place.
-- Long-press the Drift icon on the Home Screen and choose New Note, whether
-  Drift is already running or closed.
-- The notebook's options menu and submenus stay open while note previews load.
+- The keyboard and page arrive together when you start a note.
+- Returning to the notebook keeps rows steady, including after Search.
+- Editing a long note keeps your place as the keyboard opens and closes.
+- Deleting all the text and returning avoids a temporary empty row.
 
-Try your preferred On Launch setting, a quick app switch, and returning after
-five minutes away. Try the Home Screen New Note action while another note is
-open, and check that your previous writing is saved. Try reopening a previously
-used notebook while offline, then reconnect and check your changes.
+Try creating a note, typing immediately, and going back. Open a long note and
+edit near the middle and end; dismiss the keyboard and resume writing. Try
+Search, a cancelled swipe back, and both light and dark appearance. Check that
+your writing is saved when you return or reopen the app.
 
 Please report anything that feels slow, moves unexpectedly, or does not save
 as you expect. Include your device and the steps that led to the problem.
@@ -87,6 +84,9 @@ It has no account, subscription, Drift-hosted service, or demo credentials.
 
 ## Submission checks
 
+- Run the iPhone/iPad [Jank Audit](JANK-AUDIT.md) on the candidate build, including
+  physical-device keyboard and gesture evidence. Report open findings and any
+  unavailable coverage; simulator tests alone do not establish smoothness.
 - Publish and verify the support and privacy URLs before uploading.
 - Use the verified personal Apple team for the app record, App ID, profile,
   certificates, archive, and export. Never use the company team previously used
