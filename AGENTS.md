@@ -9,6 +9,14 @@ Cargo commands there. The native iPhone and iPad app lives in `drift-ios`.
 The normal `Drift` target in `drift-ios` is the main iOS app. `Drift Preview`
 is only a separate installation for disposable QA.
 
+For TestFlight builds, releases, and tester feedback, use the command-line
+[App Store Connect API workflow](docs/TESTFLIGHT-API.md) before browser automation.
+Start with `node scripts/app-store-connect.mjs status` or `feedback`; use
+`scripts/upload-testflight.mjs` for validated archives. Local credentials are
+already configured in `~/.config/drift/app-store-connect/`; reuse them without
+printing or committing private keys. Other machines and CI need their own secret
+configuration. Follow [docs/RELEASING.md](docs/RELEASING.md) for release checks.
+
 - **Keep the notebook quiet.** Preserve warm paper, ink, sepia, and attention
   on the note. Persistent labels, counters, pins, and controls need a concrete
   purpose. Selective typography improvements do not imply a redesign.

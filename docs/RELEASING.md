@@ -199,10 +199,12 @@ It installs separately from the old `com.drift.notes` development app; see the
 [migration instructions](INSTALL.md#iphone-and-ipad). Keep this public identity
 stable for subsequent updates. The Preview target keeps its existing identifier.
 
-Create the Drift app record under the personal team, archive a distribution build,
-and upload it through Xcode Organizer. Select the personal team explicitly during
-archive/export and inspect the resulting signing team before upload. The old
-company development team must not be reused.
+The Drift app record exists under the personal team. Archive a distribution
+build, then use the [TestFlight API workflow](TESTFLIGHT-API.md) to upload it,
+inspect processing and beta status, manage distribution, and retrieve tester
+feedback from the command line. Xcode Organizer remains an alternative. Select
+the personal team explicitly during archive/export and inspect the resulting
+signing team before upload. The old company development team must not be reused.
 
 For the first beta, create an internal TestFlight group first, then an external
 group. Upload for App Store Connect rather than “TestFlight Internal Only.”
