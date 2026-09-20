@@ -1,16 +1,16 @@
 # iPhone release copy
 
-Build **0.2 (11)** is live in the **Public Beta** group. Apple's API confirmed
-**IN_BETA_TESTING** and **APPROVED** on September 20, 2026 at **10:09 PDT**, with
+Build **0.2 (12)** is live in the **Public Beta** group. Apple's API confirmed
+**IN_BETA_TESTING** and **APPROVED** on September 20, 2026 at **11:03 PDT**, with
 automatic tester notification enabled. Group membership and the saved testing
 notes were verified separately. The public invitation remains active:
 <https://testflight.apple.com/join/YfEQ1TSH>.
 
-The Mac release remains **0.2.2**. Build 11 improves keyboard, editor, and
-notebook transitions and fixes the narrow empty-state text reported in build 10.
-See [the build 11 validation record](releases/2026-09-20-build11-validation.md)
-for exact coverage and limitations; [build 10's record](releases/2026-09-18-build10-validation.md)
-contains the preceding launch and menu work.
+The Mac release remains **0.2.2**. Build 12 fixes the page jumping when pressing
+Return after a title or body line. See
+[the build 12 validation record](releases/2026-09-20-build12-validation.md)
+for coverage and limitations. [Build 11's record](releases/2026-09-20-build11-validation.md)
+contains the preceding keyboard, editor, notebook, and empty-state work.
 
 ## App information
 
@@ -48,23 +48,11 @@ No Drift account. No ads. Nothing you don't want.
 
 ## TestFlight: what to test
 
-This update makes writing and moving around your notebook feel smoother.
+Fixes an issue where pressing Return in a note could make the page jump unexpectedly.
 
-- The keyboard and page arrive together when you start a note.
-- Returning to the notebook keeps rows steady, including after Search.
-- Editing a long note keeps your place as the keyboard opens and closes.
-- Deleting all the text and returning avoids a temporary empty row.
-- Empty notebook and search messages use readable spacing instead of wrapping
-  into a narrow column.
-
-Try creating a note, typing immediately, and going back. Open a long note and
-edit near the middle and end; dismiss the keyboard and resume writing. Try
-Search, a cancelled swipe back, and both light and dark appearance. Check that
-your writing is saved when you return or reopen the app.
-
-Please report anything that feels slow, moves unexpectedly, or does not save
-as you expect. Include your device and the steps that led to the problem.
-Feedback screenshots may contain note text; check them before sending.
+Please try adding new lines after the title and within the body, including blank
+lines. Writing should stay in place, and the cursor should stay visible above
+the keyboard.
 
 ## Review instructions
 
