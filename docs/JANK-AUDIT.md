@@ -46,7 +46,7 @@ latency and do not establish immediate-action coverage.
 | Route | iPhone / iPad | Mac | Watch for |
 | --- | --- | --- | --- |
 | Arrive | Cold launch, warm return, list previews arriving | Launch, restore note, new window | Empty flashes, late text, moving rows, wrong initial appearance |
-| Start writing | Compose, type immediately, back, compose again; delete the last character and immediately return; open an empty note | New note, type title/body, close/reopen | Focus delay, first-character reflow, cursor or surface changes, staggered arrival, delayed empty-row removal |
+| Start writing | Compose, type immediately; Return after title/body, blank lines, delete and retype Return; back, compose again; delete the last character and immediately return; open an empty note | New note, type title/body, close/reopen | Focus delay, first-character reflow, newline scroll jumps, cursor or surface changes, staggered arrival, delayed empty-row removal |
 | Open and return | Populated note, back, completed and cancelled edge-back | Quick-open, switch notes, return to previous position | Late title/body, lost feedback, scroll jumps, unfinished transition states |
 | Write and select | Focus a long note in the middle and at the end, type, select across lines, drag keyboard down, resume editing | Long wrapped selection, scroll while selecting, checklist toggle, undo, edit a link | Input lag, uneven selection, caret jumps, reflow, discontinuous dismissal |
 | Read | Scroll both ways, controls retreat/return, pull into/out of Read Mode | Scroll long note, resize wide/narrow, find text | Stutters, bad easing, clipping, overlays, surprise focus or layout shifts |

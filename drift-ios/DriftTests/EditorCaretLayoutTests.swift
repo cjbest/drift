@@ -174,6 +174,66 @@ final class EditorCaretLayoutTests: XCTestCase {
                                  "Typing and dismissal must keep the final line in its chosen position")
         XCTAssertEqual(editor.contentOffset.y, chosenOffset, accuracy: 1,
                        "Returning to reading must preserve the selected page position")
+
+        XCTAssertTrue(editor.becomeFirstResponder())
+        let secondFocusDeadline = ContinuousClock.now.advanced(by: .seconds(3))
+        while controller.view.keyboardLayoutGuide.layoutFrame.height < 100, ContinuousClock.now < secondFocusDeadline {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        try? await Task.sleep(for: .milliseconds(350))
+        let newlineOffset = editor.contentOffset.y
+        var newlineFrames = 0
+        var newlineOffsetDrift: CGFloat = 0
+        var minimumCaretTop = CGFloat.greatestFiniteMagnitude
+        var minimumCaretBottomClearance = CGFloat.greatestFiniteMagnitude
+        let newlineSample = {
+            guard let position = editor.selectedTextRange?.end else { return }
+            let caret = editor.caretRect(for: position)
+            newlineFrames += 1
+            newlineOffsetDrift = max(newlineOffsetDrift, abs(editor.contentOffset.y - newlineOffset))
+            minimumCaretTop = min(minimumCaretTop, caret.minY - editor.contentOffset.y)
+            minimumCaretBottomClearance = min(minimumCaretBottomClearance, editor.bounds.maxY - caret.maxY)
+        }
+        let newlineSampler = EditorViewportSampler(sample: newlineSample)
+        newlineSampler.start()
+        defer { newlineSampler.stop() }
+        editor.insertText("\n")
+        newlineSample()
+        try? await Task.sleep(for: .milliseconds(250))
+        editor.insertText("A new paragraph.")
+        newlineSample()
+        try? await Task.sleep(for: .milliseconds(250))
+        newlineSampler.stop()
+        XCTAssertEqual(editor.text, text + " More.\nA new paragraph.")
+        XCTAssertEqual(editor.selectedRange, NSRange(location: (editor.text as NSString).length, length: 0))
+        XCTAssertGreaterThan(newlineFrames, 10)
+        XCTAssertLessThanOrEqual(newlineOffsetDrift, 1,
+                                 "Return at the end of a long page must retain its chosen reading position")
+        XCTAssertGreaterThanOrEqual(minimumCaretTop, window.safeAreaInsets.top)
+        XCTAssertGreaterThanOrEqual(minimumCaretBottomClearance, 18,
+                                    "The new line must remain above the keyboard throughout Return and typing")
+
+        // Near the keyboard, Return must still reveal the new insertion line.
+        // Preventing the inflated request must not disable genuine scrolling.
+        let endCaret = editor.caretRect(for: try XCTUnwrap(editor.selectedTextRange?.end))
+        editor.setContentOffset(CGPoint(x: 0, y: endCaret.maxY - editor.bounds.height + 22), animated: false)
+        let edgeOffset = editor.contentOffset.y
+        var largestEdgeOffset = edgeOffset
+        let edgeSampler = EditorViewportSampler { largestEdgeOffset = max(largestEdgeOffset, editor.contentOffset.y) }
+        edgeSampler.start()
+        defer { edgeSampler.stop() }
+        editor.insertText("\n")
+        try? await Task.sleep(for: .milliseconds(350))
+        edgeSampler.stop()
+        let edgeCaret = editor.caretRect(for: try XCTUnwrap(editor.selectedTextRange?.end))
+        XCTAssertEqual(editor.text, text + " More.\nA new paragraph.\n")
+        XCTAssertEqual(editor.selectedRange, NSRange(location: (editor.text as NSString).length, length: 0))
+        XCTAssertGreaterThan(editor.contentOffset.y, edgeOffset + 1,
+                             "A new line beyond the comfort margin must actually scroll into view")
+        XCTAssertLessThanOrEqual(largestEdgeOffset - edgeOffset, Theme.bodyUIFont().lineHeight * 2 + 24,
+                                 "Reveal only the new line and normal clearance, not all the blank paper")
+        XCTAssertGreaterThanOrEqual(edgeCaret.minY, editor.bounds.minY + window.safeAreaInsets.top)
+        XCTAssertLessThanOrEqual(edgeCaret.maxY, editor.bounds.maxY - 18 + 0.5)
         await store.flushCatalogueCache()
     }
 
@@ -250,6 +310,145 @@ final class EditorCaretLayoutTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(emptyCaret.minY, editor.bounds.minY + window.safeAreaInsets.top)
         XCTAssertLessThanOrEqual(emptyCaret.maxY, editor.bounds.maxY - 18)
         XCTAssertGreaterThan(back.alpha, 0.95)
+        await store.flushCatalogueCache()
+    }
+
+    func testTitleReturnKeepsPageAndTitleSteadyThroughBlankLinesAndImmediateBodyTyping() async throws {
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("drift-title-return-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let store = NoteStore(folderURL: folder)
+        let snapshot = try await store.makeUnsavedNote()
+        let controller = NoteEditorViewController(store: store, snapshot: snapshot, isNew: true)
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            .first(where: { $0.activationState == .foregroundActive }))
+        let window = try XCTUnwrap(scene.windows.first(where: \.isKeyWindow))
+        let originalRoot = window.rootViewController
+        window.endEditing(true)
+        window.rootViewController = controller
+        defer {
+            window.endEditing(true)
+            window.rootViewController = originalRoot
+            window.layoutIfNeeded()
+        }
+        window.layoutIfNeeded()
+        let editor = try XCTUnwrap(controller.view.subviews.compactMap { $0 as? EditorTextView }.first)
+        XCTAssertTrue(editor.delegate === controller, "Exercise the real selection, styling, and caret callbacks")
+        let focusDeadline = ContinuousClock.now.advanced(by: .seconds(3))
+        while (!editor.isFirstResponder || controller.view.keyboardLayoutGuide.layoutFrame.height < 100),
+              ContinuousClock.now < focusDeadline {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertTrue(editor.isFirstResponder)
+        XCTAssertGreaterThan(controller.view.keyboardLayoutGuide.layoutFrame.height, 100)
+        try? await Task.sleep(for: .milliseconds(400))
+
+        // A short title, a wrapped title, then short again cover first use,
+        // the larger heading layout, and repeated use of the same live editor.
+        for (attempt, title) in ["A new thought", "A longer title with enough words to wrap onto another line", "Another thought"].enumerated() {
+            editor.selectedRange = NSRange(location: 0, length: editor.textStorage.length)
+            editor.insertText(title)
+            try? await Task.sleep(for: .milliseconds(200))
+            editor.setContentOffset(.zero, animated: false)
+            XCTAssertEqual(editor.text, title)
+            XCTAssertEqual(editor.selectedRange, NSRange(location: (title as NSString).length, length: 0))
+
+            func titleRect() -> CGRect {
+                let glyphs = editor.layoutManager.glyphRange(forCharacterRange: NSRange(location: 0, length: 1), actualCharacterRange: nil)
+                let rect = editor.layoutManager.boundingRect(forGlyphRange: glyphs, in: editor.textContainer)
+                return rect.offsetBy(dx: editor.textContainerInset.left, dy: editor.textContainerInset.top - editor.contentOffset.y)
+            }
+            let initialTitle = titleRect()
+            let initialOffset = editor.contentOffset.y
+            var phase = "first-return"
+            var samples: [(phase: String, seconds: Double, titleY: CGFloat, titleHeight: CGFloat, caretY: CGFloat, offset: CGFloat, selection: Int, caretHeight: CGFloat, extraY: CGFloat, extraHeight: CGFloat)] = []
+            let start = CACurrentMediaTime()
+            let sample = {
+                guard let caretPosition = editor.selectedTextRange?.end else { return }
+                let titleFrame = titleRect()
+                let caret = editor.caretRect(for: caretPosition)
+                samples.append((phase, CACurrentMediaTime() - start, titleFrame.minY, titleFrame.height,
+                                caret.minY - editor.contentOffset.y, editor.contentOffset.y, editor.selectedRange.location,
+                                caret.height, editor.layoutManager.extraLineFragmentRect.minY,
+                                editor.layoutManager.extraLineFragmentRect.height))
+            }
+            let sampler = EditorViewportSampler(sample: sample)
+            sampler.start()
+            editor.insertText("\n")
+            sample()
+            try? await Task.sleep(for: .milliseconds(250))
+            XCTAssertEqual(editor.text, title + "\n")
+            let firstBodyCaretY = editor.caretRect(for: try XCTUnwrap(editor.selectedTextRange?.end)).minY - editor.contentOffset.y
+
+            phase = "blank-return"
+            editor.insertText("\n")
+            sample()
+            try? await Task.sleep(for: .milliseconds(250))
+            XCTAssertEqual(editor.text, title + "\n\n")
+            let blankBodyCaretY = editor.caretRect(for: try XCTUnwrap(editor.selectedTextRange?.end)).minY - editor.contentOffset.y
+
+            // Enter followed by typing without waiting must use the same final
+            // body line immediately, including after an already blank paragraph.
+            phase = "immediate-body"
+            editor.insertText("\n")
+            editor.insertText("The body starts here.")
+            sample()
+            try? await Task.sleep(for: .milliseconds(250))
+            let immediateBodyCaretY = editor.caretRect(for: try XCTUnwrap(editor.selectedTextRange?.end)).minY - editor.contentOffset.y
+
+            phase = "body-return"
+            editor.insertText("\n")
+            sample()
+            try? await Task.sleep(for: .milliseconds(250))
+            let bodyReturnCaretY = editor.caretRect(for: try XCTUnwrap(editor.selectedTextRange?.end)).minY - editor.contentOffset.y
+
+            phase = "delete-reenter"
+            editor.deleteBackward()
+            editor.insertText("\n")
+            editor.insertText("The next line.")
+            sample()
+            try? await Task.sleep(for: .milliseconds(250))
+            let expected = title + "\n\n\nThe body starts here.\nThe next line."
+            XCTAssertEqual(editor.text, expected)
+            XCTAssertEqual(editor.selectedRange, NSRange(location: (expected as NSString).length, length: 0))
+            let finalCaretY = editor.caretRect(for: try XCTUnwrap(editor.selectedTextRange?.end)).minY - editor.contentOffset.y
+
+            phase = "middle-body"
+            let splitLocation = (expected as NSString).range(of: "starts here.").location
+            XCTAssertNotEqual(splitLocation, NSNotFound)
+            editor.selectedRange = NSRange(location: splitLocation, length: 0)
+            editor.insertText("\n")
+            sample()
+            try? await Task.sleep(for: .milliseconds(250))
+            sampler.stop()
+            XCTAssertEqual(editor.text, expected.replacingOccurrences(of: "body starts", with: "body \nstarts"),
+                           "Return inside a populated paragraph must preserve all following text")
+            XCTAssertEqual(editor.selectedRange, NSRange(location: splitLocation + 1, length: 0))
+            let middleCaretY = editor.caretRect(for: try XCTUnwrap(editor.selectedTextRange?.end)).minY - editor.contentOffset.y
+            let expectedCaretY = ["first-return": firstBodyCaretY, "blank-return": blankBodyCaretY,
+                                  "immediate-body": immediateBodyCaretY, "body-return": bodyReturnCaretY,
+                                  "delete-reenter": finalCaretY, "middle-body": middleCaretY]
+            XCTAssertGreaterThan(samples.count, 15, "Observe Return and the settled tail across displayed frames")
+            for (stage, expectedY) in expectedCaretY {
+                let frames = samples.filter { $0.phase == stage }
+                XCTAssertGreaterThan(frames.count, 3, "Sample displayed frames after \(stage)")
+                XCTAssertLessThanOrEqual(frames.map { abs($0.offset - initialOffset) }.max() ?? 0, 1,
+                                         "Return must not scroll an already visible short note: \(stage)")
+                XCTAssertLessThanOrEqual(frames.map { abs($0.titleY - initialTitle.minY) }.max() ?? 0, 1,
+                                         "The title must remain in place: \(stage)")
+                XCTAssertLessThanOrEqual(frames.map { abs($0.titleHeight - initialTitle.height) }.max() ?? 0, 1,
+                                         "Return must not temporarily restyle the title: \(stage)")
+                XCTAssertLessThanOrEqual(frames.map { abs($0.caretY - expectedY) }.max() ?? 0, 1,
+                                         "The body caret must occupy its final line immediately: \(stage)")
+            }
+            let attachment = XCTAttachment(string: "phase,seconds,titleY,titleHeight,caretY,offsetY,selection,caretHeight,extraY,extraHeight\n" + samples.map {
+                "\($0.phase),\($0.seconds),\($0.titleY),\($0.titleHeight),\($0.caretY),\($0.offset),\($0.selection),\($0.caretHeight),\($0.extraY),\($0.extraHeight)"
+            }.joined(separator: "\n"))
+            attachment.name = "title-return-frames-\(attempt + 1)"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
         await store.flushCatalogueCache()
     }
 

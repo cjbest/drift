@@ -75,6 +75,25 @@ final class EditorTextView: UITextView, @preconcurrency NSTextStorageDelegate {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
+    override func scrollRectToVisible(_ rect: CGRect, animated: Bool) {
+        var target = rect
+        if isFirstResponder, isEditable, markedTextRange == nil, !isDragging,
+           selectedRange.length == 0, selectedRange.location == textStorage.length,
+           textStorage.length > 0, textContainerInset.bottom > pageBottomInset,
+           layoutManager.extraLineFragmentTextContainer === textContainer {
+            // TextKit 1 includes the entire bottom inset when revealing the
+            // empty line after Return. Our scroll-past-end paper is not text
+            // that needs revealing: retain only the ordinary bottom clearance.
+            // Keep native scrolling for an insertion point below the keyboard.
+            let textBottom = textContainerInset.top + max(
+                layoutManager.usedRect(for: textContainer).maxY,
+                layoutManager.extraLineFragmentRect.maxY)
+            let bottom = min(target.maxY, textBottom + pageBottomInset)
+            if bottom > target.minY { target.size.height = bottom - target.minY }
+        }
+        super.scrollRectToVisible(target, animated: animated)
+    }
+
     override func didMoveToWindow() {
         super.didMoveToWindow()
         updatePaperAppearance()

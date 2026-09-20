@@ -136,6 +136,36 @@ final class JankAuditUITests: XCTestCase {
         }
     }
 
+    func testNewlinesKeepShortPageSteadyRecording() throws {
+        try launchFixture()
+        for attempt in 1...3 {
+            app.buttons["new-note"].tap()
+            let page = editor()
+            requireTypingKeyboard()
+            let title = "Return check \(attempt)"
+            page.typeText(title)
+            recordingTail("title-before-return-\(attempt)")
+            page.typeText("\n")
+            recordingTail("title-return-\(attempt)")
+            XCTAssertTrue(app.buttons["editor-back"].isHittable,
+                          "A newline that fits must not scroll the title and Back offscreen")
+            page.typeText("A first body line.\n\nA second line.")
+            recordingTail("body-and-blank-returns-\(attempt)")
+            XCTAssertTrue(app.buttons["editor-back"].isHittable)
+            // Reverse the newline immediately, then type through the next one.
+            page.typeText("\n\u{8}\nStill writing.")
+            let expected = title + "\nA first body line.\n\nA second line.\nStill writing."
+            XCTAssertEqual(page.value as? String, expected)
+            recordingTail("reversed-return-and-immediate-typing-\(attempt)")
+            XCTAssertTrue(app.buttons["editor-back"].isHittable)
+            back()
+            row(title).tap()
+            XCTAssertEqual(editor().value as? String, expected)
+            recordingTail("saved-page-reopened-\(attempt)")
+            back()
+        }
+    }
+
     func testSearchCancelledBackAndKeyboardDismissalRecording() throws {
         try launchFixture()
         let originalContents = try notebookContents()
