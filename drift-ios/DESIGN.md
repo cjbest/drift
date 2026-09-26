@@ -64,7 +64,12 @@ does not establish that the interaction is right.
   If first focus needs to clear the top fade, move text and caret together;
   typing during that movement must remain steady. Reduce Motion keeps immediate
   caret accommodation.
-- Native undo and selection should remain stable while heading styling changes.
+- UIKit owns the editable text gestures and menu: long press positions the
+  caret, double tap selects a word, and triple tap selects a paragraph. Tapping
+  the caret exposes Select and Select All. Preserve the system's suggested
+  actions when adding the Note submenu; compare against a plain `UITextView`
+  before replacing native behavior. Undo and selection remain stable while
+  heading styling changes.
 
 ### Home and search
 

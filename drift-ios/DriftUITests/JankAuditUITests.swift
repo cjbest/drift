@@ -131,6 +131,16 @@ final class JankAuditUITests: XCTestCase {
         }
     }
 
+    private func tapEditMenuAction(_ title: String) {
+        let item = app.menuItems[title].firstMatch
+        let button = app.buttons[title].firstMatch
+        waitFor("The native \(title) action must be available") {
+            (item.exists && item.isHittable) || (button.exists && button.isHittable)
+        }
+        if item.exists && item.isHittable { item.tap() }
+        else { button.tap() }
+    }
+
     private func longPressKeepsPaperSteady(_ page: XCUIElement, at fraction: Double,
                                          name: String) throws {
         let log = folder.appendingPathComponent("selection-audit.jsonl")
@@ -199,15 +209,6 @@ final class JankAuditUITests: XCTestCase {
             guard let data = try? Data(contentsOf: log) else { return nil }
             return try? selectionEvents(in: data).last
         }
-        func editMenuAction(_ title: String) {
-            let item = app.menuItems[title].firstMatch
-            let button = app.buttons[title].firstMatch
-            waitFor("The native \(title) action must be available") {
-                (item.exists && item.isHittable) || (button.exists && button.isHittable)
-            }
-            if item.exists && item.isHittable { item.tap() }
-            else { button.tap() }
-        }
 
         // Select a word through UIKit, not by injecting a selected range or
         // writing the clipboard from the test runner.
@@ -221,7 +222,7 @@ final class JankAuditUITests: XCTestCase {
         let expectedCopy = (originalText as NSString).substring(with: range)
         XCTAssertFalse(expectedCopy.isEmpty)
         recordingTail("native-word-selection")
-        editMenuAction("Copy")
+        tapEditMenuAction("Copy")
 
         // The margin belongs to the scroll view, away from the text and its
         // selection handles. Keep the selection while moving its viewport.
@@ -249,10 +250,50 @@ final class JankAuditUITests: XCTestCase {
         let composer = editor()
         requireTypingKeyboard()
         composer.coordinate(withNormalizedOffset: CGVector(dx: 0.35, dy: 0.25)).press(forDuration: 1.1)
-        editMenuAction("Paste")
+        tapEditMenuAction("Paste")
         XCTAssertEqual(composer.value as? String, expectedCopy,
                        "Native Copy and Paste must preserve the exact selected substring")
         recordingTail("native-copy-pasted-into-disposable-note")
+    }
+
+    func testNativeSelectAllCopiesWholeNoteRecording() throws {
+        try launchFixture(selectionAudit: true)
+        let originalContents = try notebookContents()
+        row("Long walk").tap()
+        let page = editor()
+        let originalText = try XCTUnwrap(page.value as? String)
+        let log = folder.appendingPathComponent("selection-audit.jsonl")
+        page.coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0.25)).tap()
+        requireTypingKeyboard()
+        let caret = page.coordinate(withNormalizedOffset: CGVector(dx: 0.4, dy: 0.45))
+        caret.press(forDuration: 1.1)
+        caret.tap()
+        recordingTail("native-caret-menu-with-select-all")
+        tapEditMenuAction("Select All")
+        waitFor("Native Select All must cover the complete note") {
+            guard let data = try? Data(contentsOf: log),
+                  let selection = try? self.selectionEvents(in: data).last else { return false }
+            return selection.location == 0 && selection.length == (originalText as NSString).length
+        }
+        let selection = XCTAttachment(data: try Data(contentsOf: log), uniformTypeIdentifier: "public.json")
+        selection.name = "native-select-all-range"
+        selection.lifetime = .keepAlways
+        add(selection)
+        tapEditMenuAction("Copy")
+        XCTAssertEqual(page.value as? String, originalText)
+        let edge = app.coordinate(withNormalizedOffset: CGVector(dx: 0.005, dy: 0.5))
+        edge.press(forDuration: 0.05,
+                   thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)))
+        XCTAssertTrue(app.tables["notes-list"].waitForExistence(timeout: 5))
+        XCTAssertEqual(try notebookContents(), originalContents)
+        app.buttons["new-note"].tap()
+        let composer = editor()
+        requireTypingKeyboard()
+        composer.coordinate(withNormalizedOffset: CGVector(dx: 0.35, dy: 0.25)).press(forDuration: 1.1)
+        tapEditMenuAction("Paste")
+        XCTAssertEqual(composer.value as? String, originalText,
+                       "Copying the entire native selection must preserve every character and newline")
+        recordingTail("native-whole-note-pasted")
     }
 
     func testRepeatedBlankComposeAndReturnRecording() throws {
