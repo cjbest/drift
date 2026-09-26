@@ -36,6 +36,51 @@ async function text(page: any, value: string) {
 const saved = (page: any, path: string) =>
   page.evaluate((p: string) => (window as any).__mockFS.get(p), path);
 
+async function holdSaves(page: any) {
+  await page.evaluate(() => {
+    const w = window as any;
+    const invoke = w.__TAURI_INTERNALS__.invoke;
+    const waiting: (() => void)[] = [];
+    let held = true;
+    w.__releaseSaves = () => {
+      held = false;
+      waiting.forEach((resolve) => resolve());
+    };
+    w.__TAURI_INTERNALS__.invoke = async (command: string, args: unknown) => {
+      if (command === "save_note" && held)
+        await new Promise<void>((resolve) => waiting.push(resolve));
+      return invoke(command, args);
+    };
+  });
+}
+
+test("a new note receives immediate writing while the previous save is pending", async ({ page }) => {
+  await open(page, "Shopping");
+  await holdSaves(page);
+  await page.keyboard.press("Meta+End");
+  await page.keyboard.insertText(" and tea");
+  await page.keyboard.press("Meta+n");
+  await page.keyboard.insertText("New page\n\nIndependent writing");
+  await expect(page.locator(".cm-content")).not.toContainText("Shopping");
+  await expect(page.locator(".cm-content")).toContainText("Independent writing");
+  await page.evaluate(() => (window as any).__releaseSaves());
+  await expect.poll(() => saved(page, "Shopping.md")).toBe("Shopping\n\nCoffee and bread and tea");
+  await expect.poll(() => saved(page, "New page.md")).toBe("New page\n\nIndependent writing");
+});
+
+test("rapid new notes keep separate writing while earlier saves are pending", async ({ page }) => {
+  await holdSaves(page);
+  for (const title of ["First page", "Second page", "Third page"]) {
+    await page.keyboard.press("Meta+n");
+    await page.keyboard.insertText(title + "\n\nOnly " + title);
+  }
+  await expect(page.locator(".cm-content")).toContainText("Only Third page");
+  await expect(page.locator(".cm-content")).not.toContainText("First page");
+  await page.evaluate(() => (window as any).__releaseSaves());
+  for (const title of ["First page", "Second page", "Third page"])
+    await expect.poll(() => saved(page, title + ".md")).toBe(title + "\n\nOnly " + title);
+});
+
 test("full text search opens a distant match and Escape restores focus", async ({
   page,
 }) => {
@@ -97,7 +142,7 @@ test("switching notes flushes pending text and undo never crosses documents", as
     .poll(() => saved(page, "Shopping.md"))
     .toBe("Shopping\n\nCoffee and bread");
 });
-test("save failure blocks navigation, keeps draft, and Retry works", async ({
+test("a failed background save keeps both drafts and Retry saves both", async ({
   page,
 }) => {
   await page.evaluate(() => {
@@ -105,13 +150,15 @@ test("save failure blocks navigation, keeps draft, and Retry works", async ({
   });
   await text(page, "Keep this\nImportant writing");
   await page.keyboard.press("Meta+n");
+  await page.keyboard.insertText("New writing\nBelongs on the new page");
   await expect(page.getByRole("alert")).toContainText("Saving failed");
-  await expect(page.locator(".cm-content")).toContainText("Important writing");
+  await expect(page.locator(".cm-content")).toContainText("Belongs on the new page");
+  await expect(page.locator(".cm-content")).not.toContainText("Important writing");
   expect(
     await page.evaluate(() =>
-      Object.keys(localStorage).some((k) => k.includes("draft:")),
+      Object.keys(localStorage).filter((k) => k.includes("draft:")).length,
     ),
-  ).toBe(true);
+  ).toBe(2);
   await page.evaluate(() => {
     (window as any).__failSave = false;
   });
@@ -119,7 +166,41 @@ test("save failure blocks navigation, keeps draft, and Retry works", async ({
   await expect
     .poll(() => saved(page, "Keep this.md"))
     .toContain("Important writing");
+  await expect.poll(() => saved(page, "New writing.md")).toBe("New writing\nBelongs on the new page");
+  await expect(page.getByRole("alert")).toHaveCount(0);
 });
+test("save failure still blocks opening an existing note", async ({ page }) => {
+  await page.evaluate(() => { (window as any).__failSave = true; });
+  await text(page, "Keep this\nImportant writing");
+  await page.keyboard.press("Meta+p");
+  await page.getByRole("combobox").fill("Shopping");
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("alert")).toContainText("Saving failed");
+  await expect(page.locator(".cm-content")).toContainText("Important writing");
+});
+
+for (const action of ["menu-close-window", "prepare-quit"]) {
+  test(`${action} waits for offscreen drafts and survives their save failure`, async ({ page }) => {
+    await page.evaluate(() => { (window as any).__failSave = true; });
+    await text(page, "Offscreen draft\nKeep these words");
+    await page.evaluate(() => (window as any).__emit("menu-new-note"));
+    await expect(page.locator(".cm-content")).not.toContainText("Keep these words");
+    await page.evaluate((event) => (window as any).__emit(event), action);
+    await expect(page.getByRole("alert")).toContainText(action === "prepare-quit" ? "stay open" : "Saving failed");
+    expect(await page.evaluate(() => (window as any).__destroyed || (window as any).__quitAck)).toBe(false);
+    await page.evaluate(() => {
+      (window as any).__failSave = false;
+      (window as any).__emit("quit-cancelled");
+    });
+    await holdSaves(page);
+    await page.evaluate((event) => (window as any).__emit(event), action);
+    await page.waitForTimeout(100);
+    expect(await page.evaluate(() => (window as any).__destroyed || (window as any).__quitAck)).toBe(false);
+    await page.evaluate(() => (window as any).__releaseSaves());
+    await expect.poll(() => page.evaluate(() => (window as any).__destroyed || (window as any).__quitAck)).toBe(true);
+    expect(await saved(page, "Offscreen draft.md")).toBe("Offscreen draft\nKeep these words");
+  });
+}
 test("crash reload restores an unsaved recovery draft", async ({ page }) => {
   await page.evaluate(() => {
     (window as any).__failSave = true;

@@ -104,11 +104,7 @@ function App() {
     quitTask = (async () => {
       await booted;
       try {
-        await Promise.all(
-          Array.from(new Set([...sessions.values(), active()]), (s) =>
-            queue.flush(s),
-          ),
-        );
+        await flushSessions();
         if (prefix)
           storage("last-note", pendingOpen ?? { path: active().path, id: active().id });
         await invoke("quit_ready", { label: appWindow.label });
@@ -241,10 +237,19 @@ function App() {
     clearTimeout(timer);
     timer = setTimeout(() => void save(), 450);
   }
+  async function flushSessions() {
+    // New Note can create another dirty session while earlier writes are pending.
+    // Retry, Close, and Quit must also finish any drafts left offscreen.
+    do {
+      await Promise.all(
+        Array.from(new Set([...sessions.values(), active()]), (s) => queue.flush(s)),
+      );
+    } while ([...sessions.values(), active()].some(dirty));
+  }
   async function save() {
     clearTimeout(timer);
     try {
-      await queue.flush(active());
+      await flushSessions();
       if (retryKind() === "save") setError("");
       return true;
     } catch (e) {
@@ -319,20 +324,16 @@ function App() {
       navigating = false;
     }
   }
-  async function newNote() {
-    if (navigating) return;
-    navigating = true;
-    try {
-      if (await save()) {
-        pendingOpen = undefined;
-        retryOpenPath = undefined;
-        await activate(fresh());
-      }
-    } catch (e) {
-      report(e);
-    } finally {
-      navigating = false;
-    }
+  function newNote() {
+    if (navigating || leaving()) return;
+    const previous = active();
+    sessions.set(previous.id, previous);
+    pendingOpen = undefined;
+    retryOpenPath = undefined;
+    // Change the editor's owner before yielding, so immediate typing or paste
+    // belongs to the new page even when saving the previous page is slow.
+    void activate(fresh()).catch(report);
+    void save();
   }
   function toggleShortcuts() {
     if (shortcuts()) {

@@ -40,6 +40,9 @@ notebook before development continued. No work-note editing was part of testing.
 
 - Separate document sessions, serialized writes, and document-specific undo.
   A save acknowledges only its own snapshot; typing during a write remains dirty.
+  New Note changes the editor's document immediately, before saving the previous
+  page, so rapid typing and pasting belong to the new page. Retry, Close, and Quit
+  flush every retained session, including failed saves from pages left offscreen.
 - Synchronous browser recovery on edits, disk recovery before writing, atomic
   replacement, and independent saved history for incoming and previous versions.
 - macOS file coordination for replacement, with blocking I/O off the UI/runtime
