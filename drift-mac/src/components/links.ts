@@ -1,6 +1,6 @@
-import type { EditorState } from "@codemirror/state";
+import { EditorSelection, type EditorState } from "@codemirror/state";
 import { syntaxTree } from "@codemirror/language";
-import { hoverTooltip } from "@codemirror/view";
+import { EditorView, hoverTooltip } from "@codemirror/view";
 
 export interface NoteLink {
   from: number;
@@ -165,6 +165,28 @@ export function compactLinkCursor(target: HTMLElement, event: MouseEvent) {
   }
   return closest.position;
 }
+
+// Supply the widget's exact source position to CodeMirror's mouse gesture
+// owner. Handling mousedown ourselves would reveal the link but swallow the
+// drag, its edge scrolling, and its eventual selection for Copy.
+export const compactLinkSelection = EditorView.mouseSelectionStyle.of((view, event) => {
+  if (event.button !== 0 || event.metaKey || event.shiftKey || event.altKey || event.ctrlKey)
+    return null;
+  const target = (event.target as HTMLElement).closest<HTMLElement>("[data-compact-link]");
+  if (!target) return null;
+  let anchor = compactLinkCursor(target, event);
+  return {
+    get(current) {
+      const head = current === event
+        ? anchor
+        : view.posAtCoords({ x: current.clientX, y: current.clientY }, false) ?? anchor;
+      return EditorSelection.single(anchor, head);
+    },
+    update(update) {
+      if (update.docChanged) anchor = update.changes.mapPos(anchor);
+    },
+  };
+});
 
 export const linkPreview = hoverTooltip(
   (view, pos) => {

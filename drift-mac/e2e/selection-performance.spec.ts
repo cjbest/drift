@@ -193,3 +193,47 @@ test("selection highlights follow rewraps, scrolling, edits, and expanding links
     text.slice(paragraph, paragraph + 20) + inserted + text.slice(paragraph + 20, paragraph + 300),
   );
 });
+
+test("drag selection survives edge scrolling, reversal, and copying after scrolling away", async ({ page }) => {
+  await page.setViewportSize({ width: 600, height: 750 });
+  await openNote(page, longNote);
+  const anchor = longNote.indexOf("Paragraph 001") + 5;
+  const start = await page.evaluate((anchor) => {
+    const rect = (window as any).__selectionView.coordsAtPos(anchor);
+    return { x: rect.left, y: (rect.top + rect.bottom) / 2 };
+  }, anchor);
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(280, 738, { steps: 20 });
+  await expect.poll(() => page.locator(".cm-scroller").evaluate(el => el.scrollTop))
+    .toBeGreaterThan(200);
+  const forwardHead = await page.evaluate(() => (window as any).__selectionView.state.selection.main.head);
+  expect(forwardHead).toBeGreaterThan(anchor);
+  await page.mouse.move(280, 45, { steps: 15 });
+  await expect.poll(() => page.evaluate(() => (window as any).__selectionView.state.selection.main.head))
+    .toBeLessThan(forwardHead);
+  await page.mouse.move(280, 300, { steps: 8 });
+  await page.mouse.up();
+  await settleSelection(page);
+
+  const selected = await page.evaluate(() => {
+    const v = (window as any).__selectionView;
+    const r = v.state.selection.main;
+    return { anchor: r.anchor, head: r.head, text: v.state.sliceDoc(r.from, r.to) };
+  });
+  expect(selected.anchor).toBe(anchor);
+  expect(selected.text.length).toBeGreaterThan(20);
+  expect(await copiedText(page)).toBe(selected.text);
+  await page.mouse.wheel(0, 1600);
+  await expect.poll(() => page.locator(".cm-scroller").evaluate(el => el.scrollTop))
+    .toBeGreaterThan(1000);
+  await settleSelection(page);
+  const top = await page.locator(".cm-scroller").evaluate(el => el.scrollTop);
+  expect(await copiedText(page)).toBe(selected.text);
+  await settleSelection(page);
+  expect(await page.locator(".cm-scroller").evaluate(el => el.scrollTop)).toBeCloseTo(top, 0);
+  expect(await page.evaluate(() => {
+    const r = (window as any).__selectionView.state.selection.main;
+    return { anchor: r.anchor, head: r.head };
+  })).toEqual({ anchor: selected.anchor, head: selected.head });
+});

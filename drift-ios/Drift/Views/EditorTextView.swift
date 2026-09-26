@@ -167,7 +167,10 @@ final class EditorTextView: UITextView, @preconcurrency NSTextStorageDelegate {
             guard let self else { return }
             self.pendingCaretUpdate = false
             guard self.isFirstResponder, self.isEditable, !self.isDragging,
-                  let selection = self.selectedTextRange else { return }
+                  let selection = self.selectedTextRange, selection.isEmpty else { return }
+            // A range's end is its larger document offset, not necessarily the
+            // handle being dragged. UIKit owns selection autoscroll; revealing
+            // that ordered end here pulls a long selection away from its start.
             self.layoutManager.ensureLayout(for: self.textContainer)
             let caret = self.caretRect(for: selection.end)
             guard !caret.isNull, caret.height > 0 else { return }

@@ -4,6 +4,72 @@ import UIKit
 
 @MainActor
 final class EditorCaretLayoutTests: XCTestCase {
+    func testCaretMaintenanceDoesNotScrollAwayFromStartOfLongSelection() async throws {
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            .first(where: { $0.activationState == .foregroundActive }))
+        let window = try XCTUnwrap(scene.windows.first(where: \.isKeyWindow))
+        let originalRoot = window.rootViewController
+        let controller = UIViewController()
+        let editor = EditorTextView()
+        editor.translatesAutoresizingMaskIntoConstraints = false
+        controller.view.addSubview(editor)
+        NSLayoutConstraint.activate([
+            editor.leadingAnchor.constraint(equalTo: controller.view.leadingAnchor),
+            editor.trailingAnchor.constraint(equalTo: controller.view.trailingAnchor),
+            editor.topAnchor.constraint(equalTo: controller.view.topAnchor),
+            editor.bottomAnchor.constraint(equalTo: controller.view.keyboardLayoutGuide.topAnchor),
+        ])
+        window.endEditing(true)
+        window.rootViewController = controller
+        defer {
+            window.endEditing(true)
+            window.rootViewController = originalRoot
+            window.layoutIfNeeded()
+        }
+        let text = "Field notes\n\n" + (1...45).map {
+            "Observation \($0): a quiet paragraph with enough words to wrap across several lines."
+        }.joined(separator: "\n\n")
+        editor.loadText(text)
+        editor.configurePageInsets(top: 140, horizontal: 20, bottom: 24, pageHeight: window.bounds.height)
+        window.layoutIfNeeded()
+        XCTAssertTrue(editor.becomeFirstResponder())
+        try? await Task.sleep(for: .milliseconds(500))
+        window.layoutIfNeeded()
+        editor.layoutManager.ensureLayout(for: editor.textContainer)
+        let start = (text as NSString).range(of: "Observation 14:").location
+        let end = (text as NSString).range(of: "Observation 42:").location
+        let selection = NSRange(location: start, length: end - start)
+        editor.selectedRange = selection
+        await drainMainQueue()
+        let startPosition = try XCTUnwrap(editor.selectedTextRange?.start)
+        let endPosition = try XCTUnwrap(editor.selectedTextRange?.end)
+        let startCaret = editor.caretRect(for: startPosition)
+        let endCaret = editor.caretRect(for: endPosition)
+        let chosenOffset = startCaret.minY - 140
+        XCTAssertGreaterThan(endCaret.minY - startCaret.minY, editor.bounds.height * 2,
+                             "Exercise a selection spanning several screens")
+
+        for attempt in 0..<3 {
+            editor.setContentOffset(CGPoint(x: 0, y: chosenOffset), animated: false)
+            editor.keepCaretVisibleAfterLayout()
+            await drainMainQueue()
+            XCTAssertEqual(editor.contentOffset.y, chosenOffset, accuracy: 1,
+                           "Caret maintenance must leave the active selection handle to UIKit (attempt \(attempt))")
+            XCTAssertEqual(editor.selectedRange, selection)
+        }
+
+        // A queued insertion-point update must also yield if a selection begins
+        // before it executes, as it can during a fast drag or Select All.
+        editor.selectedRange = NSRange(location: start, length: 0)
+        editor.setContentOffset(CGPoint(x: 0, y: chosenOffset), animated: false)
+        editor.keepCaretVisibleAfterLayout()
+        editor.selectedRange = selection
+        await drainMainQueue()
+        XCTAssertEqual(editor.contentOffset.y, chosenOffset, accuracy: 1,
+                       "Pending caret work must not pull a new selection toward its ordered end")
+        XCTAssertEqual(editor.selectedRange, selection)
+    }
+
     func testFirstCaretUpdateKeepsScrolledPageAndCurrentLayoutEngine() async throws {
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
             .first(where: { $0.activationState == .foregroundActive }))

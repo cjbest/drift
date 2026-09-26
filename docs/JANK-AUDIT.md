@@ -84,6 +84,9 @@ compose/Search/neighbors and [EmptyComposerAuditUITests](../drift-ios/DriftUITes
 for delete/return/cancel. Hosted tests cover races too quick for automation;
 recordings establish visual continuity separately. See the [iOS test workflow](../drift-ios/README.md#test)
 and desktop `drift-mac/e2e`; run npm/Cargo from `drift-mac`.
+Finish native desktop builds before browser recordings: Vite watches generated
+HTML under `src-tauri/target`, so a concurrent Cargo/Tauri build can reload the
+page and discard an active selection even when frontend sources are unchanged.
 
 Retain successful recordings too. Export an existing result without rerunning:
 

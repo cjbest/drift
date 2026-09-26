@@ -1,6 +1,6 @@
 import { onMount, onCleanup, createEffect, createSignal } from "solid-js";
 import { open } from "@tauri-apps/plugin-shell";
-import { Annotation, EditorState, Transaction } from "@codemirror/state";
+import { Annotation, EditorSelection, EditorState, Transaction } from "@codemirror/state";
 import {
   EditorView,
   keymap,
@@ -33,7 +33,7 @@ import {
   SearchQuery,
 } from "@codemirror/search";
 import { notebookMarkdown, toggleList, toggleCheckbox } from "./markdown";
-import { compactLinkCursor, linkPreview } from "./links";
+import { compactLinkSelection, linkPreview } from "./links";
 import { steadySelection } from "./selection";
 import { checklistShorthand } from "./checklist";
 import "./Editor.css";
@@ -204,6 +204,7 @@ export function Editor(props: Props) {
     EditorView.scrollMargins.of(() => ({ top: 52, bottom: 64 })),
     drawSelection({ cursorBlinkRate: 0 }),
     steadySelection,
+    compactLinkSelection,
     linkPreview,
     tooltips({
       tooltipSpace: () => ({
@@ -286,21 +287,11 @@ export function Editor(props: Props) {
             );
             return true;
           }
-          if (
-            target.dataset.compactLink &&
-            !e.metaKey &&
-            !e.shiftKey &&
-            !e.altKey &&
-            !e.ctrlKey
-          ) {
-            e.preventDefault();
-            const pos = compactLinkCursor(target, e);
-            v.focus();
-            v.dispatch({ selection: { anchor: pos } });
-            return true;
-          }
         }
-        if ((e.target as HTMLElement).closest(".checkbox-marker")) {
+        if (
+          e.button === 0 && !e.metaKey && !e.shiftKey && !e.altKey && !e.ctrlKey &&
+          (e.target as HTMLElement).closest(".checkbox-marker")
+        ) {
           e.preventDefault();
           const pos = v.posAtCoords({ x: e.clientX, y: e.clientY });
           if (pos !== null) {
@@ -344,6 +335,24 @@ export function Editor(props: Props) {
         extensions: extensions(),
       }),
       parent: container,
+      dispatchTransactions(transactions, editor) {
+        if (!transactions.length) return;
+        const state = transactions[transactions.length - 1].state;
+        const selection = state.selection;
+        // CodeMirror 6.5.4 can map a wholly replaced selection to reversed
+        // from/to bounds, including selections later restored from history.
+        // Correct it before the view sees the update. Use the mapped head as
+        // a caret rather than selecting the replacement, and keep the repair
+        // out of history. Remove once upstream mapping guarantees valid bounds.
+        if (selection.ranges.some((range) => range.from > range.to)) {
+          editor.update([...transactions, state.update({
+            selection: EditorSelection.create(selection.ranges.map((range) =>
+              range.from > range.to ? EditorSelection.cursor(range.head) : range,
+            ), selection.mainIndex),
+            annotations: Transaction.addToHistory.of(false),
+          })]);
+        } else editor.update(transactions);
+      },
     });
     const scroll = () => {
       props.onScrollPastTitle((view?.scrollDOM.scrollTop ?? 0) > 34);
@@ -394,11 +403,18 @@ export function Editor(props: Props) {
       });
       view.focus();
     } else if (view.state.doc.toString() !== text) {
-      const head = Math.min(view.state.selection.main.head, text.length),
-        scroll = view.scrollDOM.scrollTop;
+      const previous = view.state.doc.toString(), scroll = view.scrollDOM.scrollTop;
+      // Map both selection ends through the changed text. Replacing the entire
+      // document and resetting the caret discarded an active selection whenever
+      // a clean note refreshed from another device, even for an appended line.
+      let from = 0, oldTo = previous.length, newTo = text.length;
+      while (from < oldTo && from < newTo && previous[from] === text[from]) from++;
+      while (oldTo > from && newTo > from && previous[oldTo - 1] === text[newTo - 1]) {
+        oldTo--;
+        newTo--;
+      }
       view.dispatch({
-        changes: { from: 0, to: view.state.doc.length, insert: text },
-        selection: { anchor: head },
+        changes: { from, to: oldTo, insert: text.slice(from, newTo) },
         annotations: [external.of(true), Transaction.addToHistory.of(false)],
       });
       view.scrollDOM.scrollTop = scroll;

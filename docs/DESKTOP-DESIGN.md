@@ -46,7 +46,10 @@ notebook before development continued. No work-note editing was part of testing.
   executor. Mismatched or missing baselines produce a separate conflict note.
 - Close and Quit wait for saves. A failed write leaves the window and draft intact.
 - Clean open notes refresh after external changes. Dirty notes keep local writing
-  and resolve differences through the same conflict-preserving save path.
+  and resolve differences through the same conflict-preserving save path. Map
+  the active selection through the changed range when refreshing a clean note;
+  replacing the entire document and collapsing to the caret loses text being
+  selected for copying after unrelated edits from another device.
 - Metadata arrives before bodies. Four background readers index full text while
   opening and editing remain available. Search rows reserve their final height.
 - Whole-note search, relevant excerpts, stable selection, and opening at body
@@ -260,6 +263,11 @@ with pending writing, using only the disposable notebook.
 Plain click expands a compact link for editing; Cmd+click opens it. This choice
 was confirmed by the user. Replacement widgets must forward mouse events to the
 editor, and modified selection gestures must retain ordinary editing semantics.
+Supply compact-link source positions through CodeMirror's mouse selection style
+so it owns the entire drag and edge scrolling. Consuming the initial mouse event
+expands the address but leaves no gesture owner to extend the selection. Only an
+unmodified primary click activates a checkbox; selection and context-menu clicks
+must not change its contents.
 Opening a link never changes the note, moves the caret, or starts a window drag.
 
 Only the link containing the caret or intersecting the selection expands, rather
