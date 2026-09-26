@@ -1,6 +1,6 @@
 [package]
 name = "drift"
-version = "0.2.2"
+version = "0.2.3"
 description = "A minimal Markdown editor"
 authors = ["Chris Best"]
 repository = "https://github.com/cjbest/drift"
