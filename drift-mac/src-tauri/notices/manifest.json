@@ -2,9 +2,9 @@
   "generator": "cargo-about 0.9.2",
   "target": "aarch64-apple-darwin",
   "inputs": {
-    "npmLock": "c652131014dbdd522dcefa7c737da0953bbed36c00ef1a085409771f8d573905",
-    "cargoLock": "6b2c4d82a74772a900a70f85bfda4089173df866a5cfd4c40f7269f316579d26",
-    "cargoManifest": "2e62bab454c5c185de6e2a939e512a19f98f030287d6d1a4cb2abeb6851b6999",
+    "npmLock": "b5511ba22f651dbfa00cb5e01cdcd49236fa67de60e504d17b32d8a71e9fb509",
+    "cargoLock": "dc06726d694803d93de3f1cbd142d83f0226537917b6a99cb910da90c31e597f",
+    "cargoManifest": "7754af0922b297b9a1d680dd7a8ec2de9cabb699cbacc3124f334ca859bee8f9",
     "licenseConfig": "0d3407187474b68291b202c0cffaef77510bda8320c8470d2a2c6ef69f19c5f3",
     "upstreamNotices": "16696373e1aa7292ac9901e36de1ee123882eadccb14edf49c241a060c4a0c29",
     "sourceNotices": "9932376bcea0cdc308007d167a8076524d2b348e18548182fd08eb13c10cc0c2",
