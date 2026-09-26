@@ -4,6 +4,80 @@ import UIKit
 
 @MainActor
 final class EditorCaretLayoutTests: XCTestCase {
+    func testPaperExtentDoesNotAccumulateAcrossRelayoutAndWidthChanges() {
+        let editor = EditorTextView()
+        editor.frame = CGRect(x: 0, y: 0, width: 390, height: 844)
+        editor.configurePageInsets(top: 117, horizontal: 20, bottom: 58, pageHeight: 844)
+        let text = "Field notes\n\n" + String(repeating: "A thought that wraps across the page.\n\n", count: 30)
+        editor.loadText(text)
+        editor.layoutManager.ensureLayout(for: editor.textContainer)
+        editor.layoutIfNeeded()
+        let originalSize = editor.contentSize
+        for _ in 0..<3 {
+            for width in [CGFloat(600), 320, 390] {
+                editor.frame.size.width = width
+                editor.setNeedsLayout()
+                editor.layoutIfNeeded()
+                editor.layoutManager.ensureLayout(for: editor.textContainer)
+                editor.layoutIfNeeded()
+            }
+            XCTAssertEqual(editor.contentSize.height, originalSize.height, accuracy: 1,
+                           "Returning to the same page width must not add another page of paper")
+        }
+        XCTAssertEqual(editor.text, text)
+    }
+
+    func testReopeningRetainsReadingPositionInPaperAfterLastLine() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("drift-reading-position-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let text = "Field notes\n\n" + (1...36).map {
+            "Observation \($0): leave room to read the final paragraph near the top of the page."
+        }.joined(separator: "\n\n")
+        try text.write(to: folder.appendingPathComponent("Field notes.md"), atomically: true, encoding: .utf8)
+        let store = NoteStore(folderURL: folder)
+        await store.refresh()
+        let snapshot = try await store.openForEditing(XCTUnwrap(store.notes.first))
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            .first(where: { $0.activationState == .foregroundActive }))
+        let window = try XCTUnwrap(scene.windows.first(where: \.isKeyWindow))
+        let originalRoot = window.rootViewController
+        window.endEditing(true)
+        let controller = NoteEditorViewController(store: store, snapshot: snapshot)
+        window.rootViewController = controller
+        defer {
+            window.endEditing(true)
+            window.rootViewController = originalRoot
+            window.layoutIfNeeded()
+        }
+        window.layoutIfNeeded()
+        let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+        while controller.view.keyboardLayoutGuide.layoutFrame.height > 1, ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        let editor = try XCTUnwrap(controller.view.subviews.compactMap { $0 as? EditorTextView }.first)
+        editor.layoutManager.ensureLayout(for: editor.textContainer)
+        editor.selectedRange = NSRange(location: (text as NSString).length, length: 0)
+        let caret = editor.caretRect(for: try XCTUnwrap(editor.selectedTextRange?.end))
+        let readingOffset = caret.minY - 140
+        editor.setContentOffset(CGPoint(x: 0, y: readingOffset), animated: false)
+        await drainMainQueue()
+        XCTAssertGreaterThan(readingOffset, caret.maxY - editor.bounds.height + 100,
+                             "The chosen position must use blank paper after the last line")
+        controller.viewWillDisappear(false)
+
+        let reopened = NoteEditorViewController(store: store, snapshot: snapshot)
+        window.rootViewController = reopened
+        window.layoutIfNeeded()
+        await drainMainQueue()
+        let restored = try XCTUnwrap(reopened.view.subviews.compactMap { $0 as? EditorTextView }.first)
+        XCTAssertEqual(restored.contentOffset.y, readingOffset, accuracy: 1,
+                       "Reopening must include the paper beyond the text when restoring the viewport")
+        XCTAssertEqual(restored.selectedRange, editor.selectedRange)
+        XCTAssertEqual(restored.text, text)
+        await store.flushCatalogueCache()
+    }
+
     func testCaretMaintenanceDoesNotScrollAwayFromStartOfLongSelection() async throws {
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
             .first(where: { $0.activationState == .foregroundActive }))

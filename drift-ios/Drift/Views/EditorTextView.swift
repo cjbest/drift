@@ -12,6 +12,8 @@ final class EditorTextView: UITextView, @preconcurrency NSTextStorageDelegate {
     private var pageHorizontalInset: CGFloat = 20
     private var pageBottomInset: CGFloat = 32
     private var pageHeight: CGFloat?
+    private var textContentSize = CGSize.zero
+    private var extraPaperHeight: CGFloat = 0
     private var pendingCaretUpdate = false
     private var pullIsPrimed = false
     private var pullCanToggle = true
@@ -75,24 +77,37 @@ final class EditorTextView: UITextView, @preconcurrency NSTextStorageDelegate {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
-    override func scrollRectToVisible(_ rect: CGRect, animated: Bool) {
-        var target = rect
-        if isFirstResponder, isEditable, markedTextRange == nil, !isDragging,
-           selectedRange.length == 0, selectedRange.location == textStorage.length,
-           textStorage.length > 0, textContainerInset.bottom > pageBottomInset,
-           layoutManager.extraLineFragmentTextContainer === textContainer {
-            // TextKit 1 includes the entire bottom inset when revealing the
-            // empty line after Return. Our scroll-past-end paper is not text
-            // that needs revealing: retain only the ordinary bottom clearance.
-            // Keep native scrolling for an insertion point below the keyboard.
-            let textBottom = textContainerInset.top + max(
-                layoutManager.usedRect(for: textContainer).maxY,
-                layoutManager.extraLineFragmentRect.maxY)
-            let bottom = min(target.maxY, textBottom + pageBottomInset)
-            if bottom > target.minY { target.size.height = bottom - target.minY }
+    override var contentSize: CGSize {
+        get { super.contentSize }
+        set {
+            textContentSize = newValue
+            super.contentSize = CGSize(width: newValue.width, height: newValue.height + extraPaperHeight)
         }
-        super.scrollRectToVisible(target, animated: animated)
     }
+
+    func recordSelectionAudit(_ event: String) {
+        #if DEBUG
+        guard let path = ProcessInfo.processInfo.environment["DRIFT_SELECTION_AUDIT_LOG"] else { return }
+        let entry: [String: Any] = ["event": event, "time": CACurrentMediaTime(),
+            "offset": contentOffset.y, "location": selectedRange.location, "length": selectedRange.length,
+            "activeGesture": (gestureRecognizers ?? []).contains { $0.state == .began || $0.state == .changed }]
+        guard var data = try? JSONSerialization.data(withJSONObject: entry, options: [.sortedKeys]) else { return }
+        data.append(10)
+        if !FileManager.default.fileExists(atPath: path) { FileManager.default.createFile(atPath: path, contents: nil) }
+        guard let file = FileHandle(forWritingAtPath: path) else { return }
+        defer { try? file.close() }
+        _ = try? file.seekToEnd()
+        try? file.write(contentsOf: data)
+        #endif
+    }
+
+    #if DEBUG
+    override var contentOffset: CGPoint {
+        didSet {
+            if abs(contentOffset.y - oldValue.y) > 0.1 { recordSelectionAudit("offset") }
+        }
+    }
+    #endif
 
     override func didMoveToWindow() {
         super.didMoveToWindow()
@@ -133,9 +148,23 @@ final class EditorTextView: UITextView, @preconcurrency NSTextStorageDelegate {
         let pageSpace = max(0, (pageHeight ?? bounds.height) - pageTopInset - Theme.editorTitleUIFont().lineHeight + 76)
         // A blank composer has no reading position to preserve. Extra space
         // lets UIKit scroll its empty insertion point out of view during focus.
-        let bottom = textStorage.length == 0 ? pageBottomInset : max(pageBottomInset, pageSpace)
-        let inset = UIEdgeInsets(top: pageTopInset, left: pageHorizontalInset, bottom: bottom, right: pageHorizontalInset)
+        let extraPaper = textStorage.length == 0 ? 0 : max(0, pageSpace - pageBottomInset)
+        let inset = UIEdgeInsets(top: pageTopInset, left: pageHorizontalInset, bottom: pageBottomInset, right: pageHorizontalInset)
+        // TextKit uses the text-container inset as its selection-autoscroll
+        // boundary. A page-sized bottom inset puts even an interior long press
+        // in that boundary and scrolls the entire document under the finger.
+        // A large scroll-view content inset also obscures native caret reveal.
+        // Extend the scrollable paper instead, keeping TextKit's natural size
+        // separate so repeated layout never accumulates the extra space.
+        if extraPaper > extraPaperHeight {
+            extraPaperHeight = extraPaper
+            super.contentSize = CGSize(width: textContentSize.width, height: textContentSize.height + extraPaperHeight)
+        }
         if textContainerInset != inset { textContainerInset = inset }
+        if extraPaperHeight != extraPaper {
+            extraPaperHeight = extraPaper
+            super.contentSize = CGSize(width: textContentSize.width, height: textContentSize.height + extraPaperHeight)
+        }
     }
 
     func updatePullFeedback() {
@@ -166,6 +195,7 @@ final class EditorTextView: UITextView, @preconcurrency NSTextStorageDelegate {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.pendingCaretUpdate = false
+            self.recordSelectionAudit("caretRun")
             guard self.isFirstResponder, self.isEditable, !self.isDragging,
                   let selection = self.selectedTextRange, selection.isEmpty else { return }
             // A range's end is its larger document offset, not necessarily the

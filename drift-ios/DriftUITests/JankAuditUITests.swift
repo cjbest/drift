@@ -25,7 +25,7 @@ final class JankAuditUITests: XCTestCase {
         try? FileManager.default.removeItem(at: folder)
     }
 
-    private func launchFixture() throws {
+    private func launchFixture(selectionAudit: Bool = false) throws {
         let now = Date()
         let longBody = (1...36).map {
             "Observation \($0): the paper stays steady as a longer thought wraps across several lines."
@@ -46,6 +46,9 @@ final class JankAuditUITests: XCTestCase {
         }
         app = XCUIApplication()
         app.launchEnvironment["DRIFT_TEST_FOLDER"] = folder.path
+        if selectionAudit {
+            app.launchEnvironment["DRIFT_SELECTION_AUDIT_LOG"] = folder.appendingPathComponent("selection-audit.jsonl").path
+        }
         app.launchArguments = ["-drift.onLaunch", "notesList"]
         app.launch()
         XCTAssertTrue(app.buttons["new-note"].waitForExistence(timeout: 10))
@@ -99,7 +102,7 @@ final class JankAuditUITests: XCTestCase {
 
     private func notebookContents() throws -> [String: String] {
         let urls = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
-        return try Dictionary(uniqueKeysWithValues: urls.map {
+        return try Dictionary(uniqueKeysWithValues: urls.filter { $0.pathExtension == "md" }.map {
             ($0.lastPathComponent, try String(contentsOf: $0, encoding: .utf8))
         })
     }
@@ -113,6 +116,143 @@ final class JankAuditUITests: XCTestCase {
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    private struct SelectionAuditEvent: Decodable {
+        let offset: Double
+        let activeGesture: Bool
+        let location: Int
+        let length: Int
+    }
+
+    private func selectionEvents(in data: Data) throws -> [SelectionAuditEvent] {
+        try data.split(separator: 0x0A).map {
+            try JSONDecoder().decode(SelectionAuditEvent.self, from: Data($0))
+        }
+    }
+
+    private func longPressKeepsPaperSteady(_ page: XCUIElement, at fraction: Double,
+                                         name: String) throws {
+        let log = folder.appendingPathComponent("selection-audit.jsonl")
+        let before = try Data(contentsOf: log)
+        let initial = try XCTUnwrap(try selectionEvents(in: before).last)
+        let originalText = try XCTUnwrap(page.value as? String)
+        // A short hold misses the reported failure: UIKit's loupe appeared
+        // first, then native autoscroll accelerated all the way to blank paper.
+        page.coordinate(withNormalizedOffset: CGVector(dx: 0.4, dy: fraction)).press(forDuration: 3.2)
+        recordingTail(name)
+        let data = Data(try Data(contentsOf: log).dropFirst(before.count))
+        let attachment = XCTAttachment(data: data, uniformTypeIdentifier: "public.json")
+        attachment.name = name + "-events"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        let events = try selectionEvents(in: data)
+        XCTAssertTrue(events.contains(where: \.activeGesture),
+                      "Exercise a real active native gesture, not just an idle editor")
+        let movement = events.map { abs($0.offset - initial.offset) }.max() ?? 0
+        XCTAssertLessThanOrEqual(movement, 2,
+                                 "Holding still inside the editor must not scroll the paper")
+        XCTAssertEqual(page.value as? String, originalText,
+                       "Beginning selection must preserve every character")
+    }
+
+    func testFocusedLongPressKeepsPaperSteadyRecording() throws {
+        try launchFixture(selectionAudit: true)
+        let originalContents = try notebookContents()
+        for fraction in [0.32, 0.60, 0.80] {
+            // Reopening resets the viewport so every hold starts on text,
+            // even if a previous position accidentally scrolled to the end.
+            row("Long walk").tap()
+            let page = editor()
+            page.coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0.25)).tap()
+            requireTypingKeyboard()
+            recordingTail("focused-before-long-press-\(fraction)")
+            try longPressKeepsPaperSteady(page, at: fraction, name: "focused-long-press-\(fraction)")
+            back()
+        }
+        XCTAssertEqual(try notebookContents(), originalContents)
+    }
+
+    func testReadingLongPressKeepsPaperSteadyRecording() throws {
+        try launchFixture(selectionAudit: true)
+        row("Long walk").tap()
+        let page = editor()
+        page.swipeUp(velocity: .slow)
+        page.swipeUp(velocity: .slow)
+        recordingTail("reading-before-long-press")
+        XCTAssertFalse(app.keyboards.firstMatch.exists,
+                       "This route must begin without a keyboard and with the old caret offscreen")
+        try longPressKeepsPaperSteady(page, at: 0.32, name: "reading-long-press")
+        requireTypingKeyboard()
+    }
+
+    func testNativeCopySurvivesSelectionScrollAndPastesExactTextRecording() throws {
+        try launchFixture(selectionAudit: true)
+        let originalContents = try notebookContents()
+        row("Long walk").tap()
+        let page = editor()
+        page.coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0.25)).tap()
+        requireTypingKeyboard()
+        let originalText = try XCTUnwrap(page.value as? String)
+        let log = folder.appendingPathComponent("selection-audit.jsonl")
+        func currentSelection() -> SelectionAuditEvent? {
+            guard let data = try? Data(contentsOf: log) else { return nil }
+            return try? selectionEvents(in: data).last
+        }
+        func editMenuAction(_ title: String) {
+            let item = app.menuItems[title].firstMatch
+            let button = app.buttons[title].firstMatch
+            waitFor("The native \(title) action must be available") {
+                (item.exists && item.isHittable) || (button.exists && button.isHittable)
+            }
+            if item.exists && item.isHittable { item.tap() }
+            else { button.tap() }
+        }
+
+        // Select a word through UIKit, not by injecting a selected range or
+        // writing the clipboard from the test runner.
+        page.coordinate(withNormalizedOffset: CGVector(dx: 0.4, dy: 0.45)).doubleTap()
+        waitFor("Double-tapping body text must form a native selection") {
+            (currentSelection()?.length ?? 0) > 0
+        }
+        let selection = try XCTUnwrap(currentSelection())
+        let range = NSRange(location: selection.location, length: selection.length)
+        XCTAssertLessThanOrEqual(NSMaxRange(range), (originalText as NSString).length)
+        let expectedCopy = (originalText as NSString).substring(with: range)
+        XCTAssertFalse(expectedCopy.isEmpty)
+        recordingTail("native-word-selection")
+        editMenuAction("Copy")
+
+        // The margin belongs to the scroll view, away from the text and its
+        // selection handles. Keep the selection while moving its viewport.
+        let margin = page.coordinate(withNormalizedOffset: CGVector(dx: 0.97, dy: 0.76))
+        margin.press(forDuration: 0.05,
+                     thenDragTo: page.coordinate(withNormalizedOffset: CGVector(dx: 0.97, dy: 0.30)),
+                     withVelocity: .slow, thenHoldForDuration: 0)
+        waitFor("Scrolling must move the selected note") {
+            (currentSelection()?.offset ?? selection.offset) > selection.offset + 40
+        }
+        let afterScroll = try XCTUnwrap(currentSelection())
+        XCTAssertEqual(afterScroll.location, selection.location)
+        XCTAssertEqual(afterScroll.length, selection.length)
+        XCTAssertEqual(page.value as? String, originalText)
+        recordingTail("native-selection-after-scroll")
+
+        // Use the native edge-back route because the retreating Back control
+        // is deliberately offscreen once the paper has scrolled.
+        let edge = app.coordinate(withNormalizedOffset: CGVector(dx: 0.005, dy: 0.5))
+        edge.press(forDuration: 0.05,
+                   thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)))
+        XCTAssertTrue(app.tables["notes-list"].waitForExistence(timeout: 5))
+        XCTAssertEqual(try notebookContents(), originalContents)
+        app.buttons["new-note"].tap()
+        let composer = editor()
+        requireTypingKeyboard()
+        composer.coordinate(withNormalizedOffset: CGVector(dx: 0.35, dy: 0.25)).press(forDuration: 1.1)
+        editMenuAction("Paste")
+        XCTAssertEqual(composer.value as? String, expectedCopy,
+                       "Native Copy and Paste must preserve the exact selected substring")
+        recordingTail("native-copy-pasted-into-disposable-note")
     }
 
     func testRepeatedBlankComposeAndReturnRecording() throws {

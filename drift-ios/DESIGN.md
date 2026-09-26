@@ -92,9 +92,11 @@ These are bounded responses to observed iOS behavior, not universal UI rules.
   Switching engines on first focus jumped the document; the tested TextKit 2
   path hid lower lines ahead of the keyboard. Revisit this choice only with
   middle/end focus and first-keystroke recordings that preserve position and text.
-  TextKit 1 includes bottom paper padding when revealing a trailing empty line;
-  trim that excess from its reveal rectangle so Return keeps visible text steady
-  while still scrolling a caret that reaches the keyboard.
+  Keep scroll-past-end paper in the scrollable content size, outside both
+  text-container and scroll-view margins. UIKit uses those margins for selection autoscroll;
+  page-sized padding sends even a stationary interior long press to the end.
+  Verify long presses with the keyboard already open as well as first focus,
+  and retain the Return and end-of-note keyboard-transition checks.
 - **Live opening.** `PaperPushAnimator` keeps immediate focus while animating
   the page; native push still reproduced the keyboard color handoff with the
   stable text engine. Native Back remains intact. Remove the custom push only

@@ -429,6 +429,7 @@ final class NoteEditorViewController: UIViewController, UITextViewDelegate {
     }
 
     func textViewDidBeginEditing(_ textView: UITextView) {
+        editor.recordSelectionAudit("beginEditing")
         view.setNeedsLayout()
         editor.keepCaretVisibleAfterLayout(animated: true)
     }
@@ -444,6 +445,7 @@ final class NoteEditorViewController: UIViewController, UITextViewDelegate {
     }
 
     func textViewDidChangeSelection(_ textView: UITextView) {
+        editor.recordSelectionAudit("selectionChanged")
         if editor.markedTextRange == nil { editor.styleChangedText() }
         editor.updateTypingStyle()
         editor.keepCaretVisibleAfterLayout()
@@ -736,6 +738,10 @@ final class NoteEditorViewController: UIViewController, UITextViewDelegate {
         if resuming, values["readMode"] as? Bool == true {
             if !isReadMode { toggleReadMode() }
         }
+        editor.layoutIfNeeded()
+        // The initial TextKit extent can still be estimated for a long note.
+        // Resolve it before clamping a saved position near the final paragraph.
+        editor.layoutManager.ensureLayout(for: editor.textContainer)
         editor.layoutIfNeeded()
         let maximum = max(0, editor.contentSize.height - editor.bounds.height)
         let offset = min(maximum, max(0, values["offset"] as? Double ?? 0))
