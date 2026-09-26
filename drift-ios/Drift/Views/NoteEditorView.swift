@@ -324,8 +324,7 @@ final class NoteEditorViewController: UIViewController, UITextViewDelegate {
         let horizontalInset = max(readableInset, max(view.safeAreaInsets.left, view.safeAreaInsets.right) + 20)
         let top = view.safeAreaInsets.top
         let bottom = keyboardIsVisible ? 0 : view.safeAreaInsets.bottom
-        editor.configurePageInsets(top: top + 70, horizontal: horizontalInset, bottom: bottom + 24,
-                                   pageHeight: view.bounds.height)
+        editor.configurePageInsets(top: top + 70, horizontal: horizontalInset, bottom: bottom + 24)
         // The thumb follows the viewport edge, independently of the title
         // padding and retreating Back control. The viewport ends at the keyboard.
         editor.verticalScrollIndicatorInsets = editor.safeAreaInsets

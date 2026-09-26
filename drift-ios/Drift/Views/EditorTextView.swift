@@ -11,7 +11,7 @@ final class EditorTextView: UITextView, @preconcurrency NSTextStorageDelegate {
     private var pageTopInset: CGFloat = 12
     private var pageHorizontalInset: CGFloat = 20
     private var pageBottomInset: CGFloat = 32
-    private var pageHeight: CGFloat?
+    private var hasConfiguredPageInsets = false
     private var textContentSize = CGSize.zero
     private var extraPaperHeight: CGFloat = 0
     private var pendingCaretUpdate = false
@@ -77,6 +77,32 @@ final class EditorTextView: UITextView, @preconcurrency NSTextStorageDelegate {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
+    // UIKit can clamp the scroll offset inside a viewport-size setter, before
+    // layoutSubviews. Grow the paper first when the keyboard retreats; remove
+    // it after the viewport shrinks. This keeps the valid offset range stable
+    // without writing over native scrolling or selection updates.
+    override var bounds: CGRect {
+        willSet {
+            if hasConfiguredPageInsets, newValue.height > bounds.height {
+                applyPageInsets(viewportHeight: newValue.height)
+            }
+        }
+        didSet {
+            if hasConfiguredPageInsets, bounds.height < oldValue.height { applyPageInsets() }
+        }
+    }
+
+    override var frame: CGRect {
+        willSet {
+            if hasConfiguredPageInsets, transform.isIdentity, newValue.height > frame.height {
+                applyPageInsets(viewportHeight: newValue.height)
+            }
+        }
+        didSet {
+            if hasConfiguredPageInsets, frame.height < oldValue.height { applyPageInsets() }
+        }
+    }
+
     override var contentSize: CGSize {
         get { super.contentSize }
         set {
@@ -90,6 +116,8 @@ final class EditorTextView: UITextView, @preconcurrency NSTextStorageDelegate {
         guard let path = ProcessInfo.processInfo.environment["DRIFT_SELECTION_AUDIT_LOG"] else { return }
         let entry: [String: Any] = ["event": event, "time": CACurrentMediaTime(),
             "offset": contentOffset.y, "location": selectedRange.location, "length": selectedRange.length,
+            "viewportHeight": bounds.height, "contentHeight": contentSize.height,
+            "textContentHeight": textContentSize.height, "bottomInset": textContainerInset.bottom,
             "activeGesture": (gestureRecognizers ?? []).contains { $0.state == .began || $0.state == .changed }]
         guard var data = try? JSONSerialization.data(withJSONObject: entry, options: [.sortedKeys]) else { return }
         data.append(10)
@@ -123,6 +151,7 @@ final class EditorTextView: UITextView, @preconcurrency NSTextStorageDelegate {
     override func layoutSubviews() {
         super.layoutSubviews()
         applyPageInsets()
+        recordSelectionAudit("layout")
         let hintWidth = max(0, bounds.width - pageHorizontalInset * 2)
         let size = pullLabel.sizeThatFits(CGSize(width: hintWidth, height: 40))
         // Reveal the hint above the title, below the status area, rather than
@@ -130,22 +159,23 @@ final class EditorTextView: UITextView, @preconcurrency NSTextStorageDelegate {
         pullLabel.frame = CGRect(x: (bounds.width - size.width) / 2, y: pageTopInset - 42, width: size.width, height: size.height)
     }
 
-    func configurePageInsets(top: CGFloat, horizontal: CGFloat, bottom: CGFloat, pageHeight: CGFloat) {
+    func configurePageInsets(top: CGFloat, horizontal: CGFloat, bottom: CGFloat) {
         pageTopInset = top
         pageHorizontalInset = horizontal
         pageBottomInset = bottom
-        self.pageHeight = pageHeight
+        hasConfiguredPageInsets = true
         applyPageInsets()
     }
 
-    private func applyPageInsets() {
+    private func applyPageInsets(viewportHeight: CGFloat? = nil) {
         // The extra space is after the document, allowing a short note to
         // move upward into a reading position. Never insert space into text.
         // Even a single-line note gets the complete 76-point retreat. The
         // compact type otherwise leaves a short note unable to hide Back.
-        // Keep document space tied to the full page while the keyboard changes
-        // only its visible viewport, preserving the chosen reading position.
-        let pageSpace = max(0, (pageHeight ?? bounds.height) - pageTopInset - Theme.editorTitleUIFont().lineHeight + 76)
+        // Match the trailing paper to the visible viewport. When the keyboard
+        // changes its height, contentSize and bounds change equally: the last
+        // line has the same scroll limit and reading positions remain valid.
+        let pageSpace = max(0, (viewportHeight ?? bounds.height) - pageTopInset - Theme.editorTitleUIFont().lineHeight + 76)
         // A blank composer has no reading position to preserve. Extra space
         // lets UIKit scroll its empty insertion point out of view during focus.
         let extraPaper = textStorage.length == 0 ? 0 : max(0, pageSpace - pageBottomInset)

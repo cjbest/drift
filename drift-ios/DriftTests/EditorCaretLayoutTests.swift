@@ -4,10 +4,58 @@ import UIKit
 
 @MainActor
 final class EditorCaretLayoutTests: XCTestCase {
+    func testKeyboardViewportDoesNotExtendScrollPastEndLimit() {
+        let fixtures = [
+            "A short note",
+            "Field notes\n\n" + String(repeating: "A thought that wraps across the page.\n\n", count: 30),
+        ]
+        for useBounds in [false, true] {
+            for text in fixtures {
+                let editor = EditorTextView()
+                editor.frame = CGRect(x: 0, y: 0, width: 390, height: 844)
+                editor.configurePageInsets(top: 117, horizontal: 20, bottom: 58)
+                editor.layoutManager.allowsNonContiguousLayout = false
+                editor.loadText(text)
+                editor.layoutManager.ensureLayout(for: editor.textContainer)
+                editor.layoutIfNeeded()
+                // Realize the final line before comparing extents; offscreen
+                // TextKit estimates are not the document's settled scroll limit.
+                _ = editor.caretRect(for: editor.endOfDocument)
+                editor.layoutIfNeeded()
+                let originalLimit = max(0, editor.contentSize.height - editor.bounds.height)
+                XCTAssertGreaterThanOrEqual(originalLimit, 75, "Even a short note can retreat the Back control")
+                let readingOffset = max(0, originalLimit - 20)
+                editor.setContentOffset(CGPoint(x: 0, y: readingOffset), animated: false)
+
+                // Include a partially dismissed keyboard and a reversal. The text
+                // keeps its position while only the trailing blank paper changes.
+                for height in [CGFloat(520), 660, 520, 844, 520, 844] {
+                    if useBounds { editor.bounds.size.height = height }
+                    else { editor.frame.size.height = height }
+                    editor.configurePageInsets(top: 117, horizontal: 20,
+                                               bottom: height == 844 ? 58 : 24)
+                    editor.layoutManager.ensureLayout(for: editor.textContainer)
+                    editor.layoutIfNeeded()
+                    let limit = max(0, editor.contentSize.height - editor.bounds.height)
+                    XCTAssertEqual(limit, originalLimit, accuracy: 1,
+                                   "The keyboard must not add its height to the scroll-past-end limit")
+                    XCTAssertEqual(editor.contentOffset.y, readingOffset, accuracy: 1,
+                                   "Changing the viewport must preserve a valid reading position")
+                    let lastLine = editor.caretRect(for: editor.endOfDocument)
+                    XCTAssertGreaterThan(lastLine.minY - limit, 0,
+                                         "At the bottom stop, the final line must remain on screen")
+                    XCTAssertLessThanOrEqual(editor.textContainerInset.bottom, 58,
+                                             "Trailing paper must stay outside native selection margins")
+                    XCTAssertEqual(editor.text, text)
+                }
+            }
+        }
+    }
+
     func testPaperExtentDoesNotAccumulateAcrossRelayoutAndWidthChanges() {
         let editor = EditorTextView()
         editor.frame = CGRect(x: 0, y: 0, width: 390, height: 844)
-        editor.configurePageInsets(top: 117, horizontal: 20, bottom: 58, pageHeight: 844)
+        editor.configurePageInsets(top: 117, horizontal: 20, bottom: 58)
         let text = "Field notes\n\n" + String(repeating: "A thought that wraps across the page.\n\n", count: 30)
         editor.loadText(text)
         editor.layoutManager.ensureLayout(for: editor.textContainer)
@@ -104,7 +152,7 @@ final class EditorCaretLayoutTests: XCTestCase {
             "Observation \($0): a quiet paragraph with enough words to wrap across several lines."
         }.joined(separator: "\n\n")
         editor.loadText(text)
-        editor.configurePageInsets(top: 140, horizontal: 20, bottom: 24, pageHeight: window.bounds.height)
+        editor.configurePageInsets(top: 140, horizontal: 20, bottom: 24)
         window.layoutIfNeeded()
         XCTAssertTrue(editor.becomeFirstResponder())
         try? await Task.sleep(for: .milliseconds(500))
@@ -170,7 +218,7 @@ final class EditorCaretLayoutTests: XCTestCase {
             "Observation \($0): a quiet paragraph with enough words to wrap and enough room to keep reading."
         }.joined(separator: "\n\n")
         editor.loadText(text)
-        editor.configurePageInsets(top: 140, horizontal: 20, bottom: 24, pageHeight: window.bounds.height)
+        editor.configurePageInsets(top: 140, horizontal: 20, bottom: 24)
         window.layoutIfNeeded()
         await drainMainQueue()
         XCTAssertNil(editor.textLayoutManager, "The chosen writing engine must be active before focus")

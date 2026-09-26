@@ -100,6 +100,8 @@ These are bounded responses to observed iOS behavior, not universal UI rules.
   Keep scroll-past-end paper in the scrollable content size, outside both
   text-container and scroll-view margins. UIKit uses those margins for selection autoscroll;
   page-sized padding sends even a stationary interior long press to the end.
+  Size trailing paper to the current viewport so the keyboard cannot extend
+  the maximum scroll offset or push the last line above the screen.
   Verify long presses with the keyboard already open as well as first focus,
   and retain the Return and end-of-note keyboard-transition checks.
 - **Live opening.** `PaperPushAnimator` keeps immediate focus while animating

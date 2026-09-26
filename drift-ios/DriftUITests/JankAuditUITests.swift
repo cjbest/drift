@@ -22,6 +22,13 @@ final class JankAuditUITests: XCTestCase {
 
     override func tearDownWithError() throws {
         app?.terminate()
+        if let data = try? Data(contentsOf: folder.appendingPathComponent("selection-audit.jsonl")),
+           !data.isEmpty {
+            let attachment = XCTAttachment(data: data, uniformTypeIdentifier: "public.json")
+            attachment.name = "selection-audit"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
         try? FileManager.default.removeItem(at: folder)
     }
 
@@ -123,6 +130,10 @@ final class JankAuditUITests: XCTestCase {
         let activeGesture: Bool
         let location: Int
         let length: Int
+        let viewportHeight: Double?
+        let contentHeight: Double?
+        let textContentHeight: Double?
+        let bottomInset: Double?
     }
 
     private func selectionEvents(in data: Data) throws -> [SelectionAuditEvent] {
@@ -266,9 +277,15 @@ final class JankAuditUITests: XCTestCase {
         page.coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0.25)).tap()
         requireTypingKeyboard()
         let caret = page.coordinate(withNormalizedOffset: CGVector(dx: 0.4, dy: 0.45))
-        caret.press(forDuration: 1.1)
+        caret.tap()
+        // A long press can restore its original insertion point on release.
+        // Place this caret explicitly, then make a separate same-caret tap.
+        recordingTail("native-caret-placed")
+        let placedCaret = try XCTUnwrap(try selectionEvents(in: Data(contentsOf: log)).last)
+        XCTAssertEqual(placedCaret.length, 0)
         caret.tap()
         recordingTail("native-caret-menu-with-select-all")
+        XCTAssertEqual(try selectionEvents(in: Data(contentsOf: log)).last?.location, placedCaret.location)
         tapEditMenuAction("Select All")
         waitFor("Native Select All must cover the complete note") {
             guard let data = try? Data(contentsOf: log),
@@ -294,6 +311,111 @@ final class JankAuditUITests: XCTestCase {
         XCTAssertEqual(composer.value as? String, originalText,
                        "Copying the entire native selection must preserve every character and newline")
         recordingTail("native-whole-note-pasted")
+    }
+
+    func testKeyboardScrollEndKeepsLastLineOnPaperRecording() throws {
+        let attempts = 3
+        try launchFixture(selectionAudit: true)
+        let originalContents = try notebookContents()
+        let log = folder.appendingPathComponent("selection-audit.jsonl")
+        func latestEvent() -> SelectionAuditEvent? {
+            guard let data = try? Data(contentsOf: log) else { return nil }
+            return try? selectionEvents(in: data).last
+        }
+        func scrollToEnd(_ page: XCUIElement) throws {
+            for _ in 0..<10 {
+                let before = latestEvent()?.offset ?? 0
+                // Stay inside the paper: the far-right scroll indicator owns
+                // its own drag direction when visible after keyboard dismissal.
+                let start = page.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.80))
+                start.press(forDuration: 0.05,
+                            thenDragTo: page.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.15)),
+                            withVelocity: .fast, thenHoldForDuration: 0)
+                let after = try XCTUnwrap(latestEvent()).offset
+                if abs(after - before) < 1 { return }
+            }
+            XCTFail("The synthetic note must reach its scroll limit within ten swipes")
+        }
+        func capture(_ page: XCUIElement, _ name: String) throws {
+            recordingTail(name)
+            let snapshot = try XCTUnwrap(latestEvent())
+            let height = try XCTUnwrap(snapshot.viewportHeight)
+            let contentHeight = try XCTUnwrap(snapshot.contentHeight)
+            let textHeight = try XCTUnwrap(snapshot.textContentHeight)
+            let bottom = try XCTUnwrap(snapshot.bottomInset)
+            XCTAssertEqual(height, page.frame.height, accuracy: 1)
+            XCTAssertEqual(snapshot.offset, max(0, contentHeight - height), accuracy: 1,
+                           "Exercise the actual scroll limit, not an arbitrary point in the note")
+            let endY = textHeight - bottom - snapshot.offset
+            let geometry = XCTAttachment(string: "viewportHeight=\(height)\noffset=\(snapshot.offset)\ntextContentHeight=\(textHeight)\nbottomInset=\(bottom)\nvisibleTextBottom=\(endY)\n")
+            geometry.name = name + "-geometry"
+            geometry.lifetime = .keepAlways
+            add(geometry)
+            XCTAssertGreaterThanOrEqual(endY, 40,
+                                        "Scrolling to the end must leave the last line on the paper above the keyboard")
+            XCTAssertLessThan(endY, height * 0.5,
+                              "Keep the intentional space that lets the last line rise into a reading position")
+        }
+        for title in [shortTitle, "Long walk"] {
+            row(title).tap()
+            let page = editor()
+            XCTAssertFalse(app.keyboards.firstMatch.exists)
+            try scrollToEnd(page)
+            try capture(page, title + "-reading-end")
+            for attempt in 1...attempts {
+                // The final line is near the top; tapping the paper just below
+                // it places the native caret at the document end.
+                page.coordinate(withNormalizedOffset: CGVector(dx: 0.4, dy: 0.15)).tap()
+                requireTypingKeyboard()
+                try scrollToEnd(page)
+                try capture(page, title + "-writing-end-\(attempt)")
+                if title == "Long walk" && attempt == 1 {
+                    let before = try Data(contentsOf: log).count
+                    let originalHeight = page.frame.height
+                    // Pull only partway into the keyboard and pause. UIKit
+                    // completes dismissal on release; intermediate viewport
+                    // sizes must still preserve the scroll limit.
+                    let start = page.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.98))
+                    start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: 55)),
+                                withVelocity: .slow, thenHoldForDuration: 0.3)
+                    waitFor("A partial keyboard drag must complete its native dismissal") {
+                        !self.app.keyboards.firstMatch.exists
+                    }
+                    let data = Data(try Data(contentsOf: log).dropFirst(before))
+                    let heights = try selectionEvents(in: data).compactMap(\.viewportHeight)
+                    XCTAssertTrue(heights.contains { $0 > Double(originalHeight) + 20 && $0 < page.frame.height - 20 },
+                                  "Exercise an intermediate viewport while the native keyboard is being dragged")
+                    let gesture = XCTAttachment(data: data, uniformTypeIdentifier: "public.json")
+                    gesture.name = "partial-keyboard-dismissal-events"
+                    gesture.lifetime = .keepAlways
+                    add(gesture)
+                    XCTAssertFalse(app.descendants(matching: .any)
+                        .matching(identifier: "read-mode-indicator").firstMatch.exists)
+                    recordingTail("partial-keyboard-dismissal-completed")
+                    page.coordinate(withNormalizedOffset: CGVector(dx: 0.4, dy: 0.15)).tap()
+                    requireTypingKeyboard()
+                    try scrollToEnd(page)
+                    try capture(page, "long-note-end-after-partial-dismissal")
+                }
+                if attempt < attempts {
+                    let start = page.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.85))
+                    start.press(forDuration: 0.05,
+                                thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.98)),
+                                withVelocity: .slow, thenHoldForDuration: 0)
+                    waitFor("Dragging the paper must dismiss the keyboard") { !self.app.keyboards.firstMatch.exists }
+                    XCTAssertFalse(app.descendants(matching: .any)
+                        .matching(identifier: "read-mode-indicator").firstMatch.exists,
+                                   "A keyboard dismissal must not also enter Read Mode")
+                    try scrollToEnd(page)
+                    try capture(page, title + "-dismissed-end-\(attempt)")
+                }
+            }
+            let edge = app.coordinate(withNormalizedOffset: CGVector(dx: 0.005, dy: 0.5))
+            edge.press(forDuration: 0.05,
+                       thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)))
+            XCTAssertTrue(app.tables["notes-list"].waitForExistence(timeout: 5))
+        }
+        XCTAssertEqual(try notebookContents(), originalContents)
     }
 
     func testRepeatedBlankComposeAndReturnRecording() throws {
